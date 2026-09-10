@@ -1,0 +1,217 @@
+basePath: /v1
+definitions:
+  model.LocationLeg:
+    properties:
+      computed_at:
+        type: string
+      destination:
+        type: string
+      distance_m:
+        type: integer
+      duration_s:
+        type: integer
+      origin:
+        type: string
+      polyline:
+        type: string
+      vehicle:
+        type: string
+    type: object
+  response.AutocompleteResponse:
+    properties:
+      predictions:
+        items:
+          $ref: '#/definitions/response.PlacePrediction'
+        type: array
+      status:
+        type: string
+    type: object
+  response.LatLng:
+    properties:
+      lat:
+        type: number
+      lng:
+        type: number
+    type: object
+  response.PlaceDetail:
+    properties:
+      formatted_address:
+        type: string
+      geometry:
+        $ref: '#/definitions/response.PlaceGeometry'
+      name:
+        type: string
+      place_id:
+        type: string
+    type: object
+  response.PlaceDetailResponse:
+    properties:
+      result:
+        $ref: '#/definitions/response.PlaceDetail'
+      status:
+        type: string
+    type: object
+  response.PlaceGeometry:
+    properties:
+      location:
+        $ref: '#/definitions/response.LatLng'
+    type: object
+  response.PlacePrediction:
+    properties:
+      description:
+        type: string
+      place_id:
+        type: string
+      structured_formatting:
+        $ref: '#/definitions/response.StructuredFormatting'
+    type: object
+  response.StructuredFormatting:
+    properties:
+      main_text:
+        type: string
+      secondary_text:
+        type: string
+    type: object
+  share.ErrorResponse:
+    properties:
+      error:
+        example: invalid input
+        type: string
+    type: object
+info:
+  contact: {}
+  description: API Server for GWYG Application
+  title: Basic RESTful API
+  version: "1.0"
+paths:
+  /directions:
+    get:
+      description: Goong Directions v2. Cached as LocationLeg unless alternatives=true.
+        Default vehicle is motorcycle.
+      parameters:
+      - description: Origin lat,lng
+        in: query
+        name: origin
+        required: true
+        type: string
+      - description: Destination lat,lng (semicolon-separated for extra stops)
+        in: query
+        name: destination
+        required: true
+        type: string
+      - description: car, bike, motorcycle, taxi, truck, hd
+        in: query
+        name: vehicle
+        type: string
+      - description: Return alternatives; skips LocationLeg cache
+        in: query
+        name: alternatives
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.LocationLeg'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      summary: Route A to B
+      tags:
+      - maps
+  /places/autocomplete:
+    get:
+      description: Goong Place Autocomplete. Pass the same sessiontoken to /places/detail
+        to bill as one session.
+      parameters:
+      - description: Search keyword
+        in: query
+        name: input
+        required: true
+        type: string
+      - description: Bias as lat,lng
+        in: query
+        name: location
+        type: string
+      - description: UUID v4 autocomplete session
+        in: query
+        name: sessiontoken
+        type: string
+      - description: Max predictions
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.AutocompleteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      summary: Autocomplete places
+      tags:
+      - maps
+  /places/detail:
+    get:
+      description: Goong Place Detail by place_id. Reuse sessiontoken from autocomplete.
+      parameters:
+      - description: Goong place_id
+        in: query
+        name: place_id
+        required: true
+        type: string
+      - description: UUID v4 autocomplete session
+        in: query
+        name: sessiontoken
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.PlaceDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      summary: Place detail
+      tags:
+      - maps
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

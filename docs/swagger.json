@@ -1,0 +1,327 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "API Server for GWYG Application",
+        "title": "Basic RESTful API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "basePath": "/v1",
+    "paths": {
+        "/directions": {
+            "get": {
+                "description": "Goong Directions v2. Cached as LocationLeg unless alternatives=true. Default vehicle is motorcycle.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "maps"
+                ],
+                "summary": "Route A to B",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Origin lat,lng",
+                        "name": "origin",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Destination lat,lng (semicolon-separated for extra stops)",
+                        "name": "destination",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "car, bike, motorcycle, taxi, truck, hd",
+                        "name": "vehicle",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Return alternatives; skips LocationLeg cache",
+                        "name": "alternatives",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.LocationLeg"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/places/autocomplete": {
+            "get": {
+                "description": "Goong Place Autocomplete. Pass the same sessiontoken to /places/detail to bill as one session.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "maps"
+                ],
+                "summary": "Autocomplete places",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Search keyword",
+                        "name": "input",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Bias as lat,lng",
+                        "name": "location",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "UUID v4 autocomplete session",
+                        "name": "sessiontoken",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Max predictions",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.AutocompleteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/places/detail": {
+            "get": {
+                "description": "Goong Place Detail by place_id. Reuse sessiontoken from autocomplete.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "maps"
+                ],
+                "summary": "Place detail",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Goong place_id",
+                        "name": "place_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "UUID v4 autocomplete session",
+                        "name": "sessiontoken",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.PlaceDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "model.LocationLeg": {
+            "type": "object",
+            "properties": {
+                "computed_at": {
+                    "type": "string"
+                },
+                "destination": {
+                    "type": "string"
+                },
+                "distance_m": {
+                    "type": "integer"
+                },
+                "duration_s": {
+                    "type": "integer"
+                },
+                "origin": {
+                    "type": "string"
+                },
+                "polyline": {
+                    "type": "string"
+                },
+                "vehicle": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.AutocompleteResponse": {
+            "type": "object",
+            "properties": {
+                "predictions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.PlacePrediction"
+                    }
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.LatLng": {
+            "type": "object",
+            "properties": {
+                "lat": {
+                    "type": "number"
+                },
+                "lng": {
+                    "type": "number"
+                }
+            }
+        },
+        "response.PlaceDetail": {
+            "type": "object",
+            "properties": {
+                "formatted_address": {
+                    "type": "string"
+                },
+                "geometry": {
+                    "$ref": "#/definitions/response.PlaceGeometry"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "place_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.PlaceDetailResponse": {
+            "type": "object",
+            "properties": {
+                "result": {
+                    "$ref": "#/definitions/response.PlaceDetail"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.PlaceGeometry": {
+            "type": "object",
+            "properties": {
+                "location": {
+                    "$ref": "#/definitions/response.LatLng"
+                }
+            }
+        },
+        "response.PlacePrediction": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "place_id": {
+                    "type": "string"
+                },
+                "structured_formatting": {
+                    "$ref": "#/definitions/response.StructuredFormatting"
+                }
+            }
+        },
+        "response.StructuredFormatting": {
+            "type": "object",
+            "properties": {
+                "main_text": {
+                    "type": "string"
+                },
+                "secondary_text": {
+                    "type": "string"
+                }
+            }
+        },
+        "share.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "invalid input"
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "description": "Type \"Bearer\" followed by a space and JWT token.",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
+    }
+}
