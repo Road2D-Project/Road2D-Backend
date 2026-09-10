@@ -94,5 +94,5 @@ func (g *GoongClient) getJSON(ctx context.Context, path string, query url.Values
 }
 
 func goongFailed(status string) bool {
-	return status != "" && status != "OK"
+	return status != "" && !strings.EqualFold(status, "OK")
 }

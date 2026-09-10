@@ -11,11 +11,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-//go:generate swag init -g main.go -o ./docs --parseInternal
+//go:generate swag init -g main.go -o ./docs --parseInternal --outputTypes json,yaml
 
 // @title           Road To Destination API Document
 // @version         1.0
-// @description     API Server for GWYG Application
+// @description     API Server
 // @BasePath        /v1
 
 // @securityDefinitions.apikey BearerAuth
@@ -28,7 +28,7 @@ func main() {
 	}
 
 	router := gin.Default()
-	router.GET("/docs/*any", openapiui.WrapHandler(openapiui.Config{
+	router.GET("/v1/docs/*any", openapiui.WrapHandler(openapiui.Config{
 		SpecURL:      "/docs/openapi.json",
 		SpecFilePath: "./docs/swagger.json",
 		Title:        "Road To Destination",
@@ -42,7 +42,6 @@ func main() {
 	for _, r := range routers {
 		r.RegisterRoutes(v1)
 	}
-
 	addr := share.GetEnvStringDefault("HTTP_ADDR", ":8080")
 	if err := router.Run(addr); err != nil {
 		log.Fatal(err)

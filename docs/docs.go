@@ -17,7 +17,7 @@ const docTemplate = `{
     "paths": {
         "/directions": {
             "get": {
-                "description": "Goong Directions v2. Cached as LocationLeg unless alternatives=true. Default vehicle is motorcycle.",
+                "description": "Goong Directions v2. Default vehicle is bike (two-wheeler / motorbike lanes). motorcycle and motorbike are aliased to bike.",
                 "produces": [
                     "application/json"
                 ],
@@ -42,7 +42,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "car, bike, motorcycle, taxi, truck, hd",
+                        "description": "car, bike, taxi, truck, hd. motorbike/motorcycle → bike",
                         "name": "vehicle",
                         "in": "query"
                     },
@@ -83,7 +83,7 @@ const docTemplate = `{
         },
         "/places/autocomplete": {
             "get": {
-                "description": "Goong Place Autocomplete. Pass the same sessiontoken to /places/detail to bill as one session.",
+                "description": "Goong Place Autocomplete v2. Default returns new administrative units. Set has_deprecated_administrative_unit=true to also get pre-merger names.",
                 "produces": [
                     "application/json"
                 ],
@@ -106,15 +106,15 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "type": "string",
-                        "description": "UUID v4 autocomplete session",
-                        "name": "sessiontoken",
-                        "in": "query"
-                    },
-                    {
                         "type": "integer",
                         "description": "Max predictions",
                         "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "true = also return deprecated_description / deprecated_compound",
+                        "name": "has_deprecated_administrative_unit",
                         "in": "query"
                     }
                 ],
@@ -148,7 +148,7 @@ const docTemplate = `{
         },
         "/places/detail": {
             "get": {
-                "description": "Goong Place Detail by place_id. Reuse sessiontoken from autocomplete.",
+                "description": "Goong Place Detail v2 by place_id. Default address is the new administrative unit.",
                 "produces": [
                     "application/json"
                 ],
@@ -165,9 +165,9 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "string",
-                        "description": "UUID v4 autocomplete session",
-                        "name": "sessiontoken",
+                        "type": "boolean",
+                        "description": "true = also return deprecated_description / deprecated_compound",
+                        "name": "has_deprecated_administrative_unit",
                         "in": "query"
                     }
                 ],
@@ -198,9 +198,90 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/trips": {
+            "get": {
+                "description": "Goong Trip v2. Combines routing with stop-order optimization. origin, waypoints, and destination are each optional but together need ≥10 coordinates. Default vehicle is car. roundtrip defaults true (origin and destination must differ). waypoint_index is the optimized visit order; location is the point snapped to the road.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "maps"
+                ],
+                "summary": "Optimize multi-stop trip",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Start lat,lng. If omitted Goong picks a stop.",
+                        "name": "origin",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End lat,lng. If omitted Goong picks a stop.",
+                        "name": "destination",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Stops between origin and destination, lat,lng separated by ;",
+                        "name": "waypoints",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "car, bike, taxi, truck, hd. Default car. motorbike/motorcycle → bike",
+                        "name": "vehicle",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Return to start. Default true",
+                        "name": "roundtrip",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.Trip"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
+        "model.LatLng": {
+            "type": "object",
+            "properties": {
+                "lat": {
+                    "type": "number"
+                },
+                "lng": {
+                    "type": "number"
+                }
+            }
+        },
         "model.LocationLeg": {
             "type": "object",
             "properties": {
@@ -222,7 +303,191 @@ const docTemplate = `{
                 "polyline": {
                     "type": "string"
                 },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.RouteStep"
+                    }
+                },
                 "vehicle": {
+                    "type": "string",
+                    "example": "bike"
+                }
+            }
+        },
+        "model.RouteStep": {
+            "type": "object",
+            "properties": {
+                "distance_m": {
+                    "type": "integer"
+                },
+                "duration_s": {
+                    "type": "integer"
+                },
+                "end": {
+                    "$ref": "#/definitions/model.LatLng"
+                },
+                "instruction": {
+                    "type": "string"
+                },
+                "maneuver": {
+                    "type": "string"
+                },
+                "polyline": {
+                    "type": "string"
+                },
+                "start": {
+                    "$ref": "#/definitions/model.LatLng"
+                },
+                "travel_mode": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.Trip": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "computed_at": {
+                    "type": "string"
+                },
+                "destination": {
+                    "type": "string"
+                },
+                "origin": {
+                    "type": "string"
+                },
+                "roundtrip": {
+                    "type": "boolean"
+                },
+                "trips": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.TripRoute"
+                    }
+                },
+                "vehicle": {
+                    "type": "string",
+                    "example": "car"
+                },
+                "waypoints": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.TripStop"
+                    }
+                }
+            }
+        },
+        "model.TripLeg": {
+            "type": "object",
+            "properties": {
+                "distance": {
+                    "type": "number"
+                },
+                "duration": {
+                    "type": "number"
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.TripStep"
+                    }
+                },
+                "summary": {
+                    "type": "string"
+                },
+                "weight": {
+                    "type": "number"
+                }
+            }
+        },
+        "model.TripRoute": {
+            "type": "object",
+            "properties": {
+                "distance": {
+                    "type": "number"
+                },
+                "duration": {
+                    "type": "number"
+                },
+                "geometry": {
+                    "type": "string"
+                },
+                "legs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.TripLeg"
+                    }
+                },
+                "weight": {
+                    "type": "number"
+                },
+                "weight_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.TripStep": {
+            "type": "object",
+            "properties": {
+                "distance": {
+                    "type": "number"
+                },
+                "duration": {
+                    "type": "number"
+                },
+                "geometry": {
+                    "type": "string"
+                },
+                "instruction": {
+                    "type": "string"
+                },
+                "maneuver": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "summary": {
+                    "type": "string"
+                },
+                "weight": {
+                    "type": "number"
+                }
+            }
+        },
+        "model.TripStop": {
+            "type": "object",
+            "properties": {
+                "distance": {
+                    "type": "number"
+                },
+                "location": {
+                    "$ref": "#/definitions/model.LatLng"
+                },
+                "place_id": {
+                    "type": "string"
+                },
+                "trips_index": {
+                    "type": "integer"
+                },
+                "waypoint_index": {
+                    "type": "integer"
+                }
+            }
+        },
+        "response.AdministrativeCompound": {
+            "type": "object",
+            "properties": {
+                "commune": {
+                    "type": "string"
+                },
+                "district": {
+                    "type": "string"
+                },
+                "province": {
                     "type": "string"
                 }
             }
@@ -255,6 +520,15 @@ const docTemplate = `{
         "response.PlaceDetail": {
             "type": "object",
             "properties": {
+                "compound": {
+                    "$ref": "#/definitions/response.AdministrativeCompound"
+                },
+                "deprecated_compound": {
+                    "$ref": "#/definitions/response.AdministrativeCompound"
+                },
+                "deprecated_description": {
+                    "type": "string"
+                },
                 "formatted_address": {
                     "type": "string"
                 },
@@ -291,6 +565,15 @@ const docTemplate = `{
         "response.PlacePrediction": {
             "type": "object",
             "properties": {
+                "compound": {
+                    "$ref": "#/definitions/response.AdministrativeCompound"
+                },
+                "deprecated_compound": {
+                    "$ref": "#/definitions/response.AdministrativeCompound"
+                },
+                "deprecated_description": {
+                    "type": "string"
+                },
                 "description": {
                     "type": "string"
                 },
@@ -339,8 +622,8 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "",
 	BasePath:         "/v1",
 	Schemes:          []string{},
-	Title:            "Basic RESTful API",
-	Description:      "API Server for GWYG Application",
+	Title:            "Road To Destination API Document",
+	Description:      "API Server",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

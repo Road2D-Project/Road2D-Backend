@@ -16,15 +16,13 @@ func (g *GoongClient) Autocomplete(ctx context.Context, req request.Autocomplete
 	if req.Location != "" {
 		query.Set("location", req.Location)
 	}
-	if req.SessionToken != "" {
-		query.Set("sessiontoken", req.SessionToken)
-	}
 	if req.Limit > 0 {
 		query.Set("limit", strconv.Itoa(req.Limit))
 	}
+	setDeprecatedAdmin(query, req.HasDeprecatedAdministrativeUnit)
 
 	var out response.AutocompleteResponse
-	if err := g.getJSON(ctx, "/Place/AutoComplete", query, &out); err != nil {
+	if err := g.getJSON(ctx, "/v2/place/autocomplete", query, &out); err != nil {
 		return nil, err
 	}
 	if goongFailed(out.Status) {
@@ -36,16 +34,20 @@ func (g *GoongClient) Autocomplete(ctx context.Context, req request.Autocomplete
 func (g *GoongClient) DetailPlace(ctx context.Context, req request.DetailPlaceRequest) (*response.PlaceDetailResponse, error) {
 	query := url.Values{}
 	query.Set("place_id", req.PlaceId)
-	if req.SessionToken != "" {
-		query.Set("sessiontoken", req.SessionToken)
-	}
+	setDeprecatedAdmin(query, req.HasDeprecatedAdministrativeUnit)
 
 	var out response.PlaceDetailResponse
-	if err := g.getJSON(ctx, "/Place/Detail", query, &out); err != nil {
+	if err := g.getJSON(ctx, "/v2/place/detail", query, &out); err != nil {
 		return nil, err
 	}
 	if goongFailed(out.Status) {
 		return nil, fmt.Errorf("%w: %s", ErrGoongStatus, out.Status)
 	}
 	return &out, nil
+}
+
+func setDeprecatedAdmin(query url.Values, include bool) {
+	if include {
+		query.Set("has_deprecated_administrative_unit", "true")
+	}
 }

@@ -14,4 +14,5 @@ type IMapClient interface {
 	Autocomplete(ctx context.Context, req request.AutocompleteRequest) (*response.AutocompleteResponse, error)
 	DetailPlace(ctx context.Context, req request.DetailPlaceRequest) (*response.PlaceDetailResponse, error)
 	Direction(ctx context.Context, req request.DirectionRequest) (*response.DirectionResponse, error)
+	Trip(ctx context.Context, req request.TripRequest) (*response.TripResponse, error)
 }

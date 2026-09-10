@@ -1,5 +1,12 @@
 basePath: /v1
 definitions:
+  model.LatLng:
+    properties:
+      lat:
+        type: number
+      lng:
+        type: number
+    type: object
   model.LocationLeg:
     properties:
       computed_at:
@@ -14,7 +21,134 @@ definitions:
         type: string
       polyline:
         type: string
+      steps:
+        items:
+          $ref: '#/definitions/model.RouteStep'
+        type: array
       vehicle:
+        example: bike
+        type: string
+    type: object
+  model.RouteStep:
+    properties:
+      distance_m:
+        type: integer
+      duration_s:
+        type: integer
+      end:
+        $ref: '#/definitions/model.LatLng'
+      instruction:
+        type: string
+      maneuver:
+        type: string
+      polyline:
+        type: string
+      start:
+        $ref: '#/definitions/model.LatLng'
+      travel_mode:
+        type: string
+    type: object
+  model.Trip:
+    properties:
+      code:
+        type: string
+      computed_at:
+        type: string
+      destination:
+        type: string
+      origin:
+        type: string
+      roundtrip:
+        type: boolean
+      trips:
+        items:
+          $ref: '#/definitions/model.TripRoute'
+        type: array
+      vehicle:
+        example: car
+        type: string
+      visit_order:
+        items:
+          $ref: '#/definitions/model.TripStop'
+        type: array
+      waypoints:
+        items:
+          $ref: '#/definitions/model.TripStop'
+        type: array
+    type: object
+  model.TripLeg:
+    properties:
+      distance:
+        type: number
+      duration:
+        type: number
+      steps:
+        items:
+          $ref: '#/definitions/model.TripStep'
+        type: array
+      summary:
+        type: string
+      weight:
+        type: number
+    type: object
+  model.TripRoute:
+    properties:
+      distance:
+        type: number
+      duration:
+        type: number
+      geometry:
+        type: string
+      legs:
+        items:
+          $ref: '#/definitions/model.TripLeg'
+        type: array
+      weight:
+        type: number
+      weight_name:
+        type: string
+    type: object
+  model.TripStep:
+    properties:
+      distance:
+        type: number
+      duration:
+        type: number
+      geometry:
+        type: string
+      instruction:
+        type: string
+      maneuver:
+        type: string
+      name:
+        type: string
+      summary:
+        type: string
+      weight:
+        type: number
+    type: object
+  model.TripStop:
+    properties:
+      distance:
+        type: number
+      input_index:
+        type: integer
+      location:
+        $ref: '#/definitions/model.LatLng'
+      place_id:
+        type: string
+      trips_index:
+        type: integer
+      waypoint_index:
+        type: integer
+    type: object
+  response.AdministrativeCompound:
+    properties:
+      commune:
+        type: string
+      district:
+        type: string
+      province:
         type: string
     type: object
   response.AutocompleteResponse:
@@ -35,6 +169,12 @@ definitions:
     type: object
   response.PlaceDetail:
     properties:
+      compound:
+        $ref: '#/definitions/response.AdministrativeCompound'
+      deprecated_compound:
+        $ref: '#/definitions/response.AdministrativeCompound'
+      deprecated_description:
+        type: string
       formatted_address:
         type: string
       geometry:
@@ -58,6 +198,12 @@ definitions:
     type: object
   response.PlacePrediction:
     properties:
+      compound:
+        $ref: '#/definitions/response.AdministrativeCompound'
+      deprecated_compound:
+        $ref: '#/definitions/response.AdministrativeCompound'
+      deprecated_description:
+        type: string
       description:
         type: string
       place_id:
@@ -80,14 +226,14 @@ definitions:
     type: object
 info:
   contact: {}
-  description: API Server for GWYG Application
-  title: Basic RESTful API
+  description: API Server
+  title: Road To Destination API Document
   version: "1.0"
 paths:
   /directions:
     get:
-      description: Goong Directions v2. Cached as LocationLeg unless alternatives=true.
-        Default vehicle is motorcycle.
+      description: Goong Directions v2. Default vehicle is bike (two-wheeler / motorbike
+        lanes). motorcycle and motorbike are aliased to bike.
       parameters:
       - description: Origin lat,lng
         in: query
@@ -99,7 +245,7 @@ paths:
         name: destination
         required: true
         type: string
-      - description: car, bike, motorcycle, taxi, truck, hd
+      - description: car, bike, taxi, truck, hd. motorbike/motorcycle → bike
         in: query
         name: vehicle
         type: string
@@ -131,8 +277,9 @@ paths:
       - maps
   /places/autocomplete:
     get:
-      description: Goong Place Autocomplete. Pass the same sessiontoken to /places/detail
-        to bill as one session.
+      description: Goong Place Autocomplete v2. Default returns new administrative
+        units. Set has_deprecated_administrative_unit=true to also get pre-merger
+        names.
       parameters:
       - description: Search keyword
         in: query
@@ -143,14 +290,14 @@ paths:
         in: query
         name: location
         type: string
-      - description: UUID v4 autocomplete session
-        in: query
-        name: sessiontoken
-        type: string
       - description: Max predictions
         in: query
         name: limit
         type: integer
+      - description: true = also return deprecated_description / deprecated_compound
+        in: query
+        name: has_deprecated_administrative_unit
+        type: boolean
       produces:
       - application/json
       responses:
@@ -175,17 +322,18 @@ paths:
       - maps
   /places/detail:
     get:
-      description: Goong Place Detail by place_id. Reuse sessiontoken from autocomplete.
+      description: Goong Place Detail v2 by place_id. Default address is the new administrative
+        unit.
       parameters:
       - description: Goong place_id
         in: query
         name: place_id
         required: true
         type: string
-      - description: UUID v4 autocomplete session
+      - description: true = also return deprecated_description / deprecated_compound
         in: query
-        name: sessiontoken
-        type: string
+        name: has_deprecated_administrative_unit
+        type: boolean
       produces:
       - application/json
       responses:
@@ -206,6 +354,62 @@ paths:
           schema:
             $ref: '#/definitions/share.ErrorResponse'
       summary: Place detail
+      tags:
+      - maps
+  /trips:
+    get:
+      description: Goong Trip v2 is a single-vehicle TSP, not a branch graph. waypoints
+        is a bag of lat,lng points (semicolon-separated), not an edge list. The waypoints
+        array stays in input order; waypoint_index / visit_order is the visit sequence
+        on that one tour. trips_index is copied from OSRM and is 0 unless Goong returns
+        several tours — it does not mean a split at a shared vertex.
+      parameters:
+      - description: Start lat,lng. If omitted Goong picks a stop.
+        in: query
+        name: origin
+        type: string
+      - description: End lat,lng. If omitted Goong picks a stop.
+        in: query
+        name: destination
+        type: string
+      - description: Stops between origin and destination, lat,lng separated by ;
+        in: query
+        name: waypoints
+        type: string
+      - description: car, bike, taxi, truck, hd. Default car. motorbike/motorcycle
+          → bike
+        in: query
+        name: vehicle
+        type: string
+      - description: Return to start. Default true
+        in: query
+        name: roundtrip
+        type: boolean
+      - description: Turn-by-turn per leg. Default true (Goong/OSRM default is false,
+          which yields empty steps)
+        in: query
+        name: steps
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Trip'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      summary: Optimize multi-stop trip
       tags:
       - maps
 securityDefinitions:

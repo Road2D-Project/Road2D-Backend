@@ -14,9 +14,7 @@ func (g *GoongClient) Direction(ctx context.Context, req request.DirectionReques
 	query := url.Values{}
 	query.Set("origin", req.Origin)
 	query.Set("destination", req.Destination)
-	if req.Vehicle != "" {
-		query.Set("vehicle", req.Vehicle)
-	}
+	query.Set("vehicle", req.Vehicle.Goong())
 	if req.Alternatives {
 		query.Set("alternatives", strconv.FormatBool(true))
 	}

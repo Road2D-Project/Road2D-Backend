@@ -1,0 +1,20 @@
+@baseUrl = http://localhost:8080
+
+### Autocomplete rồi lấy detail — địa giới mới
+# @name autocomplete
+GET {{baseUrl}}/v1/places/autocomplete
+    ?input=Bến Thành
+    &location=10.7721,106.6980
+    &limit=5
+
+### Place detail — địa giới mới (mặc định)
+GET {{baseUrl}}/v1/places/detail
+    ?place_id={{autocomplete.response.body.predictions[0].place_id}}
+
+### Place detail — kèm địa giới cũ
+GET {{baseUrl}}/v1/places/detail
+    ?place_id=03BJ3ItZamaUc5QLkmeI53C2Yy2UAevWaKhJCqWcrl9ppT4xp-7n_WqlQhuRSaItrY07y4QDQlCmpUEupl6M1EKkTSu4XZTdcJRCVrRklHRxjOlECov2EAnOmWSmUA-_U
+    &has_deprecated_administrative_unit=true
+
+### Place detail — thiếu place_id (400)
+GET {{baseUrl}}/v1/places/detail

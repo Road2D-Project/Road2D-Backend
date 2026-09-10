@@ -6,10 +6,13 @@ type PlaceDetailResponse struct {
 }
 
 type PlaceDetail struct {
-	PlaceID          string          `json:"place_id"`
-	Name             string          `json:"name"`
-	FormattedAddress string          `json:"formatted_address"`
-	Geometry         *PlaceGeometry  `json:"geometry,omitempty"`
+	PlaceID               string                   `json:"place_id"`
+	Name                  string                   `json:"name"`
+	FormattedAddress      string                    `json:"formatted_address"`
+	Geometry              *PlaceGeometry          `json:"geometry,omitempty"`
+	Compound              *AdministrativeCompound     `json:"compound,omitempty"`
+	DeprecatedDescription string                    `json:"deprecated_description,omitempty"`
+	DeprecatedCompound    *AdministrativeCompound     `json:"deprecated_compound,omitempty"`
 }
 
 type PlaceGeometry struct {

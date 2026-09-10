@@ -2,3 +2,7 @@ docs/prompt/
 docs/research/
 docs/.obsidian/
 .env
+.vcs
+.vs
+.idea
+.git

@@ -11,6 +11,7 @@ import (
 	"Road-To-Destination-BE/module/maps/repository"
 	"Road-To-Destination-BE/module/maps/service"
 	"Road-To-Destination-BE/module/share"
+	"Road-To-Destination-BE/module/utils/enum"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,6 +19,7 @@ import (
 // Keep swagger types in this file so swag can resolve them.
 var (
 	_ = model.LocationLeg{}
+	_ = model.Trip{}
 	_ = response.AutocompleteResponse{}
 	_ = response.PlaceDetailResponse{}
 	_ = share.ErrorResponse{}
@@ -44,17 +46,18 @@ func (ctrl *MapController) RegisterRoutes(router *gin.RouterGroup) {
 		places.GET("/detail", ctrl.HandleDetailPlace)
 	}
 	router.GET("/directions", ctrl.HandleDirection)
+	router.GET("/trips", ctrl.HandleTrip)
 }
 
 // HandleAutocomplete godoc
 // @Summary      Autocomplete places
-// @Description  Goong Place Autocomplete. Pass the same sessiontoken to /places/detail to bill as one session.
+// @Description  Goong Place Autocomplete v2. Default returns new administrative units. Set has_deprecated_administrative_unit=true to also get pre-merger names.
 // @Tags         maps
 // @Produce      json
-// @Param        input         query     string  true   "Search keyword"
-// @Param        location      query     string  false  "Bias as lat,lng"
-// @Param        sessiontoken  query     string  false  "UUID v4 autocomplete session"
-// @Param        limit         query     int     false  "Max predictions"
+// @Param        input                               query     string  true   "Search keyword"
+// @Param        location                             query     string  false  "Bias as lat,lng"
+// @Param        limit                                query     int     false  "Max predictions"
+// @Param        has_deprecated_administrative_unit     query     bool    false  "true = also return deprecated_description / deprecated_compound"
 // @Success      200          {object}  response.AutocompleteResponse
 // @Failure      400          {object}  share.ErrorResponse
 // @Failure      429          {object}  share.ErrorResponse
@@ -77,11 +80,11 @@ func (ctrl *MapController) HandleAutocomplete(c *gin.Context) {
 
 // HandleDetailPlace godoc
 // @Summary      Place detail
-// @Description  Goong Place Detail by place_id. Reuse sessiontoken from autocomplete.
+// @Description  Goong Place Detail v2 by place_id. Default address is the new administrative unit.
 // @Tags         maps
 // @Produce      json
-// @Param        place_id      query     string  true   "Goong place_id"
-// @Param        sessiontoken  query     string  false  "UUID v4 autocomplete session"
+// @Param        place_id                             query     string  true   "Goong place_id"
+// @Param        has_deprecated_administrative_unit    query     bool    false  "true = also return deprecated_description / deprecated_compound"
 // @Success      200          {object}  response.PlaceDetailResponse
 // @Failure      400          {object}  share.ErrorResponse
 // @Failure      429          {object}  share.ErrorResponse
@@ -104,12 +107,12 @@ func (ctrl *MapController) HandleDetailPlace(c *gin.Context) {
 
 // HandleDirection godoc
 // @Summary      Route A to B
-// @Description  Goong Directions v2. Cached as LocationLeg unless alternatives=true. Default vehicle is motorcycle.
+// @Description  Goong Directions v2. Default vehicle is bike (two-wheeler / motorbike lanes). motorcycle and motorbike are aliased to bike.
 // @Tags         maps
 // @Produce      json
 // @Param        origin        query     string  true   "Origin lat,lng"
 // @Param        destination   query     string  true   "Destination lat,lng (semicolon-separated for extra stops)"
-// @Param        vehicle       query     string  false  "car, bike, motorcycle, taxi, truck, hd"
+// @Param        vehicle       query     string  false  "car, bike, taxi, truck, hd. motorbike/motorcycle → bike"
 // @Param        alternatives  query     bool    false  "Return alternatives; skips LocationLeg cache"
 // @Success      200          {object}  model.LocationLeg
 // @Failure      400          {object}  share.ErrorResponse
@@ -131,14 +134,49 @@ func (ctrl *MapController) HandleDirection(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
+// HandleTrip godoc
+// @Summary      Optimize multi-stop trip
+// @Description  Goong Trip v2 is a single-vehicle TSP, not a branch graph. waypoints is a bag of lat,lng points (semicolon-separated), not an edge list. The waypoints array stays in input order; waypoint_index / visit_order is the visit sequence on that one tour. trips_index is copied from OSRM and is 0 unless Goong returns several tours — it does not mean a split at a shared vertex.
+// @Tags         maps
+// @Produce      json
+// @Param        origin        query     string  false  "Start lat,lng. If omitted Goong picks a stop."
+// @Param        destination   query     string  false  "End lat,lng. If omitted Goong picks a stop."
+// @Param        waypoints     query     string  false  "Stops between origin and destination, lat,lng separated by ;"
+// @Param        vehicle       query     string  false  "car, bike, taxi, truck, hd. Default car. motorbike/motorcycle → bike"
+// @Param        roundtrip     query     bool    false  "Return to start. Default true"
+// @Param        steps         query     bool    false  "Turn-by-turn per leg. Default true (Goong/OSRM default is false, which yields empty steps)"
+// @Success      200          {object}  model.Trip
+// @Failure      400          {object}  share.ErrorResponse
+// @Failure      429          {object}  share.ErrorResponse
+// @Failure      502          {object}  share.ErrorResponse
+// @Router       /trips [get]
+func (ctrl *MapController) HandleTrip(c *gin.Context) {
+	var req request.TripRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+		return
+	}
+	trips := service.NewTripService(ctrl.goong)
+	out, err := trips.Optimize(c.Request.Context(), req)
+	if err != nil {
+		respondMapError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, out)
+}
+
 func respondMapError(c *gin.Context, err error) {
 	body := share.ErrorResponse{Error: err.Error()}
 	switch {
+	case errors.Is(err, enum.ErrUnsupportedVehicle),
+		errors.Is(err, service.ErrTooFewTripPoints),
+		errors.Is(err, service.ErrRoundtripSameEnds):
+		c.JSON(http.StatusBadRequest, body)
 	case errors.Is(err, client.ErrMissingAPIKey):
 		c.JSON(http.StatusInternalServerError, body)
 	case errors.Is(err, client.ErrRateLimited):
 		c.JSON(http.StatusTooManyRequests, body)
-	case errors.Is(err, client.ErrEmptyRoute), errors.Is(err, client.ErrGoongStatus):
+	case errors.Is(err, client.ErrEmptyRoute), errors.Is(err, client.ErrEmptyTrip), errors.Is(err, client.ErrGoongStatus):
 		c.JSON(http.StatusBadGateway, body)
 	default:
 		c.JSON(http.StatusBadGateway, body)

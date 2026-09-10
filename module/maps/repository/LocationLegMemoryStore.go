@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"Road-To-Destination-BE/module/maps/model"
+	"Road-To-Destination-BE/module/utils/enum"
 )
 
 type LocationLegMemoryStore struct {
@@ -16,11 +17,11 @@ func NewLocationLegMemoryStore() *LocationLegMemoryStore {
 	return &LocationLegMemoryStore{byKey: make(map[string]model.LocationLeg)}
 }
 
-func LegCacheKey(origin, destination, vehicle string) string {
-	return origin + "|" + destination + "|" + vehicle
+func LegCacheKey(origin, destination string, vehicle enum.Vehicle) string {
+	return origin + "|" + destination + "|" + vehicle.Goong()
 }
 
-func (store *LocationLegMemoryStore) Find(_ context.Context, origin, destination, vehicle string) (*model.LocationLeg, error) {
+func (store *LocationLegMemoryStore) Find(_ context.Context, origin, destination string, vehicle enum.Vehicle) (*model.LocationLeg, error) {
 	store.mu.RLock()
 	defer store.mu.RUnlock()
 	leg, ok := store.byKey[LegCacheKey(origin, destination, vehicle)]
