@@ -12,15 +12,17 @@ import (
 	"Road-To-Destination-BE/module/maps/repository"
 	"Road-To-Destination-BE/module/maps/service"
 	"Road-To-Destination-BE/module/share"
+	tripmodel "Road-To-Destination-BE/module/trip/model"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 var _ share.PlaygroundRegistrar = (*MapController)(nil)
 
 // Keep swagger types in this file so swag can resolve them.
 var (
-	_ = model.LocationLeg{}
+	_ = tripmodel.Leg{}
 	_ = model.Trip{}
 	_ = response.AutocompleteResponse{}
 	_ = response.PlaceDetailResponse{}
@@ -35,10 +37,10 @@ type MapController struct {
 	legs  *repository.LocationLegMemoryStore
 }
 
-func NewMapController() *MapController {
+func NewMapController(redisClient *redis.Client) *MapController {
 	return &MapController{
 		goong: client.NewDefaultGoongClient(),
-		legs:  repository.NewLocationLegMemoryStore(),
+		legs:  repository.NewLocationLegMemoryStore(redisClient),
 	}
 }
 
@@ -56,13 +58,15 @@ func (ctrl *MapController) RegisterPlayground(router *gin.RouterGroup) {
 
 // HandleAutocomplete godoc
 // @Summary      Autocomplete places
-// @Description  Goong Place Autocomplete v2. Default returns new administrative units. Set has_deprecated_administrative_unit=true to also get pre-merger names.
+// @Description  Goong Place Autocomplete v2. location biases the search; origin (lat,lng) sorts by proximity and fills distance_meters. If origin is omitted, location is reused. Set has_deprecated_administrative_unit=true to also get pre-merger names.
 // @Tags         goong
 // @Produce      json
 // @Security     PlaygroundKey
 // @Param        input                               query     string  true   "Search keyword"
 // @Param        location                             query     string  false  "Bias as lat,lng"
+// @Param        origin                               query     string  false  "Sort by distance from this lat,lng. Defaults to location"
 // @Param        limit                                query     int     false  "Max predictions"
+// @Param        radius                               query     int     false  "Search radius in km from location. Goong default 50"
 // @Param        has_deprecated_administrative_unit     query     bool    false  "true = also return deprecated_description / deprecated_compound"
 // @Success      200          {object}  response.AutocompleteResponse
 // @Failure      400          {object}  share.ErrorResponse
@@ -121,8 +125,8 @@ func (ctrl *MapController) HandleDetailPlace(c *gin.Context) {
 // @Param        origin        query     string  true   "Origin lat,lng"
 // @Param        destination   query     string  true   "Destination lat,lng (semicolon-separated for extra stops)"
 // @Param        vehicle       query     string  false  "car, bike, taxi, truck, hd. motorbike/motorcycle → bike"
-// @Param        alternatives  query     bool    false  "Return alternatives; skips LocationLeg cache"
-// @Success      200          {object}  model.LocationLeg
+// @Param        alternatives  query     bool    false  "Return alternatives; skips Leg cache"
+// @Success      200          {object}  tripmodel.Leg
 // @Failure      400          {object}  share.ErrorResponse
 // @Failure      429          {object}  share.ErrorResponse
 // @Failure      502          {object}  share.ErrorResponse
@@ -165,7 +169,7 @@ func (ctrl *MapController) HandleTrip(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
 		return
 	}
-	trips := service.NewTripService(ctrl.goong)
+	trips := service.NewTripService(ctrl.goong, ctrl.legs)
 	out, err := trips.Optimize(c.Request.Context(), req)
 	if err != nil {
 		respondMapError(c, err)
@@ -212,7 +216,8 @@ func respondMapError(c *gin.Context, err error) {
 	case errors.Is(err, enum.ErrUnsupportedVehicle),
 		errors.Is(err, service.ErrTooFewTripPoints),
 		errors.Is(err, service.ErrRoundtripSameEnds),
-		errors.Is(err, service.ErrGeocodeLookup):
+		errors.Is(err, service.ErrGeocodeLookup),
+		errors.Is(err, service.ErrInvalidLatLng):
 		c.JSON(http.StatusBadRequest, body)
 	case errors.Is(err, client.ErrMissingAPIKey):
 		c.JSON(http.StatusInternalServerError, body)

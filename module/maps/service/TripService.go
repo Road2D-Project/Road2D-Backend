@@ -12,6 +12,8 @@ import (
 	"Road-To-Destination-BE/module/maps/model"
 	"Road-To-Destination-BE/module/maps/model/request"
 	"Road-To-Destination-BE/module/maps/model/response"
+	"Road-To-Destination-BE/module/maps/repository"
+	tripmodel "Road-To-Destination-BE/module/trip/model"
 )
 
 const minTripPoints = 10
@@ -27,10 +29,11 @@ type TripMapClient interface {
 
 type TripService struct {
 	mapClient TripMapClient
+	legs      repository.LegStore
 }
 
-func NewTripService(mapClient TripMapClient) *TripService {
-	return &TripService{mapClient: mapClient}
+func NewTripService(mapClient TripMapClient, legs repository.LegStore) *TripService {
+	return &TripService{mapClient: mapClient, legs: legs}
 }
 
 func (srv *TripService) Optimize(ctx context.Context, req request.TripRequest) (*model.Trip, error) {
@@ -51,7 +54,54 @@ func (srv *TripService) Optimize(ctx context.Context, req request.TripRequest) (
 	if err != nil {
 		return nil, err
 	}
-	return tripFromGoong(req, roundtrip, raw), nil
+	out := tripFromGoong(req, roundtrip, raw)
+	if err := srv.cacheTripLegs(ctx, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (srv *TripService) cacheTripLegs(ctx context.Context, out *model.Trip) error {
+	if srv.legs == nil || out == nil || len(out.Trips) == 0 {
+		return nil
+	}
+	order := out.VisitOrder
+	routeLegs := out.Trips[0].Legs
+	limit := len(routeLegs)
+	if len(order)-1 < limit {
+		limit = len(order) - 1
+	}
+	for i := 0; i < limit; i++ {
+		steps := make([]tripmodel.RouteStep, 0, len(routeLegs[i].Steps))
+		for _, step := range routeLegs[i].Steps {
+			steps = append(steps, tripmodel.RouteStep{
+				Instruction: step.Instruction,
+				Maneuver:    step.Maneuver,
+				DistanceM:   step.Distance,
+				DurationS:   step.Duration,
+				Polyline:    step.Geometry,
+			})
+		}
+		leg := &tripmodel.Leg{
+			FromLat:        order[i].Location.Lat,
+			FromLng:        order[i].Location.Lng,
+			ToLat:          order[i+1].Location.Lat,
+			ToLng:          order[i+1].Location.Lng,
+			Vehicle:        out.Vehicle,
+			DistanceM:      routeLegs[i].Distance,
+			DurationS:      routeLegs[i].Duration,
+			Polyline:       "",
+			Source:         enum.LegSourceTrip,
+			LastComputedAt: out.ComputedAt,
+		}
+		if err := leg.SetSteps(steps); err != nil {
+			return err
+		}
+		if err := srv.legs.Upsert(ctx, leg); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func tripFromGoong(req request.TripRequest, roundtrip bool, raw *response.TripResponse) *model.Trip {

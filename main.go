@@ -9,7 +9,6 @@ import (
 	mapsController "Road-To-Destination-BE/module/maps/controller"
 	"Road-To-Destination-BE/module/share"
 	"Road-To-Destination-BE/module/share/configuration"
-	tripModel "Road-To-Destination-BE/module/trip/model"
 
 	"github.com/PeterTakahashi/gin-openapi/openapiui"
 	"github.com/gin-gonic/gin"
@@ -43,7 +42,7 @@ func main() {
 		} else {
 			log.Fatal(err)
 		}
-	} else if err := tripModel.AutoMigrate(dbConfig.GetDatabase()); err != nil {
+	} else if err := configuration.AutoMigrate(dbConfig.GetDatabase()); err != nil {
 		log.Fatal(err)
 	}
 
@@ -52,8 +51,9 @@ func main() {
 	defer redisConfig.Disconnect()
 
 	router := gin.Default()
+	// docs/public để không trùng với Repo khác
 	router.GET("/docs/*any", openapiui.WrapHandler(openapiui.Config{
-		SpecURL:      "/docs/openapi.json",
+		SpecURL:      "/docs/public/openapi.json",
 		SpecFilePath: "./docs/swagger.json",
 		Title:        "Road2D",
 		Theme:        "dark",
@@ -63,7 +63,7 @@ func main() {
 	playground := v1.Group("")
 	playground.Use(middleware.RequireHeaderPlaygroundKey())
 	sandboxes := []share.PlaygroundRegistrar{
-		mapsController.NewMapController(),
+		mapsController.NewMapController(redisConfig.Client()),
 	}
 	for _, r := range sandboxes {
 		r.RegisterPlayground(playground)

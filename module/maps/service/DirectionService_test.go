@@ -1,7 +1,6 @@
 package service
 
 import (
-	"Road-To-Destination-BE/utils/enum"
 	"context"
 	"errors"
 	"testing"
@@ -10,6 +9,10 @@ import (
 	"Road-To-Destination-BE/module/maps/model/request"
 	"Road-To-Destination-BE/module/maps/model/response"
 	"Road-To-Destination-BE/module/maps/repository"
+	"Road-To-Destination-BE/utils/enum"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 )
 
 type stubDirectionClient struct {
@@ -22,6 +25,14 @@ func (s *stubDirectionClient) Direction(_ context.Context, req request.Direction
 	s.calls++
 	s.lastVehicle = req.Vehicle
 	return s.out, nil
+}
+
+func testLegStore(t *testing.T) *repository.LocationLegMemoryStore {
+	t.Helper()
+	mini := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mini.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	return repository.NewLocationLegMemoryStore(client)
 }
 
 func TestDirectionServiceCachesLocationLeg(t *testing.T) {
@@ -46,7 +57,7 @@ func TestDirectionServiceCachesLocationLeg(t *testing.T) {
 			}},
 		},
 	}
-	store := repository.NewLocationLegMemoryStore()
+	store := testLegStore(t)
 	svc := NewDirectionService(stub, store)
 	ctx := context.Background()
 	req := request.DirectionRequest{
@@ -62,11 +73,15 @@ func TestDirectionServiceCachesLocationLeg(t *testing.T) {
 	if first.DistanceM != 1000 || first.Polyline != "abc" {
 		t.Fatalf("unexpected first leg: %+v", first)
 	}
-	if len(first.Steps) != 1 {
-		t.Fatalf("expected 1 step, got %d", len(first.Steps))
+	steps, err := first.StepList()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if first.Steps[0].Instruction != "Bắt đầu đi từ Trần Cung" || first.Steps[0].Maneuver != "left" {
-		t.Fatalf("unexpected step: %+v", first.Steps[0])
+	if len(steps) != 1 {
+		t.Fatalf("expected 1 step, got %d", len(steps))
+	}
+	if steps[0].Instruction != "Bắt đầu đi từ Trần Cung" || steps[0].Maneuver != "left" {
+		t.Fatalf("unexpected step: %+v", steps[0])
 	}
 
 	second, err := svc.Route(ctx, req)
@@ -76,19 +91,19 @@ func TestDirectionServiceCachesLocationLeg(t *testing.T) {
 	if stub.calls != 1 {
 		t.Fatalf("expected cache hit, Goong called %d times", stub.calls)
 	}
-	if time.Since(second.ComputedAt) < 0 {
-		t.Fatal("computed_at should be set")
+	if time.Since(second.LastComputedAt) < 0 {
+		t.Fatal("lastComputedAt should be set")
 	}
 
-	cached, err := store.Find(ctx, req.Origin, req.Destination, req.Vehicle)
+	cached, err := store.Find(ctx, 10.77, 106.70, 10.78, 106.71, req.Vehicle)
 	if err != nil || cached == nil {
-		t.Fatalf("expected stored LocationLeg, err=%v", err)
+		t.Fatalf("expected stored Leg, err=%v", err)
 	}
 }
 
 func TestLocationLegMemoryStoreMiss(t *testing.T) {
-	store := repository.NewLocationLegMemoryStore()
-	got, err := store.Find(context.Background(), "a", "b", enum.CAR)
+	store := testLegStore(t)
+	got, err := store.Find(context.Background(), 1, 2, 3, 4, enum.CAR)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +123,7 @@ func TestDirectionServiceDefaultVehicle(t *testing.T) {
 			}},
 		},
 	}
-	store := repository.NewLocationLegMemoryStore()
+	store := testLegStore(t)
 	svc := NewDirectionService(stub, store)
 	leg, err := svc.Route(context.Background(), request.DirectionRequest{
 		Origin:      "1,2",
@@ -133,7 +148,7 @@ func TestDirectionServiceAliasesMotorbikeToBike(t *testing.T) {
 			}},
 		},
 	}
-	store := repository.NewLocationLegMemoryStore()
+	store := testLegStore(t)
 	svc := NewDirectionService(stub, store)
 	motorbike, err := enum.ParseVehicle("motorbike")
 	if err != nil {
@@ -156,13 +171,25 @@ func TestDirectionServiceAliasesMotorbikeToBike(t *testing.T) {
 }
 
 func TestDirectionServiceRejectsUnknownVehicle(t *testing.T) {
-	svc := NewDirectionService(&stubDirectionClient{}, repository.NewLocationLegMemoryStore())
+	svc := NewDirectionService(&stubDirectionClient{}, testLegStore(t))
 	_, err := svc.Route(context.Background(), request.DirectionRequest{
 		Origin:      "1,2",
 		Destination: "3,4",
 		Vehicle:     enum.Vehicle(99),
 	})
 	if !errors.Is(err, enum.ErrUnsupportedVehicle) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestDirectionServiceRejectsInvalidLatLng(t *testing.T) {
+	svc := NewDirectionService(&stubDirectionClient{}, testLegStore(t))
+	_, err := svc.Route(context.Background(), request.DirectionRequest{
+		Origin:      "not-a-point",
+		Destination: "3,4",
+		Vehicle:     enum.BIKE,
+	})
+	if !errors.Is(err, ErrInvalidLatLng) {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -195,7 +222,7 @@ func TestDirectionServiceConcatenatesStepsAcrossLegs(t *testing.T) {
 			}},
 		},
 	}
-	svc := NewDirectionService(stub, repository.NewLocationLegMemoryStore())
+	svc := NewDirectionService(stub, testLegStore(t))
 	leg, err := svc.Route(context.Background(), request.DirectionRequest{
 		Origin:      "1,2",
 		Destination: "3,4",
@@ -204,10 +231,14 @@ func TestDirectionServiceConcatenatesStepsAcrossLegs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(leg.Steps) != 2 {
-		t.Fatalf("expected 2 steps, got %d", len(leg.Steps))
+	steps, err := leg.StepList()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if leg.Steps[1].Instruction != "Bạn đã đến điểm đích" {
-		t.Fatalf("unexpected last step: %+v", leg.Steps[1])
+	if len(steps) != 2 {
+		t.Fatalf("expected 2 steps, got %d", len(steps))
+	}
+	if steps[1].Instruction != "Bạn đã đến điểm đích" {
+		t.Fatalf("unexpected last step: %+v", steps[1])
 	}
 }

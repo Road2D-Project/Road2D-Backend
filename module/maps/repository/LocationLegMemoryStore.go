@@ -1,43 +1,77 @@
 package repository
 
 import (
-	"Road-To-Destination-BE/utils/enum"
 	"context"
-	"sync"
+	"encoding/json"
+	"errors"
+	"strconv"
+	"time"
 
-	"Road-To-Destination-BE/module/maps/model"
+	"Road-To-Destination-BE/module/share"
+	tripmodel "Road-To-Destination-BE/module/trip/model"
+	"Road-To-Destination-BE/utils/enum"
+
+	"github.com/redis/go-redis/v9"
 )
 
+const defaultLegCacheTTLSeconds = 86400
+
+type LegStore interface {
+	Find(ctx context.Context, fromLat, fromLng, toLat, toLng float64, vehicle enum.Vehicle) (*tripmodel.Leg, error)
+	Upsert(ctx context.Context, leg *tripmodel.Leg) error
+}
+
 type LocationLegMemoryStore struct {
-	mu    sync.RWMutex
-	byKey map[string]model.LocationLeg
+	client *redis.Client
+	ttl    time.Duration
 }
 
-func NewLocationLegMemoryStore() *LocationLegMemoryStore {
-	return &LocationLegMemoryStore{byKey: make(map[string]model.LocationLeg)}
+func NewLocationLegMemoryStore(client *redis.Client) *LocationLegMemoryStore {
+	seconds := share.GetEnvIntDefault("LEG_CACHE_TTL_SECONDS", defaultLegCacheTTLSeconds)
+	return &LocationLegMemoryStore{
+		client: client,
+		ttl:    time.Duration(seconds) * time.Second,
+	}
 }
 
-func LegCacheKey(origin, destination string, vehicle enum.Vehicle) string {
-	return origin + "|" + destination + "|" + vehicle.Goong()
+func LegCacheKey(fromLat, fromLng, toLat, toLng float64, vehicle enum.Vehicle) string {
+	return "leg:" + formatCoord(fromLat) + "," + formatCoord(fromLng) + "|" +
+		formatCoord(toLat) + "," + formatCoord(toLng) + "|" + vehicle.Goong()
 }
 
-func (store *LocationLegMemoryStore) Find(_ context.Context, origin, destination string, vehicle enum.Vehicle) (*model.LocationLeg, error) {
-	store.mu.RLock()
-	defer store.mu.RUnlock()
-	leg, ok := store.byKey[LegCacheKey(origin, destination, vehicle)]
-	if !ok {
+func formatCoord(value float64) string {
+	return strconv.FormatFloat(value, 'f', -1, 64)
+}
+
+func (store *LocationLegMemoryStore) Find(ctx context.Context, fromLat, fromLng, toLat, toLng float64, vehicle enum.Vehicle) (*tripmodel.Leg, error) {
+	bytes, err := store.client.Get(ctx, LegCacheKey(fromLat, fromLng, toLat, toLng, vehicle)).Bytes()
+	if errors.Is(err, redis.Nil) {
 		return nil, nil
 	}
-	copy := leg
-	return &copy, nil
+	if err != nil {
+		return nil, err
+	}
+	var leg tripmodel.Leg
+	if err := json.Unmarshal(bytes, &leg); err != nil {
+		return nil, err
+	}
+	return &leg, nil
 }
 
-func (store *LocationLegMemoryStore) Upsert(_ context.Context, leg *model.LocationLeg) error {
+func (store *LocationLegMemoryStore) Upsert(ctx context.Context, leg *tripmodel.Leg) error {
 	if leg == nil {
 		return nil
 	}
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	store.byKey[LegCacheKey(leg.Origin, leg.Destination, leg.Vehicle)] = *leg
-	return nil
+	payload, err := json.Marshal(leg)
+	if err != nil {
+		return err
+	}
+	ttl := store.ttl
+	if leg.TTLSeconds > 0 {
+		ttl = time.Duration(leg.TTLSeconds) * time.Second
+	}
+	key := LegCacheKey(leg.FromLat, leg.FromLng, leg.ToLat, leg.ToLng, leg.Vehicle)
+	return store.client.Set(ctx, key, payload, ttl).Err()
 }
+
+var _ LegStore = (*LocationLegMemoryStore)(nil)

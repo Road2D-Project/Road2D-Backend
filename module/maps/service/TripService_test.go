@@ -83,7 +83,7 @@ func sampleGoongTrip() *response.TripResponse {
 
 func TestTripServiceDefaultVehicleAndRoundtrip(t *testing.T) {
 	stub := &stubTripClient{out: sampleGoongTrip()}
-	out, err := NewTripService(stub).Optimize(context.Background(), sampleTripRequest())
+	out, err := NewTripService(stub, nil).Optimize(context.Background(), sampleTripRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestTripServiceDefaultVehicleAndRoundtrip(t *testing.T) {
 }
 
 func TestTripServiceRejectsTooFewPoints(t *testing.T) {
-	_, err := NewTripService(&stubTripClient{}).Optimize(context.Background(), request.TripRequest{
+	_, err := NewTripService(&stubTripClient{}, nil).Optimize(context.Background(), request.TripRequest{
 		Origin:      "21.0,105.8",
 		Destination: "21.1,105.8",
 		Waypoints:   "21.02,105.79",
@@ -127,7 +127,7 @@ func TestTripServiceRejectsTooFewPoints(t *testing.T) {
 func TestTripServiceRejectsRoundtripSameEnds(t *testing.T) {
 	req := sampleTripRequest()
 	req.Destination = req.Origin
-	_, err := NewTripService(&stubTripClient{}).Optimize(context.Background(), req)
+	_, err := NewTripService(&stubTripClient{}, nil).Optimize(context.Background(), req)
 	if !errors.Is(err, ErrRoundtripSameEnds) {
 		t.Fatalf("got %v", err)
 	}
@@ -139,7 +139,7 @@ func TestTripServiceAllowsSameEndsWhenNotRoundtrip(t *testing.T) {
 	roundtrip := false
 	req.Roundtrip = &roundtrip
 	stub := &stubTripClient{out: sampleGoongTrip()}
-	if _, err := NewTripService(stub).Optimize(context.Background(), req); err != nil {
+	if _, err := NewTripService(stub, nil).Optimize(context.Background(), req); err != nil {
 		t.Fatal(err)
 	}
 	if stub.lastRoundtrip != "false" {
@@ -150,7 +150,7 @@ func TestTripServiceAllowsSameEndsWhenNotRoundtrip(t *testing.T) {
 func TestTripServiceRejectsUnknownVehicle(t *testing.T) {
 	req := sampleTripRequest()
 	req.Vehicle = enum.Vehicle(99)
-	_, err := NewTripService(&stubTripClient{}).Optimize(context.Background(), req)
+	_, err := NewTripService(&stubTripClient{}, nil).Optimize(context.Background(), req)
 	if !errors.Is(err, enum.ErrUnsupportedVehicle) {
 		t.Fatalf("got %v", err)
 	}
@@ -163,7 +163,7 @@ func TestTripServiceVisitOrderFollowsWaypointIndex(t *testing.T) {
 		{Location: []float64{21.01, 105.79}, PlaceID: "input-1", WaypointIndex: 0},
 		{Location: []float64{21.02, 105.79}, PlaceID: "input-2", WaypointIndex: 1},
 	}
-	out, err := NewTripService(&stubTripClient{out: raw}).Optimize(context.Background(), sampleTripRequest())
+	out, err := NewTripService(&stubTripClient{out: raw}, nil).Optimize(context.Background(), sampleTripRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func TestTripServiceMapsOSRMManeuver(t *testing.T) {
 		Name:     "Trần Cung",
 		Maneuver: []byte(`{"type":"turn","modifier":"left"}`),
 	}}
-	out, err := NewTripService(&stubTripClient{out: raw}).Optimize(context.Background(), sampleTripRequest())
+	out, err := NewTripService(&stubTripClient{out: raw}, nil).Optimize(context.Background(), sampleTripRequest())
 	if err != nil {
 		t.Fatal(err)
 	}

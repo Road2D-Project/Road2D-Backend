@@ -16,8 +16,18 @@ func (g *GoongClient) Autocomplete(ctx context.Context, req request.Autocomplete
 	if req.Location != "" {
 		query.Set("location", req.Location)
 	}
+	origin := req.Origin
+	if origin == "" {
+		origin = req.Location
+	}
+	if origin != "" {
+		query.Set("origin", origin)
+	}
 	if req.Limit > 0 {
 		query.Set("limit", strconv.Itoa(req.Limit))
+	}
+	if req.Radius > 0 {
+		query.Set("radius", strconv.Itoa(req.Radius))
 	}
 	setDeprecatedAdmin(query, req.HasDeprecatedAdministrativeUnit)
 
