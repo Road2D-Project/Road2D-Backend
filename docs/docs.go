@@ -15,14 +15,19 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/directions": {
+        "/goong/directions": {
             "get": {
+                "security": [
+                    {
+                        "PlaygroundKey": []
+                    }
+                ],
                 "description": "Goong Directions v2. Default vehicle is bike (two-wheeler / motorbike lanes). motorcycle and motorbike are aliased to bike.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "maps"
+                    "goong"
                 ],
                 "summary": "Route A to B",
                 "parameters": [
@@ -81,14 +86,100 @@ const docTemplate = `{
                 }
             }
         },
-        "/places/autocomplete": {
+        "/goong/geocode": {
             "get": {
+                "security": [
+                    {
+                        "PlaygroundKey": []
+                    }
+                ],
+                "description": "Goong Geocode v2. Provide exactly one of address (forward), latlng (reverse), or place_id. Default results use the new administrative units. has_deprecated_administrative_unit=true adds pre-merger names. has_vnid=true adds deprecated_compound_id on reverse.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "goong"
+                ],
+                "summary": "Geocode address or coordinates",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Forward: address to coordinates",
+                        "name": "address",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Reverse: lat,lng to address",
+                        "name": "latlng",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Lookup by Goong place_id",
+                        "name": "place_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Max results (reverse)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "true = also return deprecated_description / deprecated_compound",
+                        "name": "has_deprecated_administrative_unit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "true = also return deprecated_compound_id (VN admin codes)",
+                        "name": "has_vnid",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.GeocodeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/goong/places/autocomplete": {
+            "get": {
+                "security": [
+                    {
+                        "PlaygroundKey": []
+                    }
+                ],
                 "description": "Goong Place Autocomplete v2. Default returns new administrative units. Set has_deprecated_administrative_unit=true to also get pre-merger names.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "maps"
+                    "goong"
                 ],
                 "summary": "Autocomplete places",
                 "parameters": [
@@ -146,14 +237,19 @@ const docTemplate = `{
                 }
             }
         },
-        "/places/detail": {
+        "/goong/places/detail": {
             "get": {
+                "security": [
+                    {
+                        "PlaygroundKey": []
+                    }
+                ],
                 "description": "Goong Place Detail v2 by place_id. Default address is the new administrative unit.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "maps"
+                    "goong"
                 ],
                 "summary": "Place detail",
                 "parameters": [
@@ -199,14 +295,19 @@ const docTemplate = `{
                 }
             }
         },
-        "/trips": {
+        "/goong/trips": {
             "get": {
-                "description": "Goong Trip v2. Combines routing with stop-order optimization. origin, waypoints, and destination are each optional but together need ≥10 coordinates. Default vehicle is car. roundtrip defaults true (origin and destination must differ). waypoint_index is the optimized visit order; location is the point snapped to the road.",
+                "security": [
+                    {
+                        "PlaygroundKey": []
+                    }
+                ],
+                "description": "Goong Trip v2 is a single-vehicle TSP, not a branch graph. waypoints is a bag of lat,lng points (semicolon-separated), not an edge list. The waypoints array stays in input order; waypoint_index / visit_order is the visit sequence on that one tour. trips_index is copied from OSRM and is 0 unless Goong returns several tours — it does not mean a split at a shared vertex.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "maps"
+                    "goong"
                 ],
                 "summary": "Optimize multi-stop trip",
                 "parameters": [
@@ -238,6 +339,12 @@ const docTemplate = `{
                         "type": "boolean",
                         "description": "Return to start. Default true",
                         "name": "roundtrip",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Turn-by-turn per leg. Default true (Goong/OSRM default is false, which yields empty steps)",
+                        "name": "steps",
                         "in": "query"
                     }
                 ],
@@ -372,6 +479,12 @@ const docTemplate = `{
                     "type": "string",
                     "example": "car"
                 },
+                "visit_order": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.TripStop"
+                    }
+                },
                 "waypoints": {
                     "type": "array",
                     "items": {
@@ -464,6 +577,9 @@ const docTemplate = `{
                 "distance": {
                     "type": "number"
                 },
+                "input_index": {
+                    "type": "integer"
+                },
                 "location": {
                     "$ref": "#/definitions/model.LatLng"
                 },
@@ -475,6 +591,17 @@ const docTemplate = `{
                 },
                 "waypoint_index": {
                     "type": "integer"
+                }
+            }
+        },
+        "response.AddressComponent": {
+            "type": "object",
+            "properties": {
+                "long_name": {
+                    "type": "string"
+                },
+                "short_name": {
+                    "type": "string"
                 }
             }
         },
@@ -492,6 +619,20 @@ const docTemplate = `{
                 }
             }
         },
+        "response.AdministrativeCompoundID": {
+            "type": "object",
+            "properties": {
+                "commune": {
+                    "type": "integer"
+                },
+                "district": {
+                    "type": "integer"
+                },
+                "province": {
+                    "type": "integer"
+                }
+            }
+        },
         "response.AutocompleteResponse": {
             "type": "object",
             "properties": {
@@ -503,6 +644,81 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                }
+            }
+        },
+        "response.GeocodeGeometry": {
+            "type": "object",
+            "properties": {
+                "boundary": {
+                    "type": "string"
+                },
+                "location": {
+                    "$ref": "#/definitions/response.LatLng"
+                }
+            }
+        },
+        "response.GeocodeResponse": {
+            "type": "object",
+            "properties": {
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.GeocodeResult"
+                    }
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.GeocodeResult": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "address_components": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.AddressComponent"
+                    }
+                },
+                "compound": {
+                    "$ref": "#/definitions/response.AdministrativeCompound"
+                },
+                "deprecated_compound": {
+                    "$ref": "#/definitions/response.AdministrativeCompound"
+                },
+                "deprecated_compound_id": {
+                    "$ref": "#/definitions/response.AdministrativeCompoundID"
+                },
+                "deprecated_description": {
+                    "type": "string"
+                },
+                "formatted_address": {
+                    "type": "string"
+                },
+                "geometry": {
+                    "$ref": "#/definitions/response.GeocodeGeometry"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "place_id": {
+                    "type": "string"
+                },
+                "plus_code": {
+                    "$ref": "#/definitions/response.PlusCode"
+                },
+                "reference": {
+                    "type": "string"
+                },
+                "types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -585,6 +801,17 @@ const docTemplate = `{
                 }
             }
         },
+        "response.PlusCode": {
+            "type": "object",
+            "properties": {
+                "compound_code": {
+                    "type": "string"
+                },
+                "global_code": {
+                    "type": "string"
+                }
+            }
+        },
         "response.StructuredFormatting": {
             "type": "object",
             "properties": {
@@ -612,6 +839,12 @@ const docTemplate = `{
             "type": "apiKey",
             "name": "Authorization",
             "in": "header"
+        },
+        "PlaygroundKey": {
+            "description": "Shared secret from GOONG_PLAYGROUND_KEY. Scalar → Authorize.",
+            "type": "apiKey",
+            "name": "X-Playground-Key",
+            "in": "header"
         }
     }
 }`
@@ -622,8 +855,8 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "",
 	BasePath:         "/v1",
 	Schemes:          []string{},
-	Title:            "Road To Destination API Document",
-	Description:      "API Server",
+	Title:            "Road2D",
+	Description:      "API Server for Road2D",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

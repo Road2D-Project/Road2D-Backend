@@ -1,6 +1,9 @@
 package share
 
-import "os"
+import (
+	"os"
+	"strconv"
+)
 
 func GetEnvStringDefault(key string, defaultValue string) string {
 	value := os.Getenv(key)
@@ -8,4 +11,16 @@ func GetEnvStringDefault(key string, defaultValue string) string {
 		return defaultValue
 	}
 	return value
+}
+
+func GetEnvIntDefault(key string, defaultValue int) int {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return defaultValue
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return defaultValue
+	}
+	return n
 }

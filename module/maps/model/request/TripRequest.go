@@ -1,9 +1,8 @@
 package request
 
 import (
+	"Road-To-Destination-BE/utils/enum"
 	"strings"
-
-	"Road-To-Destination-BE/module/utils/enum"
 )
 
 // TripRequest is Goong Trip v2 — optimize stop order (TSP) then route the result.

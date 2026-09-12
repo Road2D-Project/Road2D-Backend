@@ -1,9 +1,8 @@
 package model
 
 import (
+	"Road-To-Destination-BE/utils/enum"
 	"time"
-
-	"Road-To-Destination-BE/module/utils/enum"
 )
 
 // Trip is the optimized multi-stop itinerary from Goong Trip v2.
@@ -21,12 +20,12 @@ type Trip struct {
 
 // TripRoute is one optimized tour (usually a single element unless Goong returns several).
 type TripRoute struct {
-	Distance   float64    `json:"distance"`
+	Distance   float64   `json:"distance"`
 	Duration   float64   `json:"duration"`
-	Geometry   string     `json:"geometry"`
+	Geometry   string    `json:"geometry"`
 	Weight     float64   `json:"weight"`
-	WeightName string     `json:"weight_name"`
-	Legs       []TripLeg  `json:"legs"`
+	WeightName string    `json:"weight_name"`
+	Legs       []TripLeg `json:"legs"`
 }
 
 // TripLeg is the segment between two consecutive stops (origin→waypoint or waypoint→destination).
@@ -34,7 +33,7 @@ type TripLeg struct {
 	Distance float64    `json:"distance"`
 	Duration float64    `json:"duration"`
 	Weight   float64    `json:"weight"`
-	Summary  string      `json:"summary"`
+	Summary  string     `json:"summary"`
 	Steps    []TripStep `json:"steps"`
 }
 

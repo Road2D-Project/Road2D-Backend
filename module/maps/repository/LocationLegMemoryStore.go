@@ -1,11 +1,11 @@
 package repository
 
 import (
+	"Road-To-Destination-BE/utils/enum"
 	"context"
 	"sync"
 
 	"Road-To-Destination-BE/module/maps/model"
-	"Road-To-Destination-BE/module/utils/enum"
 )
 
 type LocationLegMemoryStore struct {

@@ -1,6 +1,8 @@
 package request
 
-import "Road-To-Destination-BE/module/utils/enum"
+import (
+	"Road-To-Destination-BE/utils/enum"
+)
 
 type DirectionRequest struct {
 	Origin       string       `form:"origin" binding:"required"`

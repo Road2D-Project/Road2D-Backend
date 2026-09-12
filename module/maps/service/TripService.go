@@ -1,6 +1,7 @@
 package service
 
 import (
+	"Road-To-Destination-BE/utils/enum"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,7 +12,6 @@ import (
 	"Road-To-Destination-BE/module/maps/model"
 	"Road-To-Destination-BE/module/maps/model/request"
 	"Road-To-Destination-BE/module/maps/model/response"
-	"Road-To-Destination-BE/module/utils/enum"
 )
 
 const minTripPoints = 10

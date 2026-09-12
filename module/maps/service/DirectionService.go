@@ -1,13 +1,13 @@
 package service
 
 import (
+	"Road-To-Destination-BE/utils/enum"
 	"context"
 	"time"
 
 	"Road-To-Destination-BE/module/maps/model"
 	"Road-To-Destination-BE/module/maps/model/request"
 	"Road-To-Destination-BE/module/maps/model/response"
-	"Road-To-Destination-BE/module/utils/enum"
 )
 
 type DirectionMapClient interface {

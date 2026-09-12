@@ -1,6 +1,7 @@
 package service
 
 import (
+	"Road-To-Destination-BE/utils/enum"
 	"context"
 	"errors"
 	"testing"
@@ -9,7 +10,6 @@ import (
 	"Road-To-Destination-BE/module/maps/model/request"
 	"Road-To-Destination-BE/module/maps/model/response"
 	"Road-To-Destination-BE/module/maps/repository"
-	"Road-To-Destination-BE/module/utils/enum"
 )
 
 type stubDirectionClient struct {
@@ -32,14 +32,14 @@ func TestDirectionServiceCachesLocationLeg(t *testing.T) {
 					Distance: response.TextValue{Value: 1000},
 					Duration: response.TextValue{Value: 120},
 					Steps: []response.Step{{
-						Distance:          response.TextValue{Value: 1000},
-						Duration:          response.TextValue{Value: 120},
+						Distance:         response.TextValue{Value: 1000},
+						Duration:         response.TextValue{Value: 120},
 						HTMLInstructions: "Bắt đầu đi từ Trần Cung",
-						Maneuver:          "left",
-						Polyline:          response.OverviewPolyline{Points: "abc"},
-						StartLocation:     response.LatLng{Lat: 21.04663, Lng: 105.79022},
-						EndLocation:       response.LatLng{Lat: 21.04667, Lng: 105.79022},
-						TravelMode:        "DRIVING",
+						Maneuver:         "left",
+						Polyline:         response.OverviewPolyline{Points: "abc"},
+						StartLocation:    response.LatLng{Lat: 21.04663, Lng: 105.79022},
+						EndLocation:      response.LatLng{Lat: 21.04667, Lng: 105.79022},
+						TravelMode:       "DRIVING",
 					}},
 				}},
 				OverviewPolyline: response.OverviewPolyline{Points: "abc"},
@@ -177,10 +177,10 @@ func TestDirectionServiceConcatenatesStepsAcrossLegs(t *testing.T) {
 						Duration: response.TextValue{Value: 1},
 						Steps: []response.Step{{
 							HTMLInstructions: "Bắt đầu đi từ Trần Cung",
-							Maneuver:          "left",
-							Distance:          response.TextValue{Value: 5},
-							Duration:          response.TextValue{Value: 1},
-							Polyline:          response.OverviewPolyline{Points: "aaa"},
+							Maneuver:         "left",
+							Distance:         response.TextValue{Value: 5},
+							Duration:         response.TextValue{Value: 1},
+							Polyline:         response.OverviewPolyline{Points: "aaa"},
 						}},
 					},
 					{
@@ -188,7 +188,7 @@ func TestDirectionServiceConcatenatesStepsAcrossLegs(t *testing.T) {
 						Duration: response.TextValue{Value: 0},
 						Steps: []response.Step{{
 							HTMLInstructions: "Bạn đã đến điểm đích",
-							Polyline:          response.OverviewPolyline{Points: "bbb"},
+							Polyline:         response.OverviewPolyline{Points: "bbb"},
 						}},
 					},
 				},

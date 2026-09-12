@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"Road-To-Destination-BE/utils/enum"
 	"errors"
 	"net/http"
 
@@ -11,10 +12,11 @@ import (
 	"Road-To-Destination-BE/module/maps/repository"
 	"Road-To-Destination-BE/module/maps/service"
 	"Road-To-Destination-BE/module/share"
-	"Road-To-Destination-BE/module/utils/enum"
 
 	"github.com/gin-gonic/gin"
 )
+
+var _ share.PlaygroundRegistrar = (*MapController)(nil)
 
 // Keep swagger types in this file so swag can resolve them.
 var (
@@ -22,6 +24,7 @@ var (
 	_ = model.Trip{}
 	_ = response.AutocompleteResponse{}
 	_ = response.PlaceDetailResponse{}
+	_ = response.GeocodeResponse{}
 	_ = share.ErrorResponse{}
 )
 
@@ -39,21 +42,24 @@ func NewMapController() *MapController {
 	}
 }
 
-func (ctrl *MapController) RegisterRoutes(router *gin.RouterGroup) {
-	places := router.Group("/places")
+func (ctrl *MapController) RegisterPlayground(router *gin.RouterGroup) {
+	goong := router.Group("/goong")
+	places := goong.Group("/places")
 	{
 		places.GET("/autocomplete", ctrl.HandleAutocomplete)
 		places.GET("/detail", ctrl.HandleDetailPlace)
 	}
-	router.GET("/directions", ctrl.HandleDirection)
-	router.GET("/trips", ctrl.HandleTrip)
+	goong.GET("/directions", ctrl.HandleDirection)
+	goong.GET("/trips", ctrl.HandleTrip)
+	goong.GET("/geocode", ctrl.HandleGeocode)
 }
 
 // HandleAutocomplete godoc
 // @Summary      Autocomplete places
 // @Description  Goong Place Autocomplete v2. Default returns new administrative units. Set has_deprecated_administrative_unit=true to also get pre-merger names.
-// @Tags         maps
+// @Tags         goong
 // @Produce      json
+// @Security     PlaygroundKey
 // @Param        input                               query     string  true   "Search keyword"
 // @Param        location                             query     string  false  "Bias as lat,lng"
 // @Param        limit                                query     int     false  "Max predictions"
@@ -62,7 +68,7 @@ func (ctrl *MapController) RegisterRoutes(router *gin.RouterGroup) {
 // @Failure      400          {object}  share.ErrorResponse
 // @Failure      429          {object}  share.ErrorResponse
 // @Failure      502          {object}  share.ErrorResponse
-// @Router       /places/autocomplete [get]
+// @Router       /goong/places/autocomplete [get]
 func (ctrl *MapController) HandleAutocomplete(c *gin.Context) {
 	var req request.AutocompleteRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
@@ -81,15 +87,16 @@ func (ctrl *MapController) HandleAutocomplete(c *gin.Context) {
 // HandleDetailPlace godoc
 // @Summary      Place detail
 // @Description  Goong Place Detail v2 by place_id. Default address is the new administrative unit.
-// @Tags         maps
+// @Tags         goong
 // @Produce      json
+// @Security     PlaygroundKey
 // @Param        place_id                             query     string  true   "Goong place_id"
 // @Param        has_deprecated_administrative_unit    query     bool    false  "true = also return deprecated_description / deprecated_compound"
 // @Success      200          {object}  response.PlaceDetailResponse
 // @Failure      400          {object}  share.ErrorResponse
 // @Failure      429          {object}  share.ErrorResponse
 // @Failure      502          {object}  share.ErrorResponse
-// @Router       /places/detail [get]
+// @Router       /goong/places/detail [get]
 func (ctrl *MapController) HandleDetailPlace(c *gin.Context) {
 	var req request.DetailPlaceRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
@@ -108,8 +115,9 @@ func (ctrl *MapController) HandleDetailPlace(c *gin.Context) {
 // HandleDirection godoc
 // @Summary      Route A to B
 // @Description  Goong Directions v2. Default vehicle is bike (two-wheeler / motorbike lanes). motorcycle and motorbike are aliased to bike.
-// @Tags         maps
+// @Tags         goong
 // @Produce      json
+// @Security     PlaygroundKey
 // @Param        origin        query     string  true   "Origin lat,lng"
 // @Param        destination   query     string  true   "Destination lat,lng (semicolon-separated for extra stops)"
 // @Param        vehicle       query     string  false  "car, bike, taxi, truck, hd. motorbike/motorcycle → bike"
@@ -118,7 +126,7 @@ func (ctrl *MapController) HandleDetailPlace(c *gin.Context) {
 // @Failure      400          {object}  share.ErrorResponse
 // @Failure      429          {object}  share.ErrorResponse
 // @Failure      502          {object}  share.ErrorResponse
-// @Router       /directions [get]
+// @Router       /goong/directions [get]
 func (ctrl *MapController) HandleDirection(c *gin.Context) {
 	var req request.DirectionRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
@@ -137,8 +145,9 @@ func (ctrl *MapController) HandleDirection(c *gin.Context) {
 // HandleTrip godoc
 // @Summary      Optimize multi-stop trip
 // @Description  Goong Trip v2 is a single-vehicle TSP, not a branch graph. waypoints is a bag of lat,lng points (semicolon-separated), not an edge list. The waypoints array stays in input order; waypoint_index / visit_order is the visit sequence on that one tour. trips_index is copied from OSRM and is 0 unless Goong returns several tours — it does not mean a split at a shared vertex.
-// @Tags         maps
+// @Tags         goong
 // @Produce      json
+// @Security     PlaygroundKey
 // @Param        origin        query     string  false  "Start lat,lng. If omitted Goong picks a stop."
 // @Param        destination   query     string  false  "End lat,lng. If omitted Goong picks a stop."
 // @Param        waypoints     query     string  false  "Stops between origin and destination, lat,lng separated by ;"
@@ -149,7 +158,7 @@ func (ctrl *MapController) HandleDirection(c *gin.Context) {
 // @Failure      400          {object}  share.ErrorResponse
 // @Failure      429          {object}  share.ErrorResponse
 // @Failure      502          {object}  share.ErrorResponse
-// @Router       /trips [get]
+// @Router       /goong/trips [get]
 func (ctrl *MapController) HandleTrip(c *gin.Context) {
 	var req request.TripRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
@@ -165,12 +174,45 @@ func (ctrl *MapController) HandleTrip(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
+// HandleGeocode godoc
+// @Summary      Geocode address or coordinates
+// @Description  Goong Geocode v2. Provide exactly one of address (forward), latlng (reverse), or place_id. Default results use the new administrative units. has_deprecated_administrative_unit=true adds pre-merger names. has_vnid=true adds deprecated_compound_id on reverse.
+// @Tags         goong
+// @Produce      json
+// @Security     PlaygroundKey
+// @Param        address                              query     string  false  "Forward: address to coordinates"
+// @Param        latlng                               query     string  false  "Reverse: lat,lng to address"
+// @Param        place_id                             query     string  false  "Lookup by Goong place_id"
+// @Param        limit                                 query     int     false  "Max results (reverse)"
+// @Param        has_deprecated_administrative_unit    query     bool    false  "true = also return deprecated_description / deprecated_compound"
+// @Param        has_vnid                             query     bool    false  "true = also return deprecated_compound_id (VN admin codes)"
+// @Success      200          {object}  response.GeocodeResponse
+// @Failure      400          {object}  share.ErrorResponse
+// @Failure      429          {object}  share.ErrorResponse
+// @Failure      502          {object}  share.ErrorResponse
+// @Router       /goong/geocode [get]
+func (ctrl *MapController) HandleGeocode(c *gin.Context) {
+	var req request.GeocodeRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+		return
+	}
+	geocode := service.NewGeocodeService(ctrl.goong)
+	out, err := geocode.Lookup(c.Request.Context(), req)
+	if err != nil {
+		respondMapError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, out)
+}
+
 func respondMapError(c *gin.Context, err error) {
 	body := share.ErrorResponse{Error: err.Error()}
 	switch {
 	case errors.Is(err, enum.ErrUnsupportedVehicle),
 		errors.Is(err, service.ErrTooFewTripPoints),
-		errors.Is(err, service.ErrRoundtripSameEnds):
+		errors.Is(err, service.ErrRoundtripSameEnds),
+		errors.Is(err, service.ErrGeocodeLookup):
 		c.JSON(http.StatusBadRequest, body)
 	case errors.Is(err, client.ErrMissingAPIKey):
 		c.JSON(http.StatusInternalServerError, body)

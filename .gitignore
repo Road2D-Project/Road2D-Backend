@@ -1,8 +1,13 @@
 docs/prompt/
 docs/research/
 docs/.obsidian/
+docs/review
+
 .env
 .vcs
 .vs
 .idea
 .git
+
+module/maps/test
+

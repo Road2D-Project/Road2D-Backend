@@ -15,4 +15,5 @@ type IMapClient interface {
 	DetailPlace(ctx context.Context, req request.DetailPlaceRequest) (*response.PlaceDetailResponse, error)
 	Direction(ctx context.Context, req request.DirectionRequest) (*response.DirectionResponse, error)
 	Trip(ctx context.Context, req request.TripRequest) (*response.TripResponse, error)
+	Geocode(ctx context.Context, req request.GeocodeRequest) (*response.GeocodeResponse, error)
 }

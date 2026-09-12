@@ -1,9 +1,8 @@
 package model
 
 import (
+	"Road-To-Destination-BE/utils/enum"
 	"time"
-
-	"Road-To-Destination-BE/module/utils/enum"
 )
 
 // LocationLeg is the shared, mutable cache of a computed A→B route.
