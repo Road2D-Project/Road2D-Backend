@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	authModle "Road-To-Destination-BE/module/authentication/model"
 	"Road-To-Destination-BE/module/trip/model"
 
 	"gorm.io/gorm"
@@ -16,5 +17,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.BranchDestination{},
 		&model.Leg{},
 		&model.Travel{},
+		&authModle.User{},
 	)
 }

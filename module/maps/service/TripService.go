@@ -90,12 +90,9 @@ func (srv *TripService) cacheTripLegs(ctx context.Context, out *model.Trip) erro
 			Vehicle:        out.Vehicle,
 			DistanceM:      routeLegs[i].Distance,
 			DurationS:      routeLegs[i].Duration,
-			Polyline:       "",
+			Steps:          steps,
 			Source:         enum.LegSourceTrip,
 			LastComputedAt: out.ComputedAt,
-		}
-		if err := leg.SetSteps(steps); err != nil {
-			return err
 		}
 		if err := srv.legs.Upsert(ctx, leg); err != nil {
 			return err

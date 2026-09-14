@@ -96,11 +96,9 @@ func locationLegFromRoute(req request.DirectionRequest, fromLat, fromLng, toLat,
 		DistanceM:      distanceM,
 		DurationS:      durationS,
 		Polyline:       route.OverviewPolyline.Points,
+	Steps:          steps,
 		Source:         enum.LegSourceDirection,
-		LastComputedAt: time.Now().UTC(),
-	}
-	if err := leg.SetSteps(steps); err != nil {
-		return nil, err
+		LastComputedAt: time.Now().UTC(),	
 	}
 	return leg, nil
 }

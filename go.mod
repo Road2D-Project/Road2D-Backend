@@ -4,10 +4,14 @@ go 1.26.0
 
 require (
 	github.com/PeterTakahashi/gin-openapi v0.1.0
+	github.com/alicebob/miniredis/v2 v2.39.0
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.22.0
+	github.com/serpapi/serpapi-golang v1.1.0
 	github.com/swaggo/swag v1.8.12
+	golang.org/x/crypto v0.48.0
 	golang.org/x/time v0.16.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.2
@@ -17,7 +21,6 @@ require (
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
-	github.com/alicebob/miniredis/v2 v2.39.0 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.15.0 // indirect
 	github.com/bytedance/sonic/loader v0.5.0 // indirect
@@ -57,7 +60,6 @@ require (
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/arch v0.22.0 // indirect
-	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect

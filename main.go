@@ -1,17 +1,21 @@
 package main
 
 import (
+	"Road-To-Destination-BE/utils/customValidator"
 	"errors"
 	"log"
 	"os"
 
 	"Road-To-Destination-BE/middleware"
+	authenController "Road-To-Destination-BE/module/authentication/controller"
+	mapsClient "Road-To-Destination-BE/module/maps/client"
 	mapsController "Road-To-Destination-BE/module/maps/controller"
 	"Road-To-Destination-BE/module/share"
 	"Road-To-Destination-BE/module/share/configuration"
 
 	"github.com/PeterTakahashi/gin-openapi/openapiui"
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 )
 
 //go:generate swag init -g main.go -d . --exclude ./docs -o ./docs --parseInternal --outputTypes json,yaml
@@ -49,10 +53,13 @@ func main() {
 	var redisConfig configuration.RedisConfiguration
 	redisConfig.Connect()
 	defer redisConfig.Disconnect()
+	// validator
+	mainValidator := validator.New()
+	customValidator.ValidatorRegistrar(mainValidator)
 
 	router := gin.Default()
-	// docs/public để không trùng với Repo khác
-	router.GET("/docs/*any", openapiui.WrapHandler(openapiui.Config{
+
+	router.GET("/docs/public/*any", openapiui.WrapHandler(openapiui.Config{
 		SpecURL:      "/docs/public/openapi.json",
 		SpecFilePath: "./docs/swagger.json",
 		Title:        "Road2D",
@@ -60,6 +67,8 @@ func main() {
 	}))
 
 	v1 := router.Group("/v1")
+	// Playgroup router
+	mapsClient.NewSerpClient().RegisterRoutes(v1)
 	playground := v1.Group("")
 	playground.Use(middleware.RequireHeaderPlaygroundKey())
 	sandboxes := []share.PlaygroundRegistrar{
@@ -67,6 +76,13 @@ func main() {
 	}
 	for _, r := range sandboxes {
 		r.RegisterPlayground(playground)
+	}
+	// Public router
+	routerRegistrars := []share.RouterRegistrar{
+		authenController.NewAuthenticationController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator),
+	}
+	for _, r := range routerRegistrars {
+		r.RegisterRoutes(v1)
 	}
 
 	addr := share.GetEnvStringDefault("HTTP_ADDR", ":8080")

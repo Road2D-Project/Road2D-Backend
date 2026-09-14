@@ -73,15 +73,11 @@ func TestDirectionServiceCachesLocationLeg(t *testing.T) {
 	if first.DistanceM != 1000 || first.Polyline != "abc" {
 		t.Fatalf("unexpected first leg: %+v", first)
 	}
-	steps, err := first.StepList()
-	if err != nil {
-		t.Fatal(err)
+	if len(first.Steps) != 1 {
+		t.Fatalf("expected 1 step, got %d", len(first.Steps))
 	}
-	if len(steps) != 1 {
-		t.Fatalf("expected 1 step, got %d", len(steps))
-	}
-	if steps[0].Instruction != "Bắt đầu đi từ Trần Cung" || steps[0].Maneuver != "left" {
-		t.Fatalf("unexpected step: %+v", steps[0])
+	if first.Steps[0].Instruction != "Bắt đầu đi từ Trần Cung" || first.Steps[0].Maneuver != "left" {
+		t.Fatalf("unexpected step: %+v", first.Steps[0])
 	}
 
 	second, err := svc.Route(ctx, req)
@@ -231,14 +227,10 @@ func TestDirectionServiceConcatenatesStepsAcrossLegs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	steps, err := leg.StepList()
-	if err != nil {
-		t.Fatal(err)
+	if len(leg.Steps) != 2 {
+		t.Fatalf("expected 2 steps, got %d", len(leg.Steps))
 	}
-	if len(steps) != 2 {
-		t.Fatalf("expected 2 steps, got %d", len(steps))
-	}
-	if steps[1].Instruction != "Bạn đã đến điểm đích" {
-		t.Fatalf("unexpected last step: %+v", steps[1])
+	if leg.Steps[1].Instruction != "Bạn đã đến điểm đích" {
+		t.Fatalf("unexpected last step: %+v", leg.Steps[1])
 	}
 }

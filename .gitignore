@@ -2,12 +2,12 @@ docs/prompt/
 docs/research/
 docs/.obsidian/
 docs/review
-
+persistence/
 .env
 .vcs
 .vs
 .idea
 .git
-
+.cursor/
 module/maps/test
 

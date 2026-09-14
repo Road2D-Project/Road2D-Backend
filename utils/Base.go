@@ -9,7 +9,7 @@ import (
 
 // Base is the UUID primary key + timestamps used by trip tables.
 type Base struct {
-	ID        uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
+	ID        uuid.UUID `json:"id" gorm:"type:uuid;primaryKey" swaggertype:"string" format:"uuid"`
 	CreatedAt time.Time `json:"createdTime" gorm:"autoCreateTime"`
 	UpdatedAt time.Time `json:"updatedTime" gorm:"autoUpdateTime"`
 }
