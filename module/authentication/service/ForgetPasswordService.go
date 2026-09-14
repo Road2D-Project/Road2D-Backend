@@ -14,8 +14,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const resetTokenTTLMinutes = 15
-
 type MailRepository interface {
 	CheckExistedEmail(ctx context.Context, mail string) (*model.User, error)
 }
@@ -27,10 +25,11 @@ type MailClient interface {
 type ForgetPasswordService struct {
 	emailRepository MailRepository
 	mailClient      MailClient
+	store           *PasswordResetStore
 }
 
-func NewForgetPasswordService(emailRepository MailRepository, mailClient MailClient) *ForgetPasswordService {
-	return &ForgetPasswordService{emailRepository: emailRepository, mailClient: mailClient}
+func NewForgetPasswordService(emailRepository MailRepository, mailClient MailClient, store *PasswordResetStore) *ForgetPasswordService {
+	return &ForgetPasswordService{emailRepository: emailRepository, mailClient: mailClient, store: store}
 }
 
 func (u *ForgetPasswordService) ForgetPassword(ctx context.Context, request request.ForgetPasswordRequest) (*response.ForgetPasswordResponse, error) {
@@ -38,15 +37,31 @@ func (u *ForgetPasswordService) ForgetPassword(ctx context.Context, request requ
 	if err != nil {
 		return nil, err
 	}
-	sendEmailErr := u.SendMail(ctx, ForgetPasswordForm{
+	wait, blocked, err := u.store.ResetCooldownRemaining(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	if blocked {
+		return nil, &PasswordResetCooldownError{WaitMinutes: wait}
+	}
+	alreadySent, err := u.store.ForgetMailAlreadySent(ctx, user.ID, user.Email)
+	if err != nil {
+		return nil, err
+	}
+	if alreadySent {
+		return &response.ForgetPasswordResponse{Message: alreadySentMailMessage}, nil
+	}
+	if err := u.SendMail(ctx, ForgetPasswordForm{
 		Email:    user.Email,
 		Username: user.Username,
 		UserId:   user.ID,
-	})
-	if sendEmailErr != nil {
-		return nil, sendEmailErr
+	}); err != nil {
+		return nil, err
 	}
-	return &response.ForgetPasswordResponse{Message: "Reset password email has been sent"}, nil
+	if err := u.store.MarkForgetMailSent(ctx, user.ID, user.Email); err != nil {
+		return nil, err
+	}
+	return &response.ForgetPasswordResponse{Message: alreadySentMailMessage}, nil
 }
 
 func (u *ForgetPasswordService) SendMail(ctx context.Context, form ForgetPasswordForm) error {

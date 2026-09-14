@@ -49,7 +49,7 @@ func (s *SerpClient) RegisterRoutes(router *gin.RouterGroup) {
 func (s *SerpClient) handleSearch(c *gin.Context) {
 	q := strings.TrimSpace(c.Query("q"))
 	if q == "" {
-		c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: "q is required"})
+		c.JSON(http.StatusBadRequest, share.NewError(http.StatusBadRequest, "q is required"))
 		return
 	}
 	params := s.mapsSearchParams()
@@ -64,7 +64,7 @@ func (s *SerpClient) handleSearch(c *gin.Context) {
 func (s *SerpClient) handleByCoord(c *gin.Context) {
 	ll := llFromQuery(c)
 	if ll == "" {
-		c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: "lat and lng are required"})
+		c.JSON(http.StatusBadRequest, share.NewError(http.StatusBadRequest, "lat and lng are required"))
 		return
 	}
 	q := strings.TrimSpace(c.Query("q"))
@@ -92,7 +92,7 @@ func (s *SerpClient) handleByPlacePath(c *gin.Context) {
 
 func (s *SerpClient) place(c *gin.Context, placeID string) {
 	if placeID == "" {
-		c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: "place_id is required"})
+		c.JSON(http.StatusBadRequest, share.NewError(http.StatusBadRequest, "place_id is required"))
 		return
 	}
 	params := s.mapsSearchParams()
@@ -110,12 +110,12 @@ func (s *SerpClient) mapsSearchParams() map[string]string {
 
 func (s *SerpClient) respond(c *gin.Context, params map[string]string) {
 	if s.key == "" {
-		c.JSON(http.StatusServiceUnavailable, share.ErrorResponse{Error: "SERP_MAP_API is not set"})
+		c.JSON(http.StatusServiceUnavailable, share.NewError(http.StatusServiceUnavailable, "SERP_MAP_API is not set"))
 		return
 	}
 	out, err := s.api.Search(params)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, share.ErrorResponse{Error: err.Error()})
+		c.JSON(http.StatusBadGateway, share.NewError(http.StatusBadGateway, err.Error()))
 		return
 	}
 	c.JSON(http.StatusOK, out)

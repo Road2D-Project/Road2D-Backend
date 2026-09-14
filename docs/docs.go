@@ -15,6 +15,255 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/auth/user/forget-password": {
+            "post": {
+                "description": "If the email exists, send a reset-password HTML mail with a one-time link.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Forget password",
+                "parameters": [
+                    {
+                        "description": "Forget password payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.ForgetPasswordRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.ForgetPasswordResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/user/login": {
+            "post": {
+                "description": "Authenticate with username and password. Returns access and refresh tokens.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Login",
+                "parameters": [
+                    {
+                        "description": "Login payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.LoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.LoginEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/user/refresh": {
+            "post": {
+                "description": "Issue a new access token from a valid refresh token.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Refresh access token",
+                "parameters": [
+                    {
+                        "description": "Refresh payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.RefreshRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.RefreshResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/user/register": {
+            "post": {
+                "description": "Create a user account. Returns the new user UUID.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Register",
+                "parameters": [
+                    {
+                        "description": "Register payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.RegisterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.RegisterResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/user/reset-password/{resetToken}": {
+            "post": {
+                "description": "Set a new password using the reset token from the forget-password mail.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Reset password",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Reset JWT from mail",
+                        "name": "resetToken",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New password",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.ResetPasswordRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.ResetPasswordResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/user/{id}": {
+            "get": {
+                "description": "Return a user by UUID. Password hash is never included.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Get user profile",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "User UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.User"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/goong/directions": {
             "get": {
                 "security": [
@@ -53,7 +302,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
-                        "description": "Return alternatives; skips LocationLeg cache",
+                        "description": "Return alternatives; skips Leg cache",
                         "name": "alternatives",
                         "in": "query"
                     }
@@ -62,7 +311,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/model.LocationLeg"
+                            "$ref": "#/definitions/model.Leg"
                         }
                     },
                     "400": {
@@ -174,7 +423,7 @@ const docTemplate = `{
                         "PlaygroundKey": []
                     }
                 ],
-                "description": "Goong Place Autocomplete v2. Default returns new administrative units. Set has_deprecated_administrative_unit=true to also get pre-merger names.",
+                "description": "Goong Place Autocomplete v2. location biases the search; origin (lat,lng) sorts by proximity and fills distance_meters. If origin is omitted, location is reused. Set has_deprecated_administrative_unit=true to also get pre-merger names.",
                 "produces": [
                     "application/json"
                 ],
@@ -197,9 +446,21 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Sort by distance from this lat,lng. Defaults to location",
+                        "name": "origin",
+                        "in": "query"
+                    },
+                    {
                         "type": "integer",
                         "description": "Max predictions",
                         "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Search radius in km from location. Goong default 50",
+                        "name": "radius",
                         "in": "query"
                     },
                     {
@@ -352,7 +613,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/model.Trip"
+                            "$ref": "#/definitions/Road-To-Destination-BE_module_maps_model.Trip"
                         }
                     },
                     "400": {
@@ -378,80 +639,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "model.LatLng": {
-            "type": "object",
-            "properties": {
-                "lat": {
-                    "type": "number"
-                },
-                "lng": {
-                    "type": "number"
-                }
-            }
-        },
-        "model.LocationLeg": {
-            "type": "object",
-            "properties": {
-                "computed_at": {
-                    "type": "string"
-                },
-                "destination": {
-                    "type": "string"
-                },
-                "distance_m": {
-                    "type": "integer"
-                },
-                "duration_s": {
-                    "type": "integer"
-                },
-                "origin": {
-                    "type": "string"
-                },
-                "polyline": {
-                    "type": "string"
-                },
-                "steps": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/model.RouteStep"
-                    }
-                },
-                "vehicle": {
-                    "type": "string",
-                    "example": "bike"
-                }
-            }
-        },
-        "model.RouteStep": {
-            "type": "object",
-            "properties": {
-                "distance_m": {
-                    "type": "integer"
-                },
-                "duration_s": {
-                    "type": "integer"
-                },
-                "end": {
-                    "$ref": "#/definitions/model.LatLng"
-                },
-                "instruction": {
-                    "type": "string"
-                },
-                "maneuver": {
-                    "type": "string"
-                },
-                "polyline": {
-                    "type": "string"
-                },
-                "start": {
-                    "$ref": "#/definitions/model.LatLng"
-                },
-                "travel_mode": {
-                    "type": "string"
-                }
-            }
-        },
-        "model.Trip": {
+        "Road-To-Destination-BE_module_maps_model.Trip": {
             "type": "object",
             "properties": {
                 "code": {
@@ -490,6 +678,114 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/model.TripStop"
                     }
+                }
+            }
+        },
+        "model.LatLng": {
+            "type": "object",
+            "properties": {
+                "lat": {
+                    "type": "number"
+                },
+                "lng": {
+                    "type": "number"
+                }
+            }
+        },
+        "model.Leg": {
+            "type": "object",
+            "properties": {
+                "createdTime": {
+                    "type": "string"
+                },
+                "distanceM": {
+                    "type": "number"
+                },
+                "durationS": {
+                    "type": "number"
+                },
+                "fromLat": {
+                    "type": "number"
+                },
+                "fromLng": {
+                    "type": "number"
+                },
+                "fromLocationId": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "lastComputedAt": {
+                    "type": "string"
+                },
+                "polyline": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string",
+                    "example": "direction"
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.RouteStep"
+                    }
+                },
+                "toLat": {
+                    "type": "number"
+                },
+                "toLng": {
+                    "type": "number"
+                },
+                "toLocationId": {
+                    "type": "string"
+                },
+                "ttlSeconds": {
+                    "type": "integer"
+                },
+                "updatedTime": {
+                    "type": "string"
+                },
+                "vehicle": {
+                    "type": "string",
+                    "example": "bike"
+                }
+            }
+        },
+        "model.RouteStep": {
+            "type": "object",
+            "properties": {
+                "distanceM": {
+                    "type": "number"
+                },
+                "durationS": {
+                    "type": "number"
+                },
+                "endLat": {
+                    "type": "number"
+                },
+                "endLng": {
+                    "type": "number"
+                },
+                "instruction": {
+                    "type": "string"
+                },
+                "maneuver": {
+                    "type": "string"
+                },
+                "polyline": {
+                    "type": "string"
+                },
+                "startLat": {
+                    "type": "number"
+                },
+                "startLng": {
+                    "type": "number"
+                },
+                "travelMode": {
+                    "type": "string"
                 }
             }
         },
@@ -594,6 +890,105 @@ const docTemplate = `{
                 }
             }
         },
+        "model.User": {
+            "type": "object",
+            "properties": {
+                "createdTime": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "updatedTime": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "request.ForgetPasswordRequest": {
+            "type": "object",
+            "required": [
+                "mail"
+            ],
+            "properties": {
+                "mail": {
+                    "type": "string"
+                }
+            }
+        },
+        "request.LoginRequest": {
+            "type": "object",
+            "required": [
+                "password",
+                "username"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 8
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 16,
+                    "minLength": 4
+                }
+            }
+        },
+        "request.RefreshRequest": {
+            "type": "object",
+            "properties": {
+                "refreshToken": {
+                    "type": "string"
+                }
+            }
+        },
+        "request.RegisterRequest": {
+            "type": "object",
+            "required": [
+                "confirmPassword",
+                "email",
+                "password",
+                "username"
+            ],
+            "properties": {
+                "confirmPassword": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 8
+                },
+                "email": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 8
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 16,
+                    "minLength": 4
+                }
+            }
+        },
+        "request.ResetPasswordRequest": {
+            "type": "object",
+            "properties": {
+                "confirm_password": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                }
+            }
+        },
         "response.AddressComponent": {
             "type": "object",
             "properties": {
@@ -636,6 +1031,9 @@ const docTemplate = `{
         "response.AutocompleteResponse": {
             "type": "object",
             "properties": {
+                "execution_time": {
+                    "type": "string"
+                },
                 "predictions": {
                     "type": "array",
                     "items": {
@@ -643,6 +1041,14 @@ const docTemplate = `{
                     }
                 },
                 "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.ForgetPasswordResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
                     "type": "string"
                 }
             }
@@ -733,6 +1139,36 @@ const docTemplate = `{
                 }
             }
         },
+        "response.LoginEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/response.LoginResponse"
+                }
+            }
+        },
+        "response.LoginResponse": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "refresh_token": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.MatchedSubstring": {
+            "type": "object",
+            "properties": {
+                "length": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                }
+            }
+        },
         "response.PlaceDetail": {
             "type": "object",
             "properties": {
@@ -793,11 +1229,52 @@ const docTemplate = `{
                 "description": {
                     "type": "string"
                 },
+                "distance_meters": {
+                    "type": "integer"
+                },
+                "has_children": {
+                    "type": "boolean"
+                },
+                "matched_substrings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.MatchedSubstring"
+                    }
+                },
                 "place_id": {
+                    "type": "string"
+                },
+                "plus_code": {
+                    "$ref": "#/definitions/response.PlusCode"
+                },
+                "reference": {
                     "type": "string"
                 },
                 "structured_formatting": {
                     "$ref": "#/definitions/response.StructuredFormatting"
+                },
+                "terms": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.PlaceTerm"
+                    }
+                },
+                "types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "response.PlaceTerm": {
+            "type": "object",
+            "properties": {
+                "offset": {
+                    "type": "integer"
+                },
+                "value": {
+                    "type": "string"
                 }
             }
         },
@@ -812,23 +1289,70 @@ const docTemplate = `{
                 }
             }
         },
+        "response.RefreshResponse": {
+            "type": "object",
+            "properties": {
+                "accessToken": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.RegisterResponse": {
+            "type": "object",
+            "properties": {
+                "userId": {
+                    "type": "string",
+                    "format": "uuid"
+                }
+            }
+        },
+        "response.ResetPasswordResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
         "response.StructuredFormatting": {
             "type": "object",
             "properties": {
                 "main_text": {
                     "type": "string"
                 },
+                "main_text_matched_substrings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.MatchedSubstring"
+                    }
+                },
                 "secondary_text": {
                     "type": "string"
+                },
+                "secondary_text_matched_substrings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.MatchedSubstring"
+                    }
                 }
             }
         },
         "share.ErrorResponse": {
             "type": "object",
             "properties": {
-                "error": {
+                "errors": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "message": {
                     "type": "string",
                     "example": "invalid input"
+                },
+                "status": {
+                    "type": "integer",
+                    "example": 400
                 }
             }
         }

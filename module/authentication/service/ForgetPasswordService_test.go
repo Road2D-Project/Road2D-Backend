@@ -40,7 +40,7 @@ func TestForgetPasswordSendsTypedMail(t *testing.T) {
 	user := &model.User{Username: "traveler", Email: "traveler@example.com"}
 	user.ID = uuid.New()
 	mailer := &stubMailClient{}
-	svc := NewForgetPasswordService(stubMailRepo{user: user}, mailer)
+	svc := NewForgetPasswordService(stubMailRepo{user: user}, mailer, nil)
 
 	got, err := svc.ForgetPassword(context.Background(), request.ForgetPasswordRequest{Email: "traveler@example.com"})
 	if err != nil {

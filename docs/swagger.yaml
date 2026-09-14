@@ -77,70 +77,6 @@ definitions:
         example: bike
         type: string
     type: object
-  model.LoginEnvelope:
-    properties:
-      data:
-        $ref: '#/definitions/model.LoginResponse'
-    type: object
-  model.LoginRequest:
-    properties:
-      password:
-        maxLength: 32
-        minLength: 8
-        type: string
-      username:
-        maxLength: 16
-        minLength: 4
-        type: string
-    required:
-    - password
-    - username
-    type: object
-  model.LoginResponse:
-    properties:
-      access_token:
-        type: string
-      refresh_token:
-        type: string
-    type: object
-  model.RefreshRequest:
-    properties:
-      refreshToken:
-        type: string
-    type: object
-  model.RefreshResponse:
-    properties:
-      accessToken:
-        type: string
-    type: object
-  model.RegisterRequest:
-    properties:
-      confirmPassword:
-        maxLength: 32
-        minLength: 8
-        type: string
-      email:
-        type: string
-      password:
-        maxLength: 32
-        minLength: 8
-        type: string
-      username:
-        maxLength: 16
-        minLength: 4
-        type: string
-    required:
-    - confirmPassword
-    - email
-    - password
-    - username
-    type: object
-  model.RegisterResponse:
-    properties:
-      userId:
-        format: uuid
-        type: string
-    type: object
   model.RouteStep:
     properties:
       distanceM:
@@ -244,6 +180,61 @@ definitions:
       username:
         type: string
     type: object
+  request.ForgetPasswordRequest:
+    properties:
+      mail:
+        type: string
+    required:
+    - mail
+    type: object
+  request.LoginRequest:
+    properties:
+      password:
+        maxLength: 32
+        minLength: 8
+        type: string
+      username:
+        maxLength: 16
+        minLength: 4
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  request.RefreshRequest:
+    properties:
+      refreshToken:
+        type: string
+    type: object
+  request.RegisterRequest:
+    properties:
+      confirmPassword:
+        maxLength: 32
+        minLength: 8
+        type: string
+      email:
+        type: string
+      password:
+        maxLength: 32
+        minLength: 8
+        type: string
+      username:
+        maxLength: 16
+        minLength: 4
+        type: string
+    required:
+    - confirmPassword
+    - email
+    - password
+    - username
+    type: object
+  request.ResetPasswordRequest:
+    properties:
+      confirm_password:
+        type: string
+      password:
+        type: string
+    type: object
   response.AddressComponent:
     properties:
       long_name:
@@ -278,6 +269,11 @@ definitions:
           $ref: '#/definitions/response.PlacePrediction'
         type: array
       status:
+        type: string
+    type: object
+  response.ForgetPasswordResponse:
+    properties:
+      message:
         type: string
     type: object
   response.GeocodeGeometry:
@@ -335,6 +331,18 @@ definitions:
         type: number
       lng:
         type: number
+    type: object
+  response.LoginEnvelope:
+    properties:
+      data:
+        $ref: '#/definitions/response.LoginResponse'
+    type: object
+  response.LoginResponse:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
+        type: string
     type: object
   response.MatchedSubstring:
     properties:
@@ -421,6 +429,22 @@ definitions:
       global_code:
         type: string
     type: object
+  response.RefreshResponse:
+    properties:
+      accessToken:
+        type: string
+    type: object
+  response.RegisterResponse:
+    properties:
+      userId:
+        format: uuid
+        type: string
+    type: object
+  response.ResetPasswordResponse:
+    properties:
+      message:
+        type: string
+    type: object
   response.StructuredFormatting:
     properties:
       main_text:
@@ -438,9 +462,16 @@ definitions:
     type: object
   share.ErrorResponse:
     properties:
-      error:
+      errors:
+        additionalProperties:
+          type: string
+        type: object
+      message:
         example: invalid input
         type: string
+      status:
+        example: 400
+        type: integer
     type: object
 info:
   contact: {}
@@ -476,6 +507,33 @@ paths:
       summary: Get user profile
       tags:
       - auth
+  /auth/user/forget-password:
+    post:
+      consumes:
+      - application/json
+      description: If the email exists, send a reset-password HTML mail with a one-time
+        link.
+      parameters:
+      - description: Forget password payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.ForgetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.ForgetPasswordResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      summary: Forget password
+      tags:
+      - auth
   /auth/user/login:
     post:
       consumes:
@@ -488,14 +546,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/model.LoginRequest'
+          $ref: '#/definitions/request.LoginRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/model.LoginEnvelope'
+            $ref: '#/definitions/response.LoginEnvelope'
         "400":
           description: Bad Request
           schema:
@@ -514,14 +572,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/model.RefreshRequest'
+          $ref: '#/definitions/request.RefreshRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/model.RefreshResponse'
+            $ref: '#/definitions/response.RefreshResponse'
         "400":
           description: Bad Request
           schema:
@@ -540,19 +598,51 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/model.RegisterRequest'
+          $ref: '#/definitions/request.RegisterRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/model.RegisterResponse'
+            $ref: '#/definitions/response.RegisterResponse'
         "400":
           description: Bad Request
           schema:
             $ref: '#/definitions/share.ErrorResponse'
       summary: Register
+      tags:
+      - auth
+  /auth/user/reset-password/{resetToken}:
+    post:
+      consumes:
+      - application/json
+      description: Set a new password using the reset token from the forget-password
+        mail.
+      parameters:
+      - description: Reset JWT from mail
+        in: path
+        name: resetToken
+        required: true
+        type: string
+      - description: New password
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.ResetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.ResetPasswordResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      summary: Reset password
       tags:
       - auth
   /goong/directions:

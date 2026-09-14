@@ -3,6 +3,7 @@ package middleware
 import (
 	"Road-To-Destination-BE/module/authentication/model"
 	"Road-To-Destination-BE/module/authentication/service"
+	"Road-To-Destination-BE/module/share"
 	"context"
 	"net/http"
 	"strings"
@@ -26,33 +27,25 @@ func (auth *AuthenticationMiddleware) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": "Authorization header is empty",
-			})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, share.NewError(http.StatusUnauthorized, "Authorization header is empty"))
 			return
 		}
 
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": "Authorization header is invalid",
-			})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, share.NewError(http.StatusUnauthorized, "Authorization header is invalid"))
 			return
 		}
 
 		tokenString := parts[1]
 		claims, err := service.VerifyAccessToken(tokenString)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": "Invalid token",
-			})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, share.NewError(http.StatusUnauthorized, "Invalid token"))
 			return
 		}
 		username, ok := claims["username"].(string)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": "Invalid token payload",
-			})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, share.NewError(http.StatusUnauthorized, "Invalid token payload"))
 			return
 		}
 
@@ -63,8 +56,7 @@ func (auth *AuthenticationMiddleware) RequireAuth() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		c.JSON(401, gin.H{"error": "Unauthorized"})
-		return
+		c.AbortWithStatusJSON(http.StatusUnauthorized, share.NewError(http.StatusUnauthorized, "Unauthorized"))
 	}
 }
 func GetCurrentUser(c *gin.Context) *model.User {

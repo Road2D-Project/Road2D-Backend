@@ -9,6 +9,7 @@ import (
 	"Road-To-Destination-BE/module/mail"
 	"Road-To-Destination-BE/module/share"
 	"Road-To-Destination-BE/utils/customValidator"
+	"context"
 	"errors"
 	"net/http"
 
@@ -33,6 +34,7 @@ var (
 	_ = request.ForgetPasswordRequest{}
 	_ = response.ForgetPasswordResponse{}
 	_ = request.ResetPasswordRequest{}
+	_ = response.ResetPasswordResponse{}
 	_ = share.ErrorResponse{}
 )
 
@@ -65,22 +67,27 @@ func (ctrl AuthenticationController) RegisterRoutes(router *gin.RouterGroup) {
 // @Tags         auth
 // @Accept       json
 // @Produce      json
-// @Param        body  body      model.RegisterRequest  true  "Register payload"
-// @Success      200   {object}  model.RegisterResponse
+// @Param        body  body      request.RegisterRequest  true  "Register payload"
+// @Success      200   {object}  response.RegisterResponse
 // @Failure      400   {object}  share.ErrorResponse
 // @Router       /auth/user/register [post]
 func (ctrl AuthenticationController) HandleRegister() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var registerRequest request.RegisterRequest
 		if err := c.ShouldBind(&registerRequest); err != nil {
-			c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+			jsonBindError(c, err)
+			return
+		}
+		err := ctrl.validator.Struct(registerRequest)
+		if err != nil {
+			jsonBindError(c, err)
 			return
 		}
 		repo := repository.NewUserRepository(ctrl.db)
 		registerService := service.NewRegisterService(repo)
 		userID, err := registerService.Register(registerRequest, c.Request.Context())
 		if err != nil {
-			c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+			jsonError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 		c.JSON(http.StatusOK, response.RegisterResponse{UserID: userID})
@@ -93,22 +100,22 @@ func (ctrl AuthenticationController) HandleRegister() gin.HandlerFunc {
 // @Tags         auth
 // @Accept       json
 // @Produce      json
-// @Param        body  body      model.LoginRequest  true  "Login payload"
-// @Success      200   {object}  model.LoginEnvelope
+// @Param        body  body      request.LoginRequest  true  "Login payload"
+// @Success      200   {object}  response.LoginEnvelope
 // @Failure      400   {object}  share.ErrorResponse
 // @Router       /auth/user/login [post]
 func (ctrl AuthenticationController) HandleLogin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var loginRequest request.LoginRequest
 		if err := c.ShouldBind(&loginRequest); err != nil {
-			c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+			jsonBindError(c, err)
 			return
 		}
 		repo := repository.NewCacheUserRepository(ctrl.db, ctrl.redisClient)
 		loginService := service.NewLoginService(repo)
 		accessToken, refreshToken, err := loginService.Login(c.Request.Context(), loginRequest)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+			jsonError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 		c.JSON(http.StatusOK, response.LoginEnvelope{
@@ -131,17 +138,17 @@ func (ctrl AuthenticationController) HandleGetUserProfile() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := uuid.Parse(c.Param("id"))
 		if err != nil {
-			c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: "invalid user id"})
+			jsonError(c, http.StatusBadRequest, "invalid user id")
 			return
 		}
 		repo := repository.NewUserRepository(ctrl.db)
 		user, err := repo.FindUserByID(c.Request.Context(), id)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				c.JSON(http.StatusNotFound, share.ErrorResponse{Error: "user not found"})
+				jsonError(c, http.StatusNotFound, "user not found")
 				return
 			}
-			c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+			jsonError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 		c.JSON(http.StatusOK, user)
@@ -154,30 +161,30 @@ func (ctrl AuthenticationController) HandleGetUserProfile() gin.HandlerFunc {
 // @Tags         auth
 // @Accept       json
 // @Produce      json
-// @Param        body  body      model.RefreshRequest  true  "Refresh payload"
-// @Success      200   {object}  model.RefreshResponse
+// @Param        body  body      request.RefreshRequest  true  "Refresh payload"
+// @Success      200   {object}  response.RefreshResponse
 // @Failure      400   {object}  share.ErrorResponse
 // @Router       /auth/user/refresh [post]
 func (ctrl AuthenticationController) HandleRefreshToken() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var request request.RefreshRequest
 		if err := c.ShouldBind(&request); err != nil {
-			c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+			jsonBindError(c, err)
 			return
 		}
 		claims, err := service.VerifyRefreshToken(request.RefreshToken)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+			jsonError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 		username, ok := claims["username"].(string)
 		if !ok || username == "" {
-			c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: "invalid token payload"})
+			jsonError(c, http.StatusBadRequest, "invalid token payload")
 			return
 		}
 		accessToken, err := service.CreateToken(username)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+			jsonError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 		c.JSON(http.StatusOK, response.RefreshResponse{AccessToken: accessToken})
@@ -198,24 +205,24 @@ func (ctrl AuthenticationController) HandleForgetPassword() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var passwordRequest request.ForgetPasswordRequest
 		if err := c.ShouldBind(&passwordRequest); err != nil {
-			c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+			jsonBindError(c, err)
 			return
 		}
 		userRepo := repository.NewUserRepository(ctrl.db)
-		forgetPasswordService := service.NewForgetPasswordService(userRepo, mail.NewFromEnv())
+		forgetPasswordService := service.NewForgetPasswordService(userRepo, mail.NewFromEnv(), service.NewPasswordResetStore(ctrl.redisClient))
 		message, err := forgetPasswordService.ForgetPassword(c.Request.Context(), passwordRequest)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+			jsonError(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"data": message})
+		c.JSON(http.StatusOK, message)
 	}
 }
 
 func (ctrl AuthenticationController) HandleResetPasswordPage() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		resetToken := c.Param("resetToken")
-		page, status := resetPasswordPage(resetToken)
+		page, status := resetPasswordPage(c.Request.Context(), service.NewPasswordResetStore(ctrl.redisClient), resetToken)
 		c.Header("Cache-Control", "no-store")
 		c.Data(status, "text/html; charset=utf-8", []byte(page))
 	}
@@ -227,53 +234,52 @@ func (ctrl AuthenticationController) HandleResetPasswordPage() gin.HandlerFunc {
 // @Tags         auth
 // @Accept       json
 // @Produce      json
-// @Param        resetToken  path      string                       true  "Reset JWT from mail"
-// @Param        body        body      request.ResetPasswordRequest true  "New password"
-// @Success      200         {object}  map[string]string
+// @Param        resetToken  path      string                        true  "Reset JWT from mail"
+// @Param        body        body      request.ResetPasswordRequest  true  "New password"
+// @Success      200         {object}  response.ResetPasswordResponse
 // @Failure      400         {object}  share.ErrorResponse
 // @Router       /auth/user/reset-password/{resetToken} [post]
 func (ctrl AuthenticationController) HandleResetPassword() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		resetToken := c.Param("resetToken")
-		userId, err := userIDFromResetToken(resetToken)
+		userId, email, err := resetTokenIdentity(resetToken)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+			jsonError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 		var resetPasswordRequest request.ResetPasswordRequest
 		if err := c.ShouldBind(&resetPasswordRequest); err != nil {
-			c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+			jsonBindError(c, err)
 			return
 		}
 		err = ctrl.validator.Struct(resetPasswordRequest)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, customValidator.HandleValidationError(err))
+			jsonBindError(c, err)
 			return
 		}
 		resetPasswordRepo := repository.NewCacheUserRepository(ctrl.db, ctrl.redisClient)
-		resetPasswordService := service.NewResetPasswordService(resetPasswordRepo)
-		msg, err := resetPasswordService.ResetPassword(c.Request.Context(), userId, resetPasswordRequest.Password, resetPasswordRequest.ConfirmPassword)
+		resetPasswordService := service.NewResetPasswordService(resetPasswordRepo, service.NewPasswordResetStore(ctrl.redisClient))
+		msg, err := resetPasswordService.ResetPassword(c.Request.Context(), userId, email, resetPasswordRequest.Password, resetPasswordRequest.ConfirmPassword)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+			jsonError(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"data": msg})
+		c.JSON(http.StatusOK, response.ResetPasswordResponse{Message: msg})
 	}
 }
 
-func resetPasswordPage(resetToken string) (string, int) {
-	claims, err := service.VerifyResetPasswordToken(resetToken)
+func resetPasswordPage(ctx context.Context, store *service.PasswordResetStore, resetToken string) (string, int) {
+	userId, _, username, err := parseResetToken(resetToken)
 	if err != nil {
-		html, renderErr := mail.Render(mail.KindResetPasswordPage, mail.ResetPasswordPageForm{
-			Valid: false,
-			Error: "Token đã hết hạn hoặc không hợp lệ.",
-		})
-		if renderErr != nil {
-			return renderErr.Error(), http.StatusInternalServerError
-		}
-		return html, http.StatusBadRequest
+		return invalidResetPage("Token đã hết hạn hoặc không hợp lệ.")
 	}
-	username, _ := claims["username"].(string)
+	wait, blocked, err := store.ResetCooldownRemaining(ctx, userId)
+	if err != nil {
+		return invalidResetPage(err.Error())
+	}
+	if blocked {
+		return invalidResetPage((&service.PasswordResetCooldownError{WaitMinutes: wait}).Error())
+	}
 	html, renderErr := mail.Render(mail.KindResetPasswordPage, mail.ResetPasswordPageForm{
 		Valid:    true,
 		Username: username,
@@ -284,18 +290,45 @@ func resetPasswordPage(resetToken string) (string, int) {
 	return html, http.StatusOK
 }
 
-func userIDFromResetToken(resetToken string) (uuid.UUID, error) {
+func invalidResetPage(message string) (string, int) {
+	html, renderErr := mail.Render(mail.KindResetPasswordPage, mail.ResetPasswordPageForm{
+		Valid: false,
+		Error: message,
+	})
+	if renderErr != nil {
+		return renderErr.Error(), http.StatusInternalServerError
+	}
+	return html, http.StatusBadRequest
+}
+
+func resetTokenIdentity(resetToken string) (uuid.UUID, string, error) {
+	userId, email, _, err := parseResetToken(resetToken)
+	return userId, email, err
+}
+
+func parseResetToken(resetToken string) (uuid.UUID, string, string, error) {
 	claims, err := service.VerifyResetPasswordToken(resetToken)
 	if err != nil {
-		return uuid.Nil, errors.New("invalid token")
+		return uuid.Nil, "", "", errors.New("invalid token")
 	}
 	idValue, ok := claims["id"].(string)
 	if !ok || idValue == "" {
-		return uuid.Nil, errors.New("user not found")
+		return uuid.Nil, "", "", errors.New("user not found")
 	}
 	userId, err := uuid.Parse(idValue)
 	if err != nil {
-		return uuid.Nil, errors.New("user not found")
+		return uuid.Nil, "", "", errors.New("user not found")
 	}
-	return userId, nil
+	email, _ := claims["email"].(string)
+	username, _ := claims["username"].(string)
+	return userId, email, username, nil
+}
+
+func jsonError(c *gin.Context, status int, message string) {
+	c.JSON(status, share.NewError(status, message))
+}
+
+func jsonBindError(c *gin.Context, err error) {
+	body := customValidator.HandleValidationError(err)
+	c.JSON(body.Status, body)
 }

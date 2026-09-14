@@ -13,6 +13,7 @@ import (
 	"Road-To-Destination-BE/module/maps/service"
 	"Road-To-Destination-BE/module/share"
 	tripmodel "Road-To-Destination-BE/module/trip/model"
+	"Road-To-Destination-BE/utils/customValidator"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -76,7 +77,7 @@ func (ctrl *MapController) RegisterPlayground(router *gin.RouterGroup) {
 func (ctrl *MapController) HandleAutocomplete(c *gin.Context) {
 	var req request.AutocompleteRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+		c.JSON(http.StatusBadRequest, customValidator.HandleValidationError(err))
 		return
 	}
 	places := service.NewPlaceService(ctrl.goong)
@@ -104,7 +105,7 @@ func (ctrl *MapController) HandleAutocomplete(c *gin.Context) {
 func (ctrl *MapController) HandleDetailPlace(c *gin.Context) {
 	var req request.DetailPlaceRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+		c.JSON(http.StatusBadRequest, customValidator.HandleValidationError(err))
 		return
 	}
 	places := service.NewPlaceService(ctrl.goong)
@@ -134,7 +135,7 @@ func (ctrl *MapController) HandleDetailPlace(c *gin.Context) {
 func (ctrl *MapController) HandleDirection(c *gin.Context) {
 	var req request.DirectionRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+		c.JSON(http.StatusBadRequest, customValidator.HandleValidationError(err))
 		return
 	}
 	directions := service.NewDirectionService(ctrl.goong, ctrl.legs)
@@ -166,7 +167,7 @@ func (ctrl *MapController) HandleDirection(c *gin.Context) {
 func (ctrl *MapController) HandleTrip(c *gin.Context) {
 	var req request.TripRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+		c.JSON(http.StatusBadRequest, customValidator.HandleValidationError(err))
 		return
 	}
 	trips := service.NewTripService(ctrl.goong, ctrl.legs)
@@ -198,7 +199,7 @@ func (ctrl *MapController) HandleTrip(c *gin.Context) {
 func (ctrl *MapController) HandleGeocode(c *gin.Context) {
 	var req request.GeocodeRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, share.ErrorResponse{Error: err.Error()})
+		c.JSON(http.StatusBadRequest, customValidator.HandleValidationError(err))
 		return
 	}
 	geocode := service.NewGeocodeService(ctrl.goong)
@@ -211,21 +212,20 @@ func (ctrl *MapController) HandleGeocode(c *gin.Context) {
 }
 
 func respondMapError(c *gin.Context, err error) {
-	body := share.ErrorResponse{Error: err.Error()}
+	status := http.StatusBadGateway
 	switch {
 	case errors.Is(err, enum.ErrUnsupportedVehicle),
 		errors.Is(err, service.ErrTooFewTripPoints),
 		errors.Is(err, service.ErrRoundtripSameEnds),
 		errors.Is(err, service.ErrGeocodeLookup),
 		errors.Is(err, service.ErrInvalidLatLng):
-		c.JSON(http.StatusBadRequest, body)
+		status = http.StatusBadRequest
 	case errors.Is(err, client.ErrMissingAPIKey):
-		c.JSON(http.StatusInternalServerError, body)
+		status = http.StatusInternalServerError
 	case errors.Is(err, client.ErrRateLimited):
-		c.JSON(http.StatusTooManyRequests, body)
+		status = http.StatusTooManyRequests
 	case errors.Is(err, client.ErrEmptyRoute), errors.Is(err, client.ErrEmptyTrip), errors.Is(err, client.ErrGoongStatus):
-		c.JSON(http.StatusBadGateway, body)
-	default:
-		c.JSON(http.StatusBadGateway, body)
+		status = http.StatusBadGateway
 	}
+	c.JSON(status, share.NewError(status, err.Error()))
 }
