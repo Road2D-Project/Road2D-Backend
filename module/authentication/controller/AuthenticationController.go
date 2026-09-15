@@ -209,7 +209,7 @@ func (ctrl AuthenticationController) HandleForgetPassword() gin.HandlerFunc {
 			return
 		}
 		userRepo := repository.NewUserRepository(ctrl.db)
-		forgetPasswordService := service.NewForgetPasswordService(userRepo, mail.NewFromEnv(), service.NewPasswordResetStore(ctrl.redisClient))
+		forgetPasswordService := service.NewForgetPasswordService(userRepo, mail.NewFromEnv(), repository.NewPasswordResetStore(ctrl.redisClient))
 		message, err := forgetPasswordService.ForgetPassword(c.Request.Context(), passwordRequest)
 		if err != nil {
 			jsonError(c, http.StatusBadRequest, err.Error())
@@ -222,7 +222,7 @@ func (ctrl AuthenticationController) HandleForgetPassword() gin.HandlerFunc {
 func (ctrl AuthenticationController) HandleResetPasswordPage() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		resetToken := c.Param("resetToken")
-		page, status := resetPasswordPage(c.Request.Context(), service.NewPasswordResetStore(ctrl.redisClient), resetToken)
+		page, status := resetPasswordPage(c.Request.Context(), repository.NewPasswordResetStore(ctrl.redisClient), resetToken)
 		c.Header("Cache-Control", "no-store")
 		c.Data(status, "text/html; charset=utf-8", []byte(page))
 	}
@@ -258,7 +258,7 @@ func (ctrl AuthenticationController) HandleResetPassword() gin.HandlerFunc {
 			return
 		}
 		resetPasswordRepo := repository.NewCacheUserRepository(ctrl.db, ctrl.redisClient)
-		resetPasswordService := service.NewResetPasswordService(resetPasswordRepo, service.NewPasswordResetStore(ctrl.redisClient))
+		resetPasswordService := service.NewResetPasswordService(resetPasswordRepo, repository.NewPasswordResetStore(ctrl.redisClient))
 		msg, err := resetPasswordService.ResetPassword(c.Request.Context(), userId, email, resetPasswordRequest.Password, resetPasswordRequest.ConfirmPassword)
 		if err != nil {
 			jsonError(c, http.StatusBadRequest, err.Error())
@@ -268,7 +268,7 @@ func (ctrl AuthenticationController) HandleResetPassword() gin.HandlerFunc {
 	}
 }
 
-func resetPasswordPage(ctx context.Context, store *service.PasswordResetStore, resetToken string) (string, int) {
+func resetPasswordPage(ctx context.Context, store *repository.PasswordResetStore, resetToken string) (string, int) {
 	userId, _, username, err := parseResetToken(resetToken)
 	if err != nil {
 		return invalidResetPage("Token đã hết hạn hoặc không hợp lệ.")
@@ -278,7 +278,7 @@ func resetPasswordPage(ctx context.Context, store *service.PasswordResetStore, r
 		return invalidResetPage(err.Error())
 	}
 	if blocked {
-		return invalidResetPage((&service.PasswordResetCooldownError{WaitMinutes: wait}).Error())
+		return invalidResetPage((&repository.PasswordResetCooldownError{WaitMinutes: wait}).Error())
 	}
 	html, renderErr := mail.Render(mail.KindResetPasswordPage, mail.ResetPasswordPageForm{
 		Valid:    true,

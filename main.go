@@ -22,7 +22,7 @@ import (
 
 // @title           Road2D
 // @version         1.0
-// @description     API Server for Road2D
+// @description     Backend API for Road2D (team Vandra): collaborative multi-branch ride planning and group-ride safety in Vietnam. JWT auth, Goong Maps playground, trip graph models.
 // @BasePath        /v1
 
 // @securityDefinitions.apikey BearerAuth

@@ -4,6 +4,7 @@ import (
 	"Road-To-Destination-BE/module/authentication/model"
 	"Road-To-Destination-BE/module/authentication/model/request"
 	"Road-To-Destination-BE/module/authentication/model/response"
+	"Road-To-Destination-BE/module/authentication/repository"
 	"Road-To-Destination-BE/module/mail"
 	"Road-To-Destination-BE/module/share"
 	"Road-To-Destination-BE/utils"
@@ -25,10 +26,10 @@ type MailClient interface {
 type ForgetPasswordService struct {
 	emailRepository MailRepository
 	mailClient      MailClient
-	store           *PasswordResetStore
+	store           *repository.PasswordResetStore
 }
 
-func NewForgetPasswordService(emailRepository MailRepository, mailClient MailClient, store *PasswordResetStore) *ForgetPasswordService {
+func NewForgetPasswordService(emailRepository MailRepository, mailClient MailClient, store *repository.PasswordResetStore) *ForgetPasswordService {
 	return &ForgetPasswordService{emailRepository: emailRepository, mailClient: mailClient, store: store}
 }
 
@@ -42,14 +43,14 @@ func (u *ForgetPasswordService) ForgetPassword(ctx context.Context, request requ
 		return nil, err
 	}
 	if blocked {
-		return nil, &PasswordResetCooldownError{WaitMinutes: wait}
+		return nil, &repository.PasswordResetCooldownError{WaitMinutes: wait}
 	}
 	alreadySent, err := u.store.ForgetMailAlreadySent(ctx, user.ID, user.Email)
 	if err != nil {
 		return nil, err
 	}
 	if alreadySent {
-		return &response.ForgetPasswordResponse{Message: alreadySentMailMessage}, nil
+		return &response.ForgetPasswordResponse{Message: repository.alreadySentMailMessage}, nil
 	}
 	if err := u.SendMail(ctx, ForgetPasswordForm{
 		Email:    user.Email,
@@ -61,7 +62,7 @@ func (u *ForgetPasswordService) ForgetPassword(ctx context.Context, request requ
 	if err := u.store.MarkForgetMailSent(ctx, user.ID, user.Email); err != nil {
 		return nil, err
 	}
-	return &response.ForgetPasswordResponse{Message: alreadySentMailMessage}, nil
+	return &response.ForgetPasswordResponse{Message: repository.alreadySentMailMessage}, nil
 }
 
 func (u *ForgetPasswordService) SendMail(ctx context.Context, form ForgetPasswordForm) error {
@@ -77,7 +78,7 @@ func (u *ForgetPasswordService) SendMail(ctx context.Context, form ForgetPasswor
 	return u.mailClient.Send(ctx, mail.KindForgetPassword, form.Email, mail.ForgetPasswordForm{
 		Username:      form.Username,
 		ResetURL:      resetURL,
-		ExpireMinutes: resetTokenTTLMinutes,
+		ExpireMinutes: repository.resetTokenTTLMinutes,
 	})
 }
 

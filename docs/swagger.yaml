@@ -475,7 +475,7 @@ definitions:
     type: object
 info:
   contact: {}
-  description: API Server for Road2D
+  description: 'Backend API for Road2D (team Vandra): collaborative multi-branch ride planning and group-ride safety in Vietnam. JWT auth, Goong Maps playground, trip graph models.'
   title: Road2D
   version: "1.0"
 paths:

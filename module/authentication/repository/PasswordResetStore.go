@@ -1,4 +1,4 @@
-package service
+package repository
 
 import (
 	"context"
@@ -15,7 +15,7 @@ const (
 	resetCooldownStepMinutes    = 5
 	resetCooldownMaxMinutes     = 60
 	alreadySentMailMessage      = "Reset password email has been sent"
-	passwordResetSuccessMessage = "Reset Password"
+	PasswordResetSuccessMessage = "Reset Password"
 )
 
 type PasswordResetCooldownError struct {

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"Road-To-Destination-BE/module/authentication/repository"
 	"context"
 	"errors"
 
@@ -13,10 +14,10 @@ type ResetPasswordRepository interface {
 
 type ResetPasswordService struct {
 	repo  ResetPasswordRepository
-	store *PasswordResetStore
+	store *repository.PasswordResetStore
 }
 
-func NewResetPasswordService(repo ResetPasswordRepository, store *PasswordResetStore) *ResetPasswordService {
+func NewResetPasswordService(repo ResetPasswordRepository, store *repository.PasswordResetStore) *ResetPasswordService {
 	return &ResetPasswordService{repo: repo, store: store}
 }
 
@@ -33,7 +34,7 @@ func (u *ResetPasswordService) ResetPassword(ctx context.Context, userId uuid.UU
 		if punishErr != nil {
 			return "", punishErr
 		}
-		return "", &PasswordResetCooldownError{WaitMinutes: wait}
+		return "", &repository.PasswordResetCooldownError{WaitMinutes: wait}
 	}
 	if err := u.repo.ResetPassword(ctx, userId, password); err != nil {
 		return "", err
@@ -44,5 +45,5 @@ func (u *ResetPasswordService) ResetPassword(ctx context.Context, userId uuid.UU
 	if err := u.store.StartResetCooldown(ctx, userId); err != nil {
 		return "", err
 	}
-	return passwordResetSuccessMessage, nil
+	return repository.PasswordResetSuccessMessage, nil
 }

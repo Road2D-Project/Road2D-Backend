@@ -3,6 +3,7 @@ package service
 import (
 	"Road-To-Destination-BE/module/authentication/model"
 	"Road-To-Destination-BE/module/authentication/model/request"
+	"Road-To-Destination-BE/module/authentication/repository"
 	"context"
 	"errors"
 	"testing"
@@ -12,12 +13,12 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func testResetStore(t *testing.T) *PasswordResetStore {
+func testResetStore(t *testing.T) *repository.PasswordResetStore {
 	t.Helper()
 	mini := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mini.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
-	return NewPasswordResetStore(client)
+	return repository.NewPasswordResetStore(client)
 }
 
 func TestForgetPasswordSkipsSecondMailWhileKeyExists(t *testing.T) {
@@ -44,7 +45,7 @@ func TestForgetPasswordSkipsSecondMailWhileKeyExists(t *testing.T) {
 	if mailer.kind != "" {
 		t.Fatal("expected second request to skip sending mail")
 	}
-	if got.Message != alreadySentMailMessage {
+	if got.Message != repository.alreadySentMailMessage {
 		t.Fatalf("message = %q", got.Message)
 	}
 }
@@ -60,7 +61,7 @@ func TestForgetPasswordBlockedByResetCooldown(t *testing.T) {
 	svc := NewForgetPasswordService(stubMailRepo{user: user}, mailer, store)
 
 	_, err := svc.ForgetPassword(context.Background(), request.ForgetPasswordRequest{Email: user.Email})
-	var cooldown *PasswordResetCooldownError
+	var cooldown *repository.PasswordResetCooldownError
 	if !errors.As(err, &cooldown) {
 		t.Fatalf("got %v, want cooldown", err)
 	}
@@ -103,26 +104,26 @@ func TestResetPasswordClearsForgetKeyAndBlocksReuse(t *testing.T) {
 	}
 
 	_, err = svc.ResetPassword(context.Background(), userID, email, "Otherpass1!", "Otherpass1!")
-	var cooldown *PasswordResetCooldownError
+	var cooldown *repository.PasswordResetCooldownError
 	if !errors.As(err, &cooldown) {
 		t.Fatalf("got %v, want cooldown", err)
 	}
 	if repo.calls != 1 {
 		t.Fatalf("reuse should not change password again, calls = %d", repo.calls)
 	}
-	if cooldown.WaitMinutes < cooldownMinutes(2) {
-		t.Fatalf("wait = %d, want at least %d", cooldown.WaitMinutes, cooldownMinutes(2))
+	if cooldown.WaitMinutes < repository.cooldownMinutes(2) {
+		t.Fatalf("wait = %d, want at least %d", cooldown.WaitMinutes, repository.cooldownMinutes(2))
 	}
 }
 
 func TestCooldownMinutesCaps(t *testing.T) {
-	if got := cooldownMinutes(1); got != 20 {
+	if got := repository.cooldownMinutes(1); got != 20 {
 		t.Fatalf("y=1 got %d", got)
 	}
-	if got := cooldownMinutes(9); got != 60 {
+	if got := repository.cooldownMinutes(9); got != 60 {
 		t.Fatalf("y=9 got %d", got)
 	}
-	if got := cooldownMinutes(20); got != 60 {
+	if got := repository.cooldownMinutes(20); got != 60 {
 		t.Fatalf("y=20 got %d", got)
 	}
 }
