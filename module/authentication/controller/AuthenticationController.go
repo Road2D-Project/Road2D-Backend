@@ -31,6 +31,8 @@ var (
 	_ = response.LoginEnvelope{}
 	_ = request.RefreshRequest{}
 	_ = response.RefreshResponse{}
+	_ = request.RefreshRequest{}
+	_ = response.LogoutResponse{}
 	_ = request.ForgetPasswordRequest{}
 	_ = response.ForgetPasswordResponse{}
 	_ = request.ResetPasswordRequest{}
@@ -55,6 +57,7 @@ func (ctrl AuthenticationController) RegisterRoutes(router *gin.RouterGroup) {
 		nodeGroup.POST("/user/login", ctrl.HandleLogin())
 		nodeGroup.GET("/user/:id", ctrl.HandleGetUserProfile())
 		nodeGroup.POST("/user/refresh", ctrl.HandleRefreshToken())
+		nodeGroup.POST("/user/logout", ctrl.HandleLogout())
 		nodeGroup.POST("/user/forget-password", ctrl.HandleForgetPassword())
 		nodeGroup.GET("/user/reset-password/:resetToken", ctrl.HandleResetPasswordPage())
 		nodeGroup.POST("/user/reset-password/:resetToken", ctrl.HandleResetPassword())
@@ -157,13 +160,14 @@ func (ctrl AuthenticationController) HandleGetUserProfile() gin.HandlerFunc {
 
 // HandleRefreshToken godoc
 // @Summary      Refresh access token
-// @Description  Issue a new access token from a valid refresh token.
+// @Description  Issue a new access token from a valid refresh token. Returns 401 if the refresh JWT is expired or was revoked by logout.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
 // @Param        body  body      request.RefreshRequest  true  "Refresh payload"
 // @Success      200   {object}  response.RefreshResponse
 // @Failure      400   {object}  share.ErrorResponse
+// @Failure      401   {object}  share.ErrorResponse
 // @Router       /auth/user/refresh [post]
 func (ctrl AuthenticationController) HandleRefreshToken() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -172,9 +176,14 @@ func (ctrl AuthenticationController) HandleRefreshToken() gin.HandlerFunc {
 			jsonBindError(c, err)
 			return
 		}
-		claims, err := service.VerifyRefreshToken(request.RefreshToken)
+		logoutService := ctrl.logoutService()
+		claims, err := logoutService.AssertRefreshUsable(c.Request.Context(), request.RefreshToken)
 		if err != nil {
-			jsonError(c, http.StatusBadRequest, err.Error())
+			status := http.StatusBadRequest
+			if errors.Is(err, service.ErrRefreshRevoked) || errors.Is(err, service.ErrTokenExpired) {
+				status = http.StatusUnauthorized
+			}
+			jsonError(c, status, err.Error())
 			return
 		}
 		username, ok := claims["username"].(string)
@@ -189,6 +198,41 @@ func (ctrl AuthenticationController) HandleRefreshToken() gin.HandlerFunc {
 		}
 		c.JSON(http.StatusOK, response.RefreshResponse{AccessToken: accessToken})
 	}
+}
+
+// HandleLogout godoc
+// @Summary      Logout
+// @Description  Revoke the presented refresh token. The SHA-256 hash is stored in Redis with TTL until JWT exp, and persisted in Postgres so a Redis restart cannot revive the session.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body      request.LogoutRequest  true  "Refresh token to revoke"
+// @Success      200   {object}  response.LogoutResponse
+// @Failure      400   {object}  share.ErrorResponse
+// @Failure      503   {object}  share.ErrorResponse
+// @Router       /auth/user/logout [post]
+func (ctrl AuthenticationController) HandleLogout() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body request.LogoutRequest
+		if err := c.ShouldBind(&body); err != nil {
+			jsonBindError(c, err)
+			return
+		}
+		logoutService := ctrl.logoutService()
+		if err := logoutService.Logout(c.Request.Context(), body.RefreshToken); err != nil {
+			if errors.Is(err, repository.ErrRevokeStoreUnavailable) {
+				jsonError(c, http.StatusServiceUnavailable, err.Error())
+				return
+			}
+			jsonError(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		c.JSON(http.StatusOK, response.LogoutResponse{Message: "logged out"})
+	}
+}
+
+func (ctrl AuthenticationController) logoutService() *service.LogoutService {
+	return service.NewLogoutService(repository.NewRefreshRevokeStore(ctrl.redisClient, ctrl.db))
 }
 
 // HandleForgetPassword godoc

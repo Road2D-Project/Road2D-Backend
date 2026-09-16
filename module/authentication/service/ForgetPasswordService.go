@@ -50,7 +50,7 @@ func (u *ForgetPasswordService) ForgetPassword(ctx context.Context, request requ
 		return nil, err
 	}
 	if alreadySent {
-		return &response.ForgetPasswordResponse{Message: repository.alreadySentMailMessage}, nil
+		return &response.ForgetPasswordResponse{Message: repository.AlreadySentMailMessage}, nil
 	}
 	if err := u.SendMail(ctx, ForgetPasswordForm{
 		Email:    user.Email,
@@ -62,7 +62,7 @@ func (u *ForgetPasswordService) ForgetPassword(ctx context.Context, request requ
 	if err := u.store.MarkForgetMailSent(ctx, user.ID, user.Email); err != nil {
 		return nil, err
 	}
-	return &response.ForgetPasswordResponse{Message: repository.alreadySentMailMessage}, nil
+	return &response.ForgetPasswordResponse{Message: repository.AlreadySentMailMessage}, nil
 }
 
 func (u *ForgetPasswordService) SendMail(ctx context.Context, form ForgetPasswordForm) error {
@@ -78,7 +78,7 @@ func (u *ForgetPasswordService) SendMail(ctx context.Context, form ForgetPasswor
 	return u.mailClient.Send(ctx, mail.KindForgetPassword, form.Email, mail.ForgetPasswordForm{
 		Username:      form.Username,
 		ResetURL:      resetURL,
-		ExpireMinutes: repository.resetTokenTTLMinutes,
+		ExpireMinutes: repository.ResetTokenTTLMinutes,
 	})
 }
 

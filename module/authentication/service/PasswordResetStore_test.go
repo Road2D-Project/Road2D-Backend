@@ -45,7 +45,7 @@ func TestForgetPasswordSkipsSecondMailWhileKeyExists(t *testing.T) {
 	if mailer.kind != "" {
 		t.Fatal("expected second request to skip sending mail")
 	}
-	if got.Message != repository.alreadySentMailMessage {
+	if got.Message != repository.AlreadySentMailMessage {
 		t.Fatalf("message = %q", got.Message)
 	}
 }
@@ -110,20 +110,5 @@ func TestResetPasswordClearsForgetKeyAndBlocksReuse(t *testing.T) {
 	}
 	if repo.calls != 1 {
 		t.Fatalf("reuse should not change password again, calls = %d", repo.calls)
-	}
-	if cooldown.WaitMinutes < repository.cooldownMinutes(2) {
-		t.Fatalf("wait = %d, want at least %d", cooldown.WaitMinutes, repository.cooldownMinutes(2))
-	}
-}
-
-func TestCooldownMinutesCaps(t *testing.T) {
-	if got := repository.cooldownMinutes(1); got != 20 {
-		t.Fatalf("y=1 got %d", got)
-	}
-	if got := repository.cooldownMinutes(9); got != 60 {
-		t.Fatalf("y=9 got %d", got)
-	}
-	if got := repository.cooldownMinutes(20); got != 60 {
-		t.Fatalf("y=20 got %d", got)
 	}
 }

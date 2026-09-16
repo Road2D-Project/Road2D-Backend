@@ -24,6 +24,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.Leg{},
 		&model.Travel{},
 		&authModel.User{},
+		&authModel.RevokedRefreshToken{},
 	)
 }
 

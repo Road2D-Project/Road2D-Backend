@@ -10,11 +10,11 @@ import (
 )
 
 const (
-	resetTokenTTLMinutes        = 15
+	ResetTokenTTLMinutes        = 15
 	resetCooldownBaseMinutes    = 15
 	resetCooldownStepMinutes    = 5
 	resetCooldownMaxMinutes     = 60
-	alreadySentMailMessage      = "Reset password email has been sent"
+	AlreadySentMailMessage      = "Reset password email has been sent"
 	PasswordResetSuccessMessage = "Reset Password"
 )
 
@@ -89,7 +89,7 @@ func (s *PasswordResetStore) MarkForgetMailSent(ctx context.Context, userID uuid
 	if !s.enabled() {
 		return nil
 	}
-	return s.redis.Set(ctx, forgetPassKey(userID, email), 1, time.Duration(resetTokenTTLMinutes)*time.Minute).Err()
+	return s.redis.Set(ctx, forgetPassKey(userID, email), 1, time.Duration(ResetTokenTTLMinutes)*time.Minute).Err()
 }
 
 func (s *PasswordResetStore) ClearForgetMail(ctx context.Context, userID uuid.UUID, email string) error {

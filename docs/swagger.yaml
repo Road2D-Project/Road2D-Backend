@@ -201,6 +201,13 @@ definitions:
     - password
     - username
     type: object
+  request.LogoutRequest:
+    properties:
+      refreshToken:
+        type: string
+    required:
+    - refreshToken
+    type: object
   request.RefreshRequest:
     properties:
       refreshToken:
@@ -344,6 +351,12 @@ definitions:
       refresh_token:
         type: string
     type: object
+  response.LogoutResponse:
+    properties:
+      message:
+        example: logged out
+        type: string
+    type: object
   response.MatchedSubstring:
     properties:
       length:
@@ -475,7 +488,9 @@ definitions:
     type: object
 info:
   contact: {}
-  description: 'Backend API for Road2D (team Vandra): collaborative multi-branch ride planning and group-ride safety in Vietnam. JWT auth, Goong Maps playground, trip graph models.'
+  description: 'Backend API for Road2D (team Vandra): collaborative multi-branch ride
+    planning and group-ride safety in Vietnam. JWT auth, Goong Maps playground, trip
+    graph models.'
   title: Road2D
   version: "1.0"
 paths:
@@ -561,11 +576,44 @@ paths:
       summary: Login
       tags:
       - auth
+  /auth/user/logout:
+    post:
+      consumes:
+      - application/json
+      description: Revoke the presented refresh token. The SHA-256 hash is stored
+        in Redis with TTL until JWT exp, and persisted in Postgres so a Redis restart
+        cannot revive the session.
+      parameters:
+      - description: Refresh token to revoke
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.LogoutRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.LogoutResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      summary: Logout
+      tags:
+      - auth
   /auth/user/refresh:
     post:
       consumes:
       - application/json
-      description: Issue a new access token from a valid refresh token.
+      description: Issue a new access token from a valid refresh token. Returns 401
+        if the refresh JWT is expired or was revoked by logout.
       parameters:
       - description: Refresh payload
         in: body
@@ -582,6 +630,10 @@ paths:
             $ref: '#/definitions/response.RefreshResponse'
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
           schema:
             $ref: '#/definitions/share.ErrorResponse'
       summary: Refresh access token

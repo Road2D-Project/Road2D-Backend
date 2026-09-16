@@ -1,11 +1,18 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
+)
+
+var (
+	ErrTokenExpired   = errors.New("token is expired")
+	ErrTokenInvalid   = errors.New("token is invalid")
+	ErrRefreshRevoked = errors.New("refresh token has been revoked")
 )
 
 func CreateToken(username string) (string, error) {
@@ -33,9 +40,9 @@ func VerifyRefreshToken(tokenString string) (jwt.MapClaims, error) {
 	if err != nil {
 		if ve, ok := err.(*jwt.ValidationError); ok {
 			if ve.Errors&jwt.ValidationErrorExpired != 0 {
-				return nil, errors.New("token is expired")
+				return nil, ErrTokenExpired
 			} else if ve.Errors&jwt.ValidationErrorClaimsInvalid != 0 {
-				return nil, errors.New("token is invalid")
+				return nil, ErrTokenInvalid
 			}
 
 		}
@@ -43,7 +50,7 @@ func VerifyRefreshToken(tokenString string) (jwt.MapClaims, error) {
 	}
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok || !token.Valid {
-		return nil, errors.New("invalid refresh token")
+		return nil, ErrTokenInvalid
 	}
 	return claims, nil
 }
@@ -54,14 +61,14 @@ func VerifyAccessToken(tokenString string) (jwt.MapClaims, error) {
 	if err != nil {
 		if ve, ok := err.(*jwt.ValidationError); ok {
 			if ve.Errors&jwt.ValidationErrorExpired != 0 {
-				return nil, errors.New("token is expired")
+				return nil, ErrTokenExpired
 			}
 		}
 		return nil, err
 	}
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok || !token.Valid {
-		return nil, errors.New("invalid refresh token")
+		return nil, ErrTokenInvalid
 	}
 	return claims, nil
 }
@@ -82,9 +89,9 @@ func VerifyResetPasswordToken(tokenString string) (jwt.MapClaims, error) {
 	if err != nil {
 		if ve, ok := err.(*jwt.ValidationError); ok {
 			if ve.Errors&jwt.ValidationErrorExpired != 0 {
-				return nil, errors.New("token is expired")
+				return nil, ErrTokenExpired
 			} else if ve.Errors&jwt.ValidationErrorClaimsInvalid != 0 {
-				return nil, errors.New("token is invalid")
+				return nil, ErrTokenInvalid
 			}
 
 		}
@@ -92,7 +99,30 @@ func VerifyResetPasswordToken(tokenString string) (jwt.MapClaims, error) {
 	}
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok || !token.Valid {
-		return nil, errors.New("invalid refresh token")
+		return nil, ErrTokenInvalid
 	}
 	return claims, nil
+}
+
+func ClaimsExpiry(claims jwt.MapClaims) (time.Time, bool) {
+	raw, ok := claims["exp"]
+	if !ok || raw == nil {
+		return time.Time{}, false
+	}
+	switch v := raw.(type) {
+	case float64:
+		return time.Unix(int64(v), 0).UTC(), true
+	case int64:
+		return time.Unix(v, 0).UTC(), true
+	case int:
+		return time.Unix(int64(v), 0).UTC(), true
+	case json.Number:
+		n, err := v.Int64()
+		if err != nil {
+			return time.Time{}, false
+		}
+		return time.Unix(n, 0).UTC(), true
+	default:
+		return time.Time{}, false
+	}
 }
