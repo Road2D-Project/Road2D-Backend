@@ -8,6 +8,8 @@ import (
 
 	"Road-To-Destination-BE/middleware"
 	authenController "Road-To-Destination-BE/module/authentication/controller"
+	authenRepo "Road-To-Destination-BE/module/authentication/repository"
+	groupController "Road-To-Destination-BE/module/group/controller"
 	mapsClient "Road-To-Destination-BE/module/maps/client"
 	mapsController "Road-To-Destination-BE/module/maps/controller"
 	"Road-To-Destination-BE/module/share"
@@ -77,9 +79,13 @@ func main() {
 	for _, r := range sandboxes {
 		r.RegisterPlayground(playground)
 	}
-	// Public router
+	// Public / authenticated routers
+	authMw := middleware.NewAuthenticationMiddleware(
+		authenRepo.NewCacheUserRepository(dbConfig.GetDatabase(), redisConfig.Client()),
+	)
 	routerRegistrars := []share.RouterRegistrar{
 		authenController.NewAuthenticationController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator),
+		groupController.NewGroupController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw),
 	}
 	for _, r := range routerRegistrars {
 		r.RegisterRoutes(v1)

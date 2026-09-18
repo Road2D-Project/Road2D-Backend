@@ -180,6 +180,23 @@ definitions:
       username:
         type: string
     type: object
+  request.CreateGroupRequest:
+    properties:
+      adminUsernames:
+        items:
+          type: string
+        maxItems: 50
+        type: array
+      description:
+        maxLength: 4000
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
   request.ForgetPasswordRequest:
     properties:
       mail:
@@ -240,6 +257,16 @@ definitions:
       confirm_password:
         type: string
       password:
+        type: string
+    type: object
+  request.UpdateGroupRequest:
+    properties:
+      description:
+        maxLength: 4000
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
         type: string
     type: object
   response.AddressComponent:
@@ -331,6 +358,33 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  response.GroupListResponse:
+    properties:
+      groups:
+        items:
+          $ref: '#/definitions/response.GroupResponse'
+        type: array
+    type: object
+  response.GroupResponse:
+    properties:
+      createdTime:
+        type: string
+      description:
+        type: string
+      id:
+        format: uuid
+        type: string
+      myRole:
+        example: owner
+        type: string
+      name:
+        type: string
+      ownerId:
+        format: uuid
+        type: string
+      updatedTime:
+        type: string
     type: object
   response.LatLng:
     properties:
@@ -951,6 +1005,183 @@ paths:
       summary: Optimize multi-stop trip
       tags:
       - goong
+  /groups:
+    get:
+      description: Returns groups where the caller is an active member (owner, admin,
+        or member). Each item includes myRole. Invited/pending/left/kicked memberships
+        are omitted.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.GroupListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List my groups
+      tags:
+      - groups
+    post:
+      consumes:
+      - application/json
+      description: 'Create a standing group. The caller becomes owner (active). Optional
+        adminUsernames are added immediately as active admins. Unknown usernames abort
+        the whole create. Roles: owner, admin, member. Membership statuses: invited,
+        pending, active, rejected, left, kicked.'
+      parameters:
+      - description: Group name, optional description, optional admin usernames
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.CreateGroupRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.GroupResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create group
+      tags:
+      - groups
+  /groups/{groupId}:
+    delete:
+      description: Owner only. Fails with 409 if the group still has trips (trips.group_id).
+        Members cascade-delete with the group.
+      parameters:
+      - description: Group UUID
+        format: uuid
+        in: path
+        name: groupId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Group deleted
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete group
+      tags:
+      - groups
+    get:
+      description: Returns name and description. If the caller is an active member,
+        myRole is set (owner/admin/member). Non-members still receive public name/description
+        so they can request to join; roster is never included here.
+      parameters:
+      - description: Group UUID
+        format: uuid
+        in: path
+        name: groupId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.GroupResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get group
+      tags:
+      - groups
+    patch:
+      consumes:
+      - application/json
+      description: Owner or admin may change name and/or description. Members cannot
+        update group info. Send only the fields to change.
+      parameters:
+      - description: Group UUID
+        format: uuid
+        in: path
+        name: groupId
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdateGroupRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.GroupResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update group
+      tags:
+      - groups
 securityDefinitions:
   BearerAuth:
     description: Type "Bearer" followed by a space and JWT token.

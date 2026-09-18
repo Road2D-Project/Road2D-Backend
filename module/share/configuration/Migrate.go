@@ -5,6 +5,7 @@ import (
 	"log"
 
 	authModel "Road-To-Destination-BE/module/authentication/model"
+	groupModel "Road-To-Destination-BE/module/group/model"
 	"Road-To-Destination-BE/module/trip/model"
 
 	"gorm.io/gorm"
@@ -15,6 +16,10 @@ func AutoMigrate(db *gorm.DB) error {
 		return err
 	}
 	return db.AutoMigrate(
+		&authModel.User{},
+		&authModel.RevokedRefreshToken{},
+		&groupModel.Group{},
+		&groupModel.GroupMember{},
 		&model.PlaceType{},
 		&model.Location{},
 		&model.Destination{},
@@ -23,8 +28,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.BranchDestination{},
 		&model.Leg{},
 		&model.Travel{},
-		&authModel.User{},
-		&authModel.RevokedRefreshToken{},
 	)
 }
 
