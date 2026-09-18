@@ -49,6 +49,7 @@ func (s *RefreshRevokeStore) Revoke(ctx context.Context, rawToken, username stri
 		return ErrRevokeStoreUnavailable
 	}
 	now := time.Now()
+	// if refresh token is expired -> no need to handle more in persistence
 	if !expiresAt.After(now) {
 		return nil
 	}

@@ -2,6 +2,7 @@ package model
 
 import (
 	"Road-To-Destination-BE/utils"
+	"errors"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -13,6 +14,10 @@ type User struct {
 	Password string `json:"-" gorm:"column:password;type:varchar(255);not null" swaggerignore:"true" validate:"strongPassword"`
 }
 
+var (
+	ErrPasswordMismatch = errors.New("password mismatch")
+)
+
 func (User) TableName() string {
 	return "users"
 }
@@ -20,7 +25,7 @@ func (User) TableName() string {
 func (user *User) CheckPassword(password string) (bool, error) {
 	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
-		return false, err
+		return false, ErrPasswordMismatch
 	}
 	return true, nil
 }

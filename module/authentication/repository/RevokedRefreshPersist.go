@@ -22,6 +22,7 @@ type gormRevokePersist struct {
 }
 
 func (p *gormRevokePersist) Upsert(ctx context.Context, row *model.RevokedRefreshToken) error {
+	// Clause thêm các mệnh đề câu truy vấn -> làm được nhiều việc hơn
 	return p.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(row).Error
 }
 
