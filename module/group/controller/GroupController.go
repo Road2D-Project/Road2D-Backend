@@ -23,6 +23,8 @@ var (
 	_ = request.UpdateGroupRequest{}
 	_ = response.GroupResponse{}
 	_ = response.GroupListResponse{}
+	_ = response.InvitationResponse{}
+	_ = response.InvitationListResponse{}
 	_ = share.ErrorResponse{}
 )
 
@@ -42,8 +44,12 @@ func (ctrl *GroupController) RegisterRoutes(router *gin.RouterGroup) {
 	{
 		groups.POST("", ctrl.HandleCreateGroup())
 		groups.GET("", ctrl.HandleListGroups())
+		groups.GET("/invitations", ctrl.HandleListInvitations())
 		groups.GET("/:groupId", ctrl.HandleGetGroup())
 		groups.PATCH("/:groupId", ctrl.handleActiveGroupRole(), ctrl.requireGroupRole(enum.GroupRoleOwner, enum.GroupRoleAdmin), ctrl.HandleUpdateGroup())
 		groups.DELETE("/:groupId", ctrl.handleActiveGroupRole(), ctrl.requireGroupRole(enum.GroupRoleOwner), ctrl.HandleDeleteGroup())
+		groups.POST("/:groupId/invite/:userId", ctrl.handleActiveGroupRole(), ctrl.requireGroupRole(enum.GroupRoleOwner, enum.GroupRoleAdmin), ctrl.HandleInviteNewMember())
+		groups.POST("/:groupId/invitations/accept", ctrl.HandleAcceptInvitation())
+		groups.POST("/:groupId/invitations/reject", ctrl.HandleRejectInvitation())
 	}
 }

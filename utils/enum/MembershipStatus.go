@@ -10,7 +10,7 @@ package enum
 // invited  — An admin/owner invited this user; waiting for accept or decline.
 // pending  — The user requested to join; waiting for admin/owner approval.
 // active   — Current member. May see the roster, edit nickname, and leave.
-// rejected — The join request was denied by an admin/owner.
+// rejected — The invitee declined, or a join request was denied by staff.
 // left     — The user left the group on their own.
 // kicked   — An admin/owner removed the user.
 //
