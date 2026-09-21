@@ -9,7 +9,7 @@ import (
 
 // HandleUpdateGroup godoc
 // @Summary      Update group
-// @Description  Owner or admin may change name and/or description. Members cannot update group info. Send only the fields to change.
+// @Description  Owner or admin may change name, description, and/or policy (group rules text). Members cannot update group info. Send only the fields to change.
 // @Tags         groups
 // @Accept       json
 // @Produce      json

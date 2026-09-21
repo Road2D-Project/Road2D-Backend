@@ -21,6 +21,7 @@ var (
 	_ = model.GroupMember{}
 	_ = request.CreateGroupRequest{}
 	_ = request.UpdateGroupRequest{}
+	_ = request.UpdateMemberRequest{}
 	_ = response.GroupResponse{}
 	_ = response.GroupListResponse{}
 	_ = response.InvitationResponse{}
@@ -50,6 +51,8 @@ func (ctrl *GroupController) RegisterRoutes(router *gin.RouterGroup) {
 		groups.GET("/mine", ctrl.HandleGetJoinedGroup())
 		groups.GET("/:groupId", ctrl.HandleGetGroup())
 		groups.GET("/:groupId/members", ctrl.handleActiveGroupRole(), ctrl.HandleListGroupMembers())
+		groups.PATCH("/:groupId/members/:userId", ctrl.handleActiveGroupRole(), ctrl.HandleUpdateMember())
+		groups.DELETE("/:groupId/members/:userId", ctrl.handleActiveGroupRole(), ctrl.requireGroupRole(enum.GroupRoleOwner, enum.GroupRoleAdmin), ctrl.HandleKickMember())
 		groups.PATCH("/:groupId", ctrl.handleActiveGroupRole(), ctrl.requireGroupRole(enum.GroupRoleOwner, enum.GroupRoleAdmin), ctrl.HandleUpdateGroup())
 		groups.DELETE("/:groupId", ctrl.handleActiveGroupRole(), ctrl.requireGroupRole(enum.GroupRoleOwner), ctrl.HandleDeleteGroup())
 		groups.POST("/:groupId/invite/:userId", ctrl.handleActiveGroupRole(), ctrl.requireGroupRole(enum.GroupRoleOwner, enum.GroupRoleAdmin), ctrl.HandleInviteNewMember())

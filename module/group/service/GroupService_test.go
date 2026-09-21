@@ -47,7 +47,7 @@ func (s *stubGroupRecords) FindGroupByID(_ context.Context, id uuid.UUID) (*mode
 	return &copied, nil
 }
 
-func (s *stubGroupRecords) UpdateGroupInfo(_ context.Context, id uuid.UUID, name, description *string) error {
+func (s *stubGroupRecords) UpdateGroupInfo(_ context.Context, id uuid.UUID, name, description, policy *string) error {
 	if s.updateErr != nil {
 		return s.updateErr
 	}
@@ -60,6 +60,9 @@ func (s *stubGroupRecords) UpdateGroupInfo(_ context.Context, id uuid.UUID, name
 	}
 	if description != nil {
 		g.Description = *description
+	}
+	if policy != nil {
+		g.Policy = *policy
 	}
 	return nil
 }
@@ -115,6 +118,37 @@ func TestCreateGroupAddsOwnerAndAdmins(t *testing.T) {
 	}
 	if groups.members[1].Role != enum.GroupRoleAdmin || groups.members[1].UserID != admin.ID {
 		t.Fatal("second member should be admin scout")
+	}
+}
+
+func TestCreateGroupPersistsPolicy(t *testing.T) {
+	owner := &authModel.User{Username: "leader"}
+	owner.ID = uuid.New()
+	groups := &stubGroupRecords{byID: map[uuid.UUID]*model.Group{}}
+	svc := NewGroupService(groups, stubUsersByName{}, nil, nil)
+	got, err := svc.CreateGroup(context.Background(), owner, request.CreateGroupRequest{
+		Name:   "Crew",
+		Policy: "  helmets on  ",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Policy != "helmets on" || groups.created.Policy != "helmets on" {
+		t.Fatalf("policy = %q", got.Policy)
+	}
+}
+
+func TestUpdateGroupPolicyOnly(t *testing.T) {
+	id := uuid.New()
+	groups := &stubGroupRecords{byID: map[uuid.UUID]*model.Group{id: {Name: "a", Policy: "old"}}}
+	svc := NewGroupService(groups, nil, nil, nil)
+	policy := "no night riding"
+	got, err := svc.UpdateGroup(context.Background(), id, request.UpdateGroupRequest{Policy: &policy}, enum.GroupRoleOwner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Policy != "no night riding" {
+		t.Fatalf("policy = %q", got.Policy)
 	}
 }
 

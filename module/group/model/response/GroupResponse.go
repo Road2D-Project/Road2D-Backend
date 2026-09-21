@@ -12,6 +12,7 @@ type GroupResponse struct {
 	ID          uuid.UUID       `json:"id" swaggertype:"string" format:"uuid"`
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
+	Policy      string          `json:"policy"`
 	OwnerID     uuid.UUID       `json:"ownerId" swaggertype:"string" format:"uuid"`
 	MyRole      *enum.GroupRole `json:"myRole,omitempty" swaggertype:"string" example:"owner"`
 	CreatedTime time.Time       `json:"createdTime"`
@@ -27,6 +28,7 @@ func FromGroup(group *model.Group, role *enum.GroupRole) GroupResponse {
 		ID:          group.ID,
 		Name:        group.Name,
 		Description: group.Description,
+		Policy:      group.Policy,
 		OwnerID:     group.OwnerID,
 		MyRole:      role,
 		CreatedTime: group.CreatedAt,

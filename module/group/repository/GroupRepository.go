@@ -57,13 +57,16 @@ func (r *GroupRepository) FindGroupByID(ctx context.Context, id uuid.UUID) (*mod
 	return &group, nil
 }
 
-func (r *GroupRepository) UpdateGroupInfo(ctx context.Context, id uuid.UUID, name, description *string) error {
+func (r *GroupRepository) UpdateGroupInfo(ctx context.Context, id uuid.UUID, name, description, policy *string) error {
 	updates := map[string]any{}
 	if name != nil {
 		updates["name"] = *name
 	}
 	if description != nil {
 		updates["description"] = *description
+	}
+	if policy != nil {
+		updates["policy"] = *policy
 	}
 	if len(updates) == 0 {
 		return ErrNoGroupUpdate

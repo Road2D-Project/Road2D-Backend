@@ -14,7 +14,7 @@ import (
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        body  body      request.CreateGroupRequest  true  "Group name, optional description, optional admin usernames"
+// @Param        body  body      request.CreateGroupRequest  true  "Group name, optional description, optional policy, optional admin usernames"
 // @Success      201   {object}  response.GroupResponse
 // @Failure      400   {object}  share.ErrorResponse
 // @Failure      401   {object}  share.ErrorResponse

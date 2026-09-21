@@ -212,3 +212,24 @@ func (r *GroupMemberRepository) ApplyLeave(ctx context.Context, leaver *model.Gr
 		return nil
 	})
 }
+
+func (r *GroupMemberRepository) ApplyKick(ctx context.Context, member *model.GroupMember) error {
+	if r == nil || r.db == nil {
+		return ErrInternalServerError
+	}
+	if member == nil {
+		return ErrUserNotGroupMember
+	}
+	result := r.db.WithContext(ctx).Model(&model.GroupMember{}).Where("id = ?", member.ID).Updates(map[string]any{
+		"role":      enum.GroupRoleMember,
+		"status":    enum.MembershipKicked,
+		"joined_at": nil,
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrUserNotGroupMember
+	}
+	return nil
+}

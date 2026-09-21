@@ -59,6 +59,13 @@ func (ctrl *GroupController) leaveGroupService() *service.LeaveGroupService {
 	)
 }
 
+func (ctrl *GroupController) kickMemberService() *service.KickMemberService {
+	return service.NewKickMemberService(
+		repository.NewGroupMemberRepository(ctrl.db),
+		repository.NewGroupMemberStore(ctrl.redisClient),
+	)
+}
+
 func mapGroupError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, repository.ErrGroupNotFound),
@@ -74,7 +81,11 @@ func mapGroupError(c *gin.Context, err error) {
 		errors.Is(err, repository.ErrJoinRequestNotPending),
 		errors.Is(err, repository.ErrNoSuccessorToTransfer):
 		jsonError(c, http.StatusConflict, err.Error())
-	case errors.Is(err, repository.ErrUserNotGroupMember):
+	case errors.Is(err, repository.ErrUserNotGroupMember),
+		errors.Is(err, repository.ErrCannotKickOwner),
+		errors.Is(err, repository.ErrCannotKickSelf),
+		errors.Is(err, repository.ErrInsufficientKickRole),
+		errors.Is(err, repository.ErrCannotUpdateOtherNickname):
 		jsonError(c, http.StatusForbidden, err.Error())
 	case errors.Is(err, repository.ErrAdminUserNotFound),
 		errors.Is(err, repository.ErrNoGroupUpdate),

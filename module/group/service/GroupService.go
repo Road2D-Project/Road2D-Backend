@@ -20,7 +20,7 @@ import (
 type GroupRecordRepository interface {
 	CreateGroupWithMembers(ctx context.Context, group *model.Group, members []model.GroupMember) error
 	FindGroupByID(ctx context.Context, id uuid.UUID) (*model.Group, error)
-	UpdateGroupInfo(ctx context.Context, id uuid.UUID, name, description *string) error
+	UpdateGroupInfo(ctx context.Context, id uuid.UUID, name, description, policy *string) error
 	DeleteGroup(ctx context.Context, id uuid.UUID) error
 	ListActiveGroupByUser(ctx context.Context, userID uuid.UUID) ([]repository.ActiveGroupByUser, error)
 	CountGroupTrips(ctx context.Context, groupID uuid.UUID) (int64, error)
@@ -74,6 +74,7 @@ func (s *GroupService) CreateGroup(ctx context.Context, owner *authModel.User, r
 	group := &model.Group{
 		Name:        name,
 		Description: utils.Santize(req.Description),
+		Policy:      utils.Santize(req.Policy),
 		OwnerID:     owner.ID,
 	}
 	members := []model.GroupMember{{
@@ -151,7 +152,7 @@ func (s *GroupService) ListActiveGroupsForUser(ctx context.Context, userID uuid.
 }
 
 func (s *GroupService) UpdateGroup(ctx context.Context, groupID uuid.UUID, req request.UpdateGroupRequest, myRole enum.GroupRole) (*response.GroupResponse, error) {
-	var name, description *string
+	var name, description, policy *string
 	if req.Name != nil {
 		cleaned := utils.Santize(*req.Name)
 		if cleaned == "" {
@@ -163,10 +164,14 @@ func (s *GroupService) UpdateGroup(ctx context.Context, groupID uuid.UUID, req r
 		cleaned := utils.Santize(*req.Description)
 		description = &cleaned
 	}
-	if name == nil && description == nil {
+	if req.Policy != nil {
+		cleaned := utils.Santize(*req.Policy)
+		policy = &cleaned
+	}
+	if name == nil && description == nil && policy == nil {
 		return nil, repository.ErrNoGroupUpdate
 	}
-	if err := s.groupRecords.UpdateGroupInfo(ctx, groupID, name, description); err != nil {
+	if err := s.groupRecords.UpdateGroupInfo(ctx, groupID, name, description, policy); err != nil {
 		return nil, err
 	}
 	group, err := s.groupRecords.FindGroupByID(ctx, groupID)

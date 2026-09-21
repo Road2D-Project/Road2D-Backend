@@ -12,6 +12,7 @@ type Group struct {
 	utils.Base
 	Name        string          `json:"name" gorm:"column:name;type:varchar(255);not null"`
 	Description string          `json:"description" gorm:"column:description;type:text"`
+	Policy      string          `json:"policy" gorm:"column:policy;type:text"`
 	OwnerID     uuid.UUID       `json:"ownerId" gorm:"type:uuid;index;not null" swaggertype:"string" format:"uuid"`
 	Owner       *authModel.User `json:"-" gorm:"constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;" swaggerignore:"true"`
 	Members     []GroupMember   `json:"members,omitempty" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
