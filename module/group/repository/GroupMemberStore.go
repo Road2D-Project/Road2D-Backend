@@ -53,6 +53,13 @@ func (g *GroupMemberStore) SetCachedGroupMemberRole(ctx context.Context, groupId
 	return g.redisClient.Set(ctx, g.GroupMemberRoleCacheKey(groupId, userId), role.String(), groupMemberRoleCacheTTL).Err()
 }
 
+func (g *GroupMemberStore) DeleteCachedGroupMemberRole(ctx context.Context, groupId uuid.UUID, userId uuid.UUID) error {
+	if !g.enabled() {
+		return nil
+	}
+	return g.redisClient.Del(ctx, g.GroupMemberRoleCacheKey(groupId, userId)).Err()
+}
+
 func (g *GroupMemberStore) GroupMemberRoleCacheKey(groupId uuid.UUID, userId uuid.UUID) string {
 	return fmt.Sprintf("group-role:%s:%s", groupId.String(), userId.String())
 }

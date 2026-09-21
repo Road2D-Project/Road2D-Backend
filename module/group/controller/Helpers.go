@@ -10,9 +10,15 @@ import (
 	"Road-To-Destination-BE/utils/customValidator"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+)
+
+const (
+	membershipActionAccept = "accept"
+	membershipActionReject = "reject"
 )
 
 func (ctrl *GroupController) groupService() *service.GroupService {
@@ -35,17 +41,38 @@ func (ctrl *GroupController) invitationRespondingService() *service.InvitationRe
 	)
 }
 
+func (ctrl *GroupController) joinRequestService() *service.JoinRequestService {
+	return service.NewJoinRequestService(
+		repository.NewGroupMemberRepository(ctrl.db),
+		repository.NewGroupMemberStore(ctrl.redisClient),
+	)
+}
+
+func (ctrl *GroupController) groupMemberService() *service.GroupMemberService {
+	return service.NewGroupMemberService(repository.NewGroupMemberRepository(ctrl.db))
+}
+
+func (ctrl *GroupController) leaveGroupService() *service.LeaveGroupService {
+	return service.NewLeaveGroupService(
+		repository.NewGroupMemberRepository(ctrl.db),
+		repository.NewGroupMemberStore(ctrl.redisClient),
+	)
+}
+
 func mapGroupError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, repository.ErrGroupNotFound),
 		errors.Is(err, repository.ErrUserNotFound),
-		errors.Is(err, repository.ErrInvitationNotFound):
+		errors.Is(err, repository.ErrInvitationNotFound),
+		errors.Is(err, repository.ErrJoinRequestNotFound):
 		jsonError(c, http.StatusNotFound, err.Error())
 	case errors.Is(err, repository.ErrGroupHasTrips),
 		errors.Is(err, repository.ErrAlreadyGroupMember),
 		errors.Is(err, repository.ErrAlreadyInvited),
 		errors.Is(err, repository.ErrJoinRequestPending),
-		errors.Is(err, repository.ErrInvitationNotPending):
+		errors.Is(err, repository.ErrInvitationNotPending),
+		errors.Is(err, repository.ErrJoinRequestNotPending),
+		errors.Is(err, repository.ErrNoSuccessorToTransfer):
 		jsonError(c, http.StatusConflict, err.Error())
 	case errors.Is(err, repository.ErrUserNotGroupMember):
 		jsonError(c, http.StatusForbidden, err.Error())
@@ -57,6 +84,17 @@ func mapGroupError(c *gin.Context, err error) {
 		jsonError(c, http.StatusInternalServerError, err.Error())
 	default:
 		jsonError(c, http.StatusBadRequest, err.Error())
+	}
+}
+
+func parseAcceptOrReject(c *gin.Context) (string, bool) {
+	action := strings.ToLower(strings.TrimSpace(c.Query("action")))
+	switch action {
+	case membershipActionAccept, membershipActionReject:
+		return action, true
+	default:
+		jsonError(c, http.StatusBadRequest, "action must be accept or reject")
+		return "", false
 	}
 }
 

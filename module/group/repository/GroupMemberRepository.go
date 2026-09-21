@@ -77,6 +77,43 @@ func (r *GroupMemberRepository) InviteMember(ctx context.Context, userId uuid.UU
 	return r.AddNewMember(ctx, userId, groupId, enum.GroupRoleMember, enum.MembershipInvited, &invitorName)
 }
 
+func (r *GroupMemberRepository) RequestJoin(ctx context.Context, userId uuid.UUID, groupId uuid.UUID) (*model.GroupMember, error) {
+	return r.AddNewMember(ctx, userId, groupId, enum.GroupRoleMember, enum.MembershipPending, nil)
+}
+
+func (r *GroupMemberRepository) ListPendingMembers(ctx context.Context, groupId uuid.UUID) ([]model.GroupMember, error) {
+	if r == nil || r.db == nil {
+		return nil, ErrInternalServerError
+	}
+	var members []model.GroupMember
+	err := r.db.WithContext(ctx).
+		Preload("Group").
+		Preload("User").
+		Where("group_id = ? AND status = ?", groupId, enum.MembershipPending).
+		Order("updated_at DESC").
+		Find(&members).Error
+	if err != nil {
+		return nil, err
+	}
+	return members, nil
+}
+
+func (r *GroupMemberRepository) ListActiveMembers(ctx context.Context, groupId uuid.UUID) ([]model.GroupMember, error) {
+	if r == nil || r.db == nil {
+		return nil, ErrInternalServerError
+	}
+	var members []model.GroupMember
+	err := r.db.WithContext(ctx).
+		Preload("User").
+		Where("group_id = ? AND status = ?", groupId, enum.MembershipActive).
+		Order("joined_at ASC").
+		Find(&members).Error
+	if err != nil {
+		return nil, err
+	}
+	return members, nil
+}
+
 func (r *GroupMemberRepository) FindGroupActiveMemberRole(ctx context.Context, groupId uuid.UUID, userId uuid.UUID) (enum.GroupRole, error) {
 	if r == nil || r.db == nil {
 		return 0, ErrInternalServerError
@@ -133,4 +170,45 @@ func (r *GroupMemberRepository) AddNewMember(ctx context.Context, userId uuid.UU
 	member.Group = &group
 	member.User = &user
 	return &member, nil
+}
+
+func (r *GroupMemberRepository) ApplyLeave(ctx context.Context, leaver *model.GroupMember, successor *model.GroupMember) error {
+	if r == nil || r.db == nil {
+		return ErrInternalServerError
+	}
+	if leaver == nil {
+		return ErrUserNotGroupMember
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if successor != nil {
+			// update quyền
+			result := tx.Model(&model.GroupMember{}).Where("id = ?", successor.ID).Update("role", enum.GroupRoleOwner)
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				return ErrUserNotGroupMember
+			}
+			// update group
+			result = tx.Model(&model.Group{}).Where("id = ?", leaver.GroupID).Update("owner_id", successor.UserID)
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				return ErrGroupNotFound
+			}
+		}
+		result := tx.Model(&model.GroupMember{}).Where("id = ?", leaver.ID).Updates(map[string]any{
+			"role":      enum.GroupRoleMember,
+			"status":    enum.MembershipLeft,
+			"joined_at": nil,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return ErrUserNotGroupMember
+		}
+		return nil
+	})
 }

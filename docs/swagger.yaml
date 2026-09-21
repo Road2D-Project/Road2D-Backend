@@ -386,6 +386,41 @@ definitions:
       updatedTime:
         type: string
     type: object
+  response.InvitationListResponse:
+    properties:
+      invitations:
+        items:
+          $ref: '#/definitions/response.InvitationResponse'
+        type: array
+    type: object
+  response.InvitationResponse:
+    properties:
+      groupId:
+        format: uuid
+        type: string
+      groupName:
+        type: string
+      invitorName:
+        type: string
+      status:
+        example: invited
+        type: string
+      userId:
+        format: uuid
+        type: string
+      userName:
+        type: string
+      userRole:
+        example: member
+        type: string
+    type: object
+  response.JoinRequestListResponse:
+    properties:
+      joinRequests:
+        items:
+          $ref: '#/definitions/response.InvitationResponse'
+        type: array
+    type: object
   response.LatLng:
     properties:
       lat:
@@ -660,6 +695,25 @@ paths:
           schema:
             $ref: '#/definitions/share.ErrorResponse'
       summary: Logout
+      tags:
+      - auth
+  /auth/user/me:
+    get:
+      description: Return the authenticated user. Password hash is never included.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.User'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: My profile
       tags:
       - auth
   /auth/user/refresh:
@@ -1180,6 +1234,272 @@ paths:
       security:
       - BearerAuth: []
       summary: Update group
+      tags:
+      - groups
+  /groups/{groupId}/invitations:
+    post:
+      description: The invited caller accepts or rejects with ?action=accept|reject.
+        Accept makes them an active member; reject sets status rejected.
+      parameters:
+      - description: Group UUID
+        format: uuid
+        in: path
+        name: groupId
+        required: true
+        type: string
+      - description: accept or reject
+        enum:
+        - accept
+        - reject
+        in: query
+        name: action
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.InvitationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Respond to a group invitation
+      tags:
+      - groups
+  /groups/{groupId}/invite/{userId}:
+    post:
+      description: Owner or admin invites a user by UUID. Reuses a left/rejected/kicked
+        membership row. The invitee later accepts or rejects.
+      parameters:
+      - description: Group UUID
+        format: uuid
+        in: path
+        name: groupId
+        required: true
+        type: string
+      - description: Invitee UUID
+        format: uuid
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.InvitationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Invite a user to a group
+      tags:
+      - groups
+  /groups/{groupId}/join:
+    post:
+      description: The caller creates a pending join request. Owner/admin later accept
+        or reject it. Reuses a left/rejected/kicked membership row.
+      parameters:
+      - description: Group UUID
+        format: uuid
+        in: path
+        name: groupId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.InvitationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Request to join a group
+      tags:
+      - groups
+  /groups/{groupId}/join-requests:
+    get:
+      description: Owner or admin lists users waiting to join this group.
+      parameters:
+      - description: Group UUID
+        format: uuid
+        in: path
+        name: groupId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.JoinRequestListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List pending join requests
+      tags:
+      - groups
+  /groups/{groupId}/join-requests/{userId}:
+    post:
+      description: Owner or admin responds with ?action=accept|reject. Accept makes
+        the user an active member; reject sets status rejected.
+      parameters:
+      - description: Group UUID
+        format: uuid
+        in: path
+        name: groupId
+        required: true
+        type: string
+      - description: Applicant UUID
+        format: uuid
+        in: path
+        name: userId
+        required: true
+        type: string
+      - description: accept or reject
+        enum:
+        - accept
+        - reject
+        in: query
+        name: action
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.InvitationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Accept or reject a join request
+      tags:
+      - groups
+  /groups/invitations:
+    get:
+      description: Returns invitations waiting for the caller to accept or reject.
+        Other users' invitations are never included.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.InvitationListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List my group invitations
+      tags:
+      - groups
+  /groups/mine:
+    get:
+      description: Returns groups where the caller is an active member (owner, admin,
+        or member). Each item includes myRole.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.GroupListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List groups I have joined
       tags:
       - groups
 securityDefinitions:

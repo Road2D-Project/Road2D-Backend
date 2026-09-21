@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"Road-To-Destination-BE/middleware"
 	"Road-To-Destination-BE/module/authentication/model"
 	"Road-To-Destination-BE/module/authentication/model/request"
 	"Road-To-Destination-BE/module/authentication/model/response"
@@ -53,8 +54,10 @@ func NewAuthenticationController(db *gorm.DB, client *redis.Client, validator *v
 func (ctrl AuthenticationController) RegisterRoutes(router *gin.RouterGroup) {
 	nodeGroup := router.Group("/auth")
 	{
+		auth := middleware.NewAuthenticationMiddleware(repository.NewCacheUserRepository(ctrl.db, ctrl.redisClient))
 		nodeGroup.POST("/user/register", ctrl.HandleRegister())
 		nodeGroup.POST("/user/login", ctrl.HandleLogin())
+		nodeGroup.GET("/user/me", auth.RequireAuth(), ctrl.HandleMyProfile())
 		nodeGroup.GET("/user/:id", ctrl.HandleGetUserProfile())
 		nodeGroup.POST("/user/refresh", ctrl.HandleRefreshToken())
 		nodeGroup.POST("/user/logout", ctrl.HandleLogout())
@@ -309,6 +312,26 @@ func (ctrl AuthenticationController) HandleResetPassword() gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, response.ResetPasswordResponse{Message: msg})
+	}
+}
+
+// HandleMyProfile godoc
+// @Summary      My profile
+// @Description  Return the authenticated user. Password hash is never included.
+// @Tags         auth
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  model.User
+// @Failure      401  {object}  share.ErrorResponse
+// @Router       /auth/user/me [get]
+func (ctrl AuthenticationController) HandleMyProfile() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user := middleware.GetCurrentUser(c)
+		if user == nil {
+			jsonError(c, http.StatusUnauthorized, "Unauthorized")
+			return
+		}
+		c.JSON(http.StatusOK, user)
 	}
 }
 

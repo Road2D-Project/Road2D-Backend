@@ -5,7 +5,9 @@ package enum
 //
 // owner  — Unique creator of the group. May edit name/description, add/invite/
 //          approve/kick members, appoint or demote admins, delete the group, or
-//          transfer ownership. Cannot leave while still owner.
+//          transfer ownership. Leaving auto-transfers to the earliest-joined
+//          admin, else the earliest-joined member. If nobody remains, delete
+//          the group instead.
 // admin  — May edit name/description and manage members (add, invite, approve,
 //          reject, kick). Cannot delete the group or change the owner's role.
 // member — May read the active roster, change their own nickname, leave, or
