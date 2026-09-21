@@ -15,7 +15,7 @@ type Trip struct {
 	GroupID       *uuid.UUID        `json:"groupId,omitempty" gorm:"type:uuid;index" swaggertype:"string" format:"uuid"`
 	Group         *groupmodel.Group `json:"-" gorm:"constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;" swaggerignore:"true"`
 	Name          string            `json:"name" gorm:"column:name;type:varchar(255);not null"`
-	Status        enum.TripStatus   `json:"status" gorm:"column:status;type:varchar(32);not null;default:planning"`
+	Status        enum.TripStatus   `json:"status" gorm:"column:status;type:varchar(32);not null"`
 	StartTime     *time.Time        `json:"startTime,omitempty" gorm:"column:start_time"`
 	EndTime       *time.Time        `json:"endTime,omitempty" gorm:"column:end_time"`
 	TotalDistance float64           `json:"totalDistance" gorm:"column:total_distance;not null;default:0"`

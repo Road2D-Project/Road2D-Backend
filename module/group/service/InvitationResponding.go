@@ -40,6 +40,7 @@ func (s *InvitationRespondingService) ListInvitations(ctx context.Context, userI
 	if err != nil {
 		return nil, err
 	}
+	//map thủ công, không cần qua GORM
 	items := make([]response.InvitationResponse, 0, len(members))
 	for i := range members {
 		items = append(items, response.FromGroupMember(&members[i]))

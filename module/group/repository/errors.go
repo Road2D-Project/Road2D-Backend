@@ -17,4 +17,5 @@ var (
 	ErrJoinRequestPending   = errors.New("user already has a pending join request")
 	ErrInvitationNotFound   = errors.New("invitation not found")
 	ErrInvitationNotPending = errors.New("membership is not a pending invitation")
+	ErrNotEnoughGroupMember = errors.New("At least 2 group member (include creator) are needed to join")
 )

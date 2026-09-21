@@ -38,7 +38,7 @@ func (r *GroupRepository) CreateGroupWithMembers(ctx context.Context, group *mod
 			members[i].GroupID = group.ID
 		}
 		if len(members) == 0 {
-			return nil
+			return ErrNotEnoughGroupMember
 		}
 		// GroupMember.TableName() is group_members; GORM inserts that slice as new rows.
 		return tx.Create(&members).Error

@@ -26,7 +26,7 @@ type Leg struct {
 	DistanceM      float64        `json:"distanceM" gorm:"column:distance_m;not null;default:0"`
 	DurationS      float64        `json:"durationS" gorm:"column:duration_s;not null;default:0"`
 	Steps          []RouteStep    `json:"steps,omitempty" gorm:"column:steps;type:jsonb;serializer:json"`
-	Source         enum.LegSource `json:"source" gorm:"column:source;type:varchar(32);not null;default:direction" swaggertype:"string" example:"direction"`
+	Source         enum.LegSource `json:"source" gorm:"column:source;type:varchar(32);not null" swaggertype:"string" example:"direction"`
 	LastComputedAt time.Time      `json:"lastComputedAt" gorm:"column:last_computed_at"`
 	TTLSeconds     int            `json:"ttlSeconds" gorm:"column:ttl_seconds;not null;default:0"`
 }

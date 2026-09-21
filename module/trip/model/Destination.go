@@ -19,7 +19,7 @@ type Destination struct {
 	Name         string                 `json:"name" gorm:"column:name;type:varchar(255);not null"`
 	ArriveTime   *time.Time             `json:"arriveTime,omitempty" gorm:"column:arrive_time"`
 	StayOverTime int                    `json:"stayOverTime" gorm:"column:stay_over_time;not null;default:0"`
-	Status       enum.DestinationStatus `json:"status" gorm:"column:status;type:varchar(32);not null;default:Editing"`
+	Status       enum.DestinationStatus `json:"status" gorm:"column:status;type:varchar(32);not null"`
 }
 
 func (Destination) TableName() string {

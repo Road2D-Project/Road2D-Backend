@@ -104,11 +104,12 @@ func (s *GroupService) CreateGroup(ctx context.Context, owner *authModel.User, r
 			continue
 		}
 		members = append(members, model.GroupMember{
-			UserID:   admin.ID,
-			Role:     enum.GroupRoleAdmin,
-			Status:   enum.MembershipActive,
-			Nickname: admin.Username,
-			JoinedAt: &now,
+			UserID:      admin.ID,
+			Role:        enum.GroupRoleAdmin,
+			Status:      enum.MembershipActive,
+			Nickname:    admin.Username,
+			JoinedAt:    &now,
+			InvitorName: new(owner.Username),
 		})
 	}
 	if err := s.groupRecords.CreateGroupWithMembers(ctx, group, members); err != nil {

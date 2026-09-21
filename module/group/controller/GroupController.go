@@ -48,8 +48,30 @@ func (ctrl *GroupController) RegisterRoutes(router *gin.RouterGroup) {
 		groups.GET("/:groupId", ctrl.HandleGetGroup())
 		groups.PATCH("/:groupId", ctrl.handleActiveGroupRole(), ctrl.requireGroupRole(enum.GroupRoleOwner, enum.GroupRoleAdmin), ctrl.HandleUpdateGroup())
 		groups.DELETE("/:groupId", ctrl.handleActiveGroupRole(), ctrl.requireGroupRole(enum.GroupRoleOwner), ctrl.HandleDeleteGroup())
-		groups.POST("/:groupId/invite/:userId", ctrl.handleActiveGroupRole(), ctrl.requireGroupRole(enum.GroupRoleOwner, enum.GroupRoleAdmin), ctrl.HandleInviteNewMember())
+		groups.POST("/:groupId/invite/:userId", ctrl.handleActiveGroupRole(), ctrl.HandleInviteNewMember())
 		groups.POST("/:groupId/invitations/accept", ctrl.HandleAcceptInvitation())
 		groups.POST("/:groupId/invitations/reject", ctrl.HandleRejectInvitation())
+		groups.POST("/:groupId/join", ctrl.HandleJoinGroup())
+		groups.POST("/:groupId/join-request/get", ctrl.requireGroupRole(enum.GroupRoleOwner, enum.GroupRoleAdmin), ctrl.HandleListJoinRequest())
+		groups.POST("/:groupId/join-request/:userId/action=?", ctrl.requireGroupRole(enum.GroupRoleOwner, enum.GroupRoleAdmin), ctrl.HandleJoinRequest())
+	}
+}
+
+func (ctrl *GroupController) HandleJoinGroup() gin.HandlerFunc {
+	return func(c *gin.Context) {
+
+	}
+
+}
+
+func (ctrl *GroupController) HandleListJoinRequest() gin.HandlerFunc {
+	return func(c *gin.Context) {
+
+	}
+}
+
+func (ctrl *GroupController) HandleJoinRequest() gin.HandlerFunc {
+	return func(c *gin.Context) {
+
 	}
 }
