@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// trỏ đúng path -> go test -run TestXxxxx -v -count=1
 type stubJoinMembers struct {
 	member    *model.TripMember
 	findErr   error
@@ -57,13 +58,13 @@ func TestJoinTripInsertsNewMember(t *testing.T) {
 	members := &stubJoinMembers{}
 	user := &authModel.User{Username: "scout"}
 	user.ID = uuid.New()
-
+	t.Logf("Hello with %s", tripID)
 	got, err := NewJoinTripService(trips, members, nil).Join(context.Background(), user, token)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.MyRole == nil || *got.MyRole != enum.TripRoleMember {
-		t.Logf("Hello?")
+
 		t.Fatal("joiner should be member")
 	}
 	if members.added == nil || members.added.UserID != user.ID || members.added.TripID != tripID {
@@ -115,4 +116,5 @@ func TestJoinTripUnknownToken(t *testing.T) {
 	if !errors.Is(err, repository.ErrInviteNotFound) {
 		t.Fatalf("got %v", err)
 	}
+	t.Log("????")
 }
