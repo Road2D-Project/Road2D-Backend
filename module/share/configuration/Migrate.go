@@ -24,6 +24,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.Location{},
 		&model.Destination{},
 		&model.Trip{},
+		&model.TripMember{},
 		&model.TripBranch{},
 		&model.BranchDestination{},
 		&model.Leg{},

@@ -30,4 +30,5 @@ func (g *GoongClient) Direction(ctx context.Context, req request.DirectionReques
 		return nil, ErrEmptyRoute
 	}
 	return &out, nil
+
 }

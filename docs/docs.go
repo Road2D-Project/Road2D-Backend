@@ -2279,8 +2279,6 @@ var SwaggerInfo = &swag.Spec{
 	Description:      "Backend API for Road2D (team Vandra): collaborative multi-branch ride planning and group-ride safety in Vietnam. JWT auth, Goong Maps playground, trip graph models.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
-	LeftDelim:        "{{",
-	RightDelim:       "}}",
 }
 
 func init() {

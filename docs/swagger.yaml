@@ -28,6 +28,38 @@ definitions:
           $ref: '#/definitions/model.TripStop'
         type: array
     type: object
+  Road-To-Destination-BE_module_trip_model_response.TripResponse:
+    properties:
+      createdTime:
+        type: string
+      endTime:
+        type: string
+      groupId:
+        format: uuid
+        type: string
+      id:
+        format: uuid
+        type: string
+      myRole:
+        example: leader
+        type: string
+      name:
+        type: string
+      note:
+        type: string
+      ownerId:
+        format: uuid
+        type: string
+      startTime:
+        type: string
+      status:
+        example: planning
+        type: string
+      totalDistance:
+        type: number
+      updatedTime:
+        type: string
+    type: object
   model.LatLng:
     properties:
       lat:
@@ -194,7 +226,30 @@ definitions:
         maxLength: 255
         minLength: 1
         type: string
+      policy:
+        maxLength: 4000
+        type: string
     required:
+    - name
+    type: object
+  request.CreateTripRequest:
+    properties:
+      endTime:
+        type: string
+      groupId:
+        format: uuid
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      note:
+        maxLength: 4000
+        type: string
+      startTime:
+        type: string
+    required:
+    - groupId
     - name
     type: object
   request.ForgetPasswordRequest:
@@ -267,6 +322,32 @@ definitions:
       name:
         maxLength: 255
         minLength: 1
+        type: string
+      policy:
+        maxLength: 4000
+        type: string
+    type: object
+  request.UpdateMemberRequest:
+    properties:
+      nickname:
+        maxLength: 64
+        minLength: 1
+        type: string
+    required:
+    - nickname
+    type: object
+  request.UpdateTripRequest:
+    properties:
+      endTime:
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      note:
+        maxLength: 4000
+        type: string
+      startTime:
         type: string
     type: object
   response.AddressComponent:
@@ -366,6 +447,33 @@ definitions:
           $ref: '#/definitions/response.GroupResponse'
         type: array
     type: object
+  response.GroupMemberListResponse:
+    properties:
+      members:
+        items:
+          $ref: '#/definitions/response.GroupMemberResponse'
+        type: array
+    type: object
+  response.GroupMemberResponse:
+    properties:
+      invitorName:
+        type: string
+      joinedAt:
+        type: string
+      nickname:
+        type: string
+      role:
+        example: member
+        type: string
+      status:
+        example: active
+        type: string
+      userId:
+        format: uuid
+        type: string
+      userName:
+        type: string
+    type: object
   response.GroupResponse:
     properties:
       createdTime:
@@ -382,6 +490,8 @@ definitions:
         type: string
       ownerId:
         format: uuid
+        type: string
+      policy:
         type: string
       updatedTime:
         type: string
@@ -560,6 +670,21 @@ definitions:
       secondary_text_matched_substrings:
         items:
           $ref: '#/definitions/response.MatchedSubstring'
+        type: array
+    type: object
+  response.TripInviteLinkResponse:
+    properties:
+      joinPath:
+        example: /v1/trips/join/550e8400-e29b-41d4-a716-446655440000
+        type: string
+      token:
+        type: string
+    type: object
+  response.TripListResponse:
+    properties:
+      trips:
+        items:
+          $ref: '#/definitions/Road-To-Destination-BE_module_trip_model_response.TripResponse'
         type: array
     type: object
   share.ErrorResponse:
@@ -1088,7 +1213,8 @@ paths:
         the whole create. Roles: owner, admin, member. Membership statuses: invited,
         pending, active, rejected, left, kicked.'
       parameters:
-      - description: Group name, optional description, optional admin usernames
+      - description: Group name, optional description, optional policy, optional admin
+          usernames
         in: body
         name: body
         required: true
@@ -1193,8 +1319,8 @@ paths:
     patch:
       consumes:
       - application/json
-      description: Owner or admin may change name and/or description. Members cannot
-        update group info. Send only the fields to change.
+      description: Owner or admin may change name, description, and/or policy (group
+        rules text). Members cannot update group info. Send only the fields to change.
       parameters:
       - description: Group UUID
         format: uuid
@@ -1462,6 +1588,167 @@ paths:
       summary: Accept or reject a join request
       tags:
       - groups
+  /groups/{groupId}/leave:
+    post:
+      description: The caller leaves (status left). If the owner leaves, ownership
+        transfers to the earliest-joined admin, or the earliest-joined member if there
+        is no admin. The last remaining owner must delete the group instead.
+      parameters:
+      - description: Group UUID
+        format: uuid
+        in: path
+        name: groupId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Left the group
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Leave group
+      tags:
+      - groups
+  /groups/{groupId}/members:
+    get:
+      description: Returns the active roster (owner, admin, member). Invited, pending,
+        left, rejected, and kicked rows are omitted. Any active member may call this.
+      parameters:
+      - description: Group UUID
+        format: uuid
+        in: path
+        name: groupId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.GroupMemberListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List group members
+      tags:
+      - groups
+  /groups/{groupId}/members/{userId}:
+    delete:
+      description: Owner may kick admin or member. Admin may kick member only. Cannot
+        kick the owner or yourself (use leave). Target must be active. Status becomes
+        kicked.
+      parameters:
+      - description: Group UUID
+        format: uuid
+        in: path
+        name: groupId
+        required: true
+        type: string
+      - description: Member UUID
+        format: uuid
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Member kicked
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Kick a group member
+      tags:
+      - groups
+    patch:
+      consumes:
+      - application/json
+      description: An active member may change only their own nickname. Path userId
+        must match the caller.
+      parameters:
+      - description: Group UUID
+        format: uuid
+        in: path
+        name: groupId
+        required: true
+        type: string
+      - description: Member UUID
+        format: uuid
+        in: path
+        name: userId
+        required: true
+        type: string
+      - description: New nickname
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdateMemberRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.GroupMemberResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update my nickname
+      tags:
+      - groups
   /groups/invitations:
     get:
       description: Returns invitations waiting for the caller to accept or reject.
@@ -1502,6 +1789,302 @@ paths:
       summary: List groups I have joined
       tags:
       - groups
+  /trips:
+    get:
+      description: Returns trips where the caller is an active member (leader or member).
+        Each item includes myRole. Left/kicked seats are omitted.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TripListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List my trips
+      tags:
+      - trips
+    post:
+      consumes:
+      - application/json
+      description: Create a planning trip under a group. The caller must be an active
+        group member and becomes the trip leader. An invite token is minted immediately.
+      parameters:
+      - description: Group id, name, optional note and times
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.CreateTripRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/Road-To-Destination-BE_module_trip_model_response.TripResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create trip
+      tags:
+      - trips
+  /trips/{tripId}:
+    delete:
+      description: Leader only. Members cascade-delete with the trip.
+      parameters:
+      - description: Trip UUID
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Trip deleted
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete trip
+      tags:
+      - trips
+    get:
+      description: Returns trip info. If the caller is an active member, myRole is
+        set (leader/member). The invite token is never included.
+      parameters:
+      - description: Trip UUID
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/Road-To-Destination-BE_module_trip_model_response.TripResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get trip
+      tags:
+      - trips
+    patch:
+      consumes:
+      - application/json
+      description: Leader only. Change name, note, startTime, and/or endTime. Send
+        only the fields to change. Status is not updated here.
+      parameters:
+      - description: Trip UUID
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdateTripRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/Road-To-Destination-BE_module_trip_model_response.TripResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update trip
+      tags:
+      - trips
+  /trips/{tripId}/invite-link:
+    post:
+      description: Leader only. Returns the current invite token and join path. Set
+        rotate=true to invalidate the previous link.
+      parameters:
+      - description: Trip UUID
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      - description: Mint a new token and drop the old one
+        in: query
+        name: rotate
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TripInviteLinkResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create trip invite link
+      tags:
+      - trips
+  /trips/{tripId}/leave:
+    post:
+      description: The caller leaves (status left). If the leader leaves, leadership
+        transfers to the earliest-joined remaining member. The last remaining leader
+        must delete the trip instead.
+      parameters:
+      - description: Trip UUID
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Left the trip
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Leave trip
+      tags:
+      - trips
+  /trips/join/{token}:
+    post:
+      description: Authenticated caller joins the trip identified by the invite token
+        as a member. Reuses a left/rejected/kicked row. Already-active members get
+        409.
+      parameters:
+      - description: Invite token (UUID)
+        in: path
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/Road-To-Destination-BE_module_trip_model_response.TripResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Join trip via invite link
+      tags:
+      - trips
 securityDefinitions:
   BearerAuth:
     description: Type "Bearer" followed by a space and JWT token.

@@ -18,3 +18,13 @@ type BranchDestination struct {
 func (BranchDestination) TableName() string {
 	return "branch_destinations"
 }
+
+func NewBranchDestination(TripBranch *TripBranch, Destination *Destination, orderInt int) *BranchDestination {
+	return &BranchDestination{
+		TripBranchID:  TripBranch.ID,
+		TripBranch:    TripBranch,
+		DestinationID: Destination.ID,
+		Destination:   Destination,
+		OrderInBranch: orderInt,
+	}
+}

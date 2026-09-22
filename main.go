@@ -14,6 +14,7 @@ import (
 	mapsController "Road-To-Destination-BE/module/maps/controller"
 	"Road-To-Destination-BE/module/share"
 	"Road-To-Destination-BE/module/share/configuration"
+	tripController "Road-To-Destination-BE/module/trip/controller"
 
 	"github.com/PeterTakahashi/gin-openapi/openapiui"
 	"github.com/gin-gonic/gin"
@@ -86,6 +87,7 @@ func main() {
 	routerRegistrars := []share.RouterRegistrar{
 		authenController.NewAuthenticationController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator),
 		groupController.NewGroupController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw),
+		tripController.NewTripController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw),
 	}
 	for _, r := range routerRegistrars {
 		r.RegisterRoutes(v1)
