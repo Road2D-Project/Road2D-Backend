@@ -13,4 +13,6 @@ var (
 	ErrInviteNotFound        = errors.New("invite link not found")
 	ErrNoSuccessorToTransfer = errors.New("no member to transfer leadership to")
 	ErrInternalServerError   = errors.New("internal server error")
+	ErrDestinationNotFound   = errors.New("destination not found")
+	ErrInvalidTripGraph      = errors.New("invalid trip graph")
 )

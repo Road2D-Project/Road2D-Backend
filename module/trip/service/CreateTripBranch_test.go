@@ -117,7 +117,7 @@ func TestCreateBranch(t *testing.T) {
 			d[0], d[1], d[2], d[4], d[5], d[9],
 		},
 		{
-			// split từ d1 -> merge xuống d9
+			// split từ d1, kết thúc hở tại d10 (không nhập lại graph)
 			d[1], d[10],
 		},
 		{
@@ -125,7 +125,9 @@ func TestCreateBranch(t *testing.T) {
 		},
 	}
 	// Tự động nối node cơ bản
-	tripBranch, err := model.BuildTripBranches(&trip, graphDes)
+	openTail := make([]bool, len(graphDes))
+	openTail[1] = true
+	tripBranch, err := model.BuildTripBranches(&trip, graphDes, openTail)
 	if err != nil {
 		t.Fatal(err)
 	}

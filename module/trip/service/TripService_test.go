@@ -98,6 +98,18 @@ func (s *stubTripRecords) ListActiveTripByUser(context.Context, uuid.UUID) ([]re
 	return s.listed, nil
 }
 
+func (s *stubTripRecords) FindDestinationsByIDs(context.Context, []uuid.UUID) ([]model.Destination, error) {
+	return nil, nil
+}
+
+func (s *stubTripRecords) ReplaceTripBranches(context.Context, uuid.UUID, []model.TripBranch) error {
+	return nil
+}
+
+func (s *stubTripRecords) FindTripWithBranches(context.Context, uuid.UUID) (*model.Trip, error) {
+	return nil, repository.ErrTripNotFound
+}
+
 type stubGroups struct {
 	byID map[uuid.UUID]*groupModel.Group
 }

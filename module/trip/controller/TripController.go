@@ -24,6 +24,7 @@ var (
 	_ = response.TripResponse{}
 	_ = response.TripListResponse{}
 	_ = response.TripInviteLinkResponse{}
+	_ = response.TripDetailResponse{}
 	_ = share.ErrorResponse{}
 )
 
@@ -45,6 +46,7 @@ func (ctrl *TripController) RegisterRoutes(router *gin.RouterGroup) {
 		trips.GET("", ctrl.HandleListTrips())
 		trips.POST("/join/:token", ctrl.HandleJoinTrip())
 		trips.GET("/:tripId", ctrl.HandleGetTrip())
+		trips.PUT("/:tripId/graph", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleSetTripGraph())
 		trips.PATCH("/:tripId", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleUpdateTrip())
 		trips.DELETE("/:tripId", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleDeleteTrip())
 		trips.POST("/:tripId/invite-link", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleCreateInviteLink())

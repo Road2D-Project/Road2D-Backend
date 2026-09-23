@@ -23,13 +23,13 @@ Travel (frozen Leg snapshot when the trip locks)
 
 - **authentication** — register, login, refresh, profile, forget / reset password
 - **maps** — Goong v2 playground: autocomplete, place detail, geocode, directions, trip TSP
-- **trip** — graph models + AutoMigrate; HTTP CRUD is not wired yet
+- **trip** — trip CRUD, membership, invite links, and `PUT /trips/:tripId/graph` to replace the route graph while the trip is planning
 
 Goong stands in for Google Maps Platform in Vietnam. Directions default to `bike`. Goong Trip is a single-vehicle TSP, not the product branch graph.
 
 ### Trip graph input: `GraphBranch`
 
-`GraphBranch` (`module/trip/model/GraphBranches.go`) is the DTO the client sends to describe a trip's route graph. It is a `[][]Destination`: each inner slice is one branch, listed in travel order. `BuildTripBranches` turns it into `[]TripBranch` + `BranchDestination` rows.
+The client sends the graph through `PUT /trips/:tripId/graph` as destination ids (`SetTripGraphRequest.Branches`, a `[][]uuid`) plus an `openTail` flag per branch. The service resolves those ids to `Destination` rows and `BuildTripBranches` (`module/trip/model/GraphBranches.go`) turns the resolved `GraphBranch` (`[][]Destination`) into `TripBranch` + `BranchDestination` rows. The response is a `TripDetailResponse`: the trip plus its branches with the audit columns dropped.
 
 Rules:
 
@@ -50,7 +50,7 @@ graph = [
 
 Validation is deliberately loose: the backend only checks that endpoints connect to the graph. It does not verify geographic plausibility or that a split point precedes its merge point on the parent branch — the client owns that.
 
-> **Consideration:** `mergeTo` may become optional. A sub branch that ends without rejoining the graph (a one-way detour, e.g. a scout run or a rider dropping off) currently fails validation; allowing `mergeTo == nil` would keep the split rule strict while letting the tail end open. Not decided yet.
+`openTail[i] = true` makes the merge optional for sub branch `i`: the branch still splits at its first stop but ends without rejoining, so `mergeTo` stays nil and its last stop does not have to appear anywhere else. `openTail[0]` is always false, since the main branch has no merge. This covers a one-way detour such as a scout run or a rider dropping off. The graph can only be replaced while the trip is `planning`.
 
 ## Run locally
 

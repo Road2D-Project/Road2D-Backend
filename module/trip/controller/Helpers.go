@@ -24,7 +24,12 @@ func (ctrl *TripController) tripService() *service.TripService {
 		repository.NewTripMemberStore(ctrl.redisClient),
 	)
 }
-
+func (ctrl *TripController) tripBranch() *service.TripBranchService {
+	return service.NewTripBranchService(
+		repository.NewTripBranchRepository(ctrl.db),
+		repository.NewTripRepository(ctrl.db),
+	)
+}
 func (ctrl *TripController) leaveTripService() *service.LeaveTripService {
 	return service.NewLeaveTripService(
 		repository.NewTripMemberRepository(ctrl.db),
@@ -44,7 +49,8 @@ func mapTripError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, repository.ErrTripNotFound),
 		errors.Is(err, repository.ErrGroupNotFound),
-		errors.Is(err, repository.ErrInviteNotFound):
+		errors.Is(err, repository.ErrInviteNotFound),
+		errors.Is(err, repository.ErrDestinationNotFound):
 		jsonError(c, http.StatusNotFound, err.Error())
 	case errors.Is(err, repository.ErrAlreadyTripMember),
 		errors.Is(err, repository.ErrNoSuccessorToTransfer):
