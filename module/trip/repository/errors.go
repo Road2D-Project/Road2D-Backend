@@ -14,5 +14,7 @@ var (
 	ErrNoSuccessorToTransfer = errors.New("no member to transfer leadership to")
 	ErrInternalServerError   = errors.New("internal server error")
 	ErrDestinationNotFound   = errors.New("destination not found")
+	ErrDestinationNotEditing = errors.New("destination is not editing")
+	ErrLocationNotFound      = errors.New("location not found")
 	ErrInvalidTripGraph      = errors.New("invalid trip graph")
 )

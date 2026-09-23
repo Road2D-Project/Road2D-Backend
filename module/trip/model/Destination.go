@@ -10,6 +10,7 @@ import (
 
 // Destination is a trip pin. lat/lng always belong to this row.
 // locationId is set only after verify or fork-from-Location; then lat/lng copy Location.
+// TODO: thêm các trường validate cho ArriveTimme và StayOverTime
 type Destination struct {
 	utils.Base
 	LocationID *uuid.UUID `json:"locationId,omitempty" gorm:"type:uuid;index"`
@@ -25,4 +26,13 @@ type Destination struct {
 
 func (Destination) TableName() string {
 	return "destinations"
+}
+
+// CoordinatesEditable reports whether lat/lng on this pin may change.
+// Once locationId is set, those coordinates are a copy of the linked Location.
+func (d *Destination) CoordinatesEditable() bool {
+	if d == nil {
+		return false
+	}
+	return d.LocationID == nil && d.Location == nil
 }

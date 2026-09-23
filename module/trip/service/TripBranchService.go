@@ -25,7 +25,7 @@ type TripBranchService struct {
 }
 
 func NewTripBranchService(repo TripBranchRecordRepository, trip TripFinderRepository) *TripBranchService {
-	return &TripBranchService{branches: repo}
+	return &TripBranchService{branches: repo, trip: trip}
 }
 
 // SetTripGraph replaces the route graph of a planning trip. The request carries

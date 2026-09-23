@@ -45,15 +45,26 @@ func (ctrl *TripController) joinTripService() *service.JoinTripService {
 	)
 }
 
+func (ctrl *TripController) placeService() *service.PlaceService {
+	// Get and fork read a stored location. Coordinate edits never call the map.
+	return service.NewLocationService(
+		repository.NewDestinationRepository(ctrl.db),
+		nil,
+		repository.NewLocationRepository(ctrl.db),
+	)
+}
+
 func mapTripError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, repository.ErrTripNotFound),
 		errors.Is(err, repository.ErrGroupNotFound),
 		errors.Is(err, repository.ErrInviteNotFound),
-		errors.Is(err, repository.ErrDestinationNotFound):
+		errors.Is(err, repository.ErrDestinationNotFound),
+		errors.Is(err, repository.ErrLocationNotFound):
 		jsonError(c, http.StatusNotFound, err.Error())
 	case errors.Is(err, repository.ErrAlreadyTripMember),
-		errors.Is(err, repository.ErrNoSuccessorToTransfer):
+		errors.Is(err, repository.ErrNoSuccessorToTransfer),
+		errors.Is(err, repository.ErrDestinationNotEditing):
 		jsonError(c, http.StatusConflict, err.Error())
 	case errors.Is(err, repository.ErrUserNotTripMember),
 		errors.Is(err, repository.ErrUserNotGroupMember):
@@ -68,9 +79,21 @@ func mapTripError(c *gin.Context, err error) {
 }
 
 func parseTripID(c *gin.Context) (uuid.UUID, bool) {
-	id, err := uuid.Parse(c.Param("tripId"))
+	return parsePathID(c, "tripId")
+}
+
+func parseLocationID(c *gin.Context) (uuid.UUID, bool) {
+	return parsePathID(c, "locationId")
+}
+
+func parseDestinationID(c *gin.Context) (uuid.UUID, bool) {
+	return parsePathID(c, "destinationId")
+}
+
+func parsePathID(c *gin.Context, name string) (uuid.UUID, bool) {
+	id, err := uuid.Parse(c.Param(name))
 	if err != nil {
-		jsonError(c, http.StatusBadRequest, "invalid tripId")
+		jsonError(c, http.StatusBadRequest, "invalid "+name)
 		return uuid.Nil, false
 	}
 	return id, true

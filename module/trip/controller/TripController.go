@@ -52,4 +52,12 @@ func (ctrl *TripController) RegisterRoutes(router *gin.RouterGroup) {
 		trips.POST("/:tripId/invite-link", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleCreateInviteLink())
 		trips.POST("/:tripId/leave", ctrl.handleActiveTripRole(), ctrl.HandleLeaveTrip())
 	}
+	// liên quan tới place{location,destination}
+	planing := router.Group("/planing", ctrl.auth.RequireAuth())
+	{
+		planing.POST("/fork/:locationId", ctrl.HandleForkLocation())
+		planing.GET("/location/:locationId", ctrl.HandleGetLocation())
+		planing.GET("/destination/:destinationId", ctrl.HandleGetDestination())
+		planing.PUT("/destination/:destinationId", ctrl.HandleUpdateDestination())
+	}
 }

@@ -57,7 +57,7 @@ func TestSetTripGraphReplacesBranches(t *testing.T) {
 		withBranches: &model.Trip{Status: enum.TripPlanning},
 	}
 
-	svc := NewTripBranchService(nil, nil)
+	svc := NewTripBranchService(records, records)
 	_, err := svc.SetTripGraph(context.Background(), tripID, request.SetTripGraphRequest{
 		Branches: [][]uuid.UUID{{d1, d2}, {d2, d3, d1}},
 		OpenTail: []bool{false, false},
@@ -79,10 +79,10 @@ func TestSetTripGraphReplacesBranches(t *testing.T) {
 
 func TestSetTripGraphRejectsBadShape(t *testing.T) {
 	tripID := uuid.New()
-	//records := &graphRecords{
-	//	stubTripRecords: stubTripRecords{byID: map[uuid.UUID]*model.Trip{tripID: planningTrip(tripID)}},
-	//}
-	svc := NewTripBranchService(nil, nil)
+	records := &graphRecords{
+		stubTripRecords: stubTripRecords{byID: map[uuid.UUID]*model.Trip{tripID: planningTrip(tripID)}},
+	}
+	svc := NewTripBranchService(records, records)
 
 	// The main branch is never open ended.
 	_, err := svc.SetTripGraph(context.Background(), tripID, request.SetTripGraphRequest{
@@ -105,11 +105,11 @@ func TestSetTripGraphRejectsBadShape(t *testing.T) {
 
 func TestSetTripGraphUnknownDestinationAborts(t *testing.T) {
 	tripID := uuid.New()
-	//records := &graphRecords{
-	//	stubTripRecords: stubTripRecords{byID: map[uuid.UUID]*model.Trip{tripID: planningTrip(tripID)}},
-	//	destinations:    map[uuid.UUID]model.Destination{},
-	//}
-	svc := NewTripBranchService(nil, nil)
+	records := &graphRecords{
+		stubTripRecords: stubTripRecords{byID: map[uuid.UUID]*model.Trip{tripID: planningTrip(tripID)}},
+		destinations:    map[uuid.UUID]model.Destination{},
+	}
+	svc := NewTripBranchService(records, records)
 
 	_, err := svc.SetTripGraph(context.Background(), tripID, request.SetTripGraphRequest{
 		Branches: [][]uuid.UUID{{uuid.New(), uuid.New()}},
@@ -122,10 +122,10 @@ func TestSetTripGraphUnknownDestinationAborts(t *testing.T) {
 
 func TestSetTripGraphRequiresPlanningStatus(t *testing.T) {
 	tripID := uuid.New()
-	//records := &graphRecords{
-	//	stubTripRecords: stubTripRecords{byID: map[uuid.UUID]*model.Trip{tripID: {Status: enum.TripLocked}}},
-	//}
-	svc := NewTripBranchService(nil, nil)
+	records := &graphRecords{
+		stubTripRecords: stubTripRecords{byID: map[uuid.UUID]*model.Trip{tripID: {Status: enum.TripLocked}}},
+	}
+	svc := NewTripBranchService(records, records)
 
 	_, err := svc.SetTripGraph(context.Background(), tripID, request.SetTripGraphRequest{
 		Branches: [][]uuid.UUID{{uuid.New()}},

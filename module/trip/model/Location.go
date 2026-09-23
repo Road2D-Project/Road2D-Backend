@@ -2,6 +2,7 @@ package model
 
 import (
 	"Road-To-Destination-BE/utils"
+	"fmt"
 
 	"github.com/google/uuid"
 )
@@ -13,10 +14,15 @@ type Compound struct {
 	Province string `json:"province,omitempty"`
 }
 
+func (c *Compound) ToAddress() string {
+	return fmt.Sprintf("%s, %s, %s", c.Commune, c.District, c.Province)
+}
+
 // Location is a verified (or resolvable) place. lat/lng are required.
 // place_id / address / compound / PlaceType are optional.
 type Location struct {
 	utils.Base
+	Name             string     `json:"name" gorm:"column:name;type:varchar(255);index:idx_location_name,unique;not null"`
 	Lat              float64    `json:"lat" gorm:"column:lat;not null"`
 	Lng              float64    `json:"lng" gorm:"column:lng;not null"`
 	Address          *string    `json:"address,omitempty" gorm:"column:address;type:text"`
