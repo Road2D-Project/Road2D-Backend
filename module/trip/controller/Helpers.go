@@ -46,10 +46,8 @@ func (ctrl *TripController) joinTripService() *service.JoinTripService {
 }
 
 func (ctrl *TripController) placeService() *service.PlaceService {
-	// Get and fork read a stored location. Coordinate edits never call the map.
 	return service.NewLocationService(
 		repository.NewDestinationRepository(ctrl.db),
-		nil,
 		repository.NewLocationRepository(ctrl.db),
 	)
 }

@@ -31,3 +31,22 @@ func (r *LocationRepository) FindLocationById(ctx context.Context, locationId uu
 	}
 	return &location, nil
 }
+
+func (r *LocationRepository) FindLocationByPlaceID(ctx context.Context, placeID string) (*model.Location, error) {
+	if placeID == "" {
+		return nil, ErrLocationNotFound
+	}
+	var location model.Location
+	err := r.db.WithContext(ctx).Where("place_id = ?", placeID).First(&location).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrLocationNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &location, nil
+}
+
+func (r *LocationRepository) CreateLocation(ctx context.Context, location *model.Location) error {
+	return r.db.WithContext(ctx).Omit("PlaceType").Create(location).Error
+}

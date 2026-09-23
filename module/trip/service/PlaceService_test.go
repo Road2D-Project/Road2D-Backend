@@ -70,7 +70,7 @@ func TestUpdateDestinationMovesUnlinkedPin(t *testing.T) {
 			Status: enum.Editing,
 		},
 	}}
-	svc := NewLocationService(destinations, nil, &stubLocations{})
+	svc := NewLocationService(destinations, &stubLocations{})
 
 	updated, err := svc.UpdateDestination(context.Background(), id, request.UpdateDestinationRequest{
 		Lat:          11,
@@ -100,7 +100,7 @@ func TestUpdateDestinationKeepsCoordinatesWhenLinked(t *testing.T) {
 			Status:     enum.Editing,
 		},
 	}}
-	svc := NewLocationService(destinations, nil, &stubLocations{})
+	svc := NewLocationService(destinations, &stubLocations{})
 
 	updated, err := svc.UpdateDestination(context.Background(), id, request.UpdateDestinationRequest{
 		Lat:    99,
@@ -124,7 +124,7 @@ func TestUpdateDestinationRejectsConfirmedPin(t *testing.T) {
 	destinations := &stubDestinations{byID: map[uuid.UUID]*model.Destination{
 		id: {Base: utils.Base{ID: id}, Status: enum.Confirm},
 	}}
-	svc := NewLocationService(destinations, nil, &stubLocations{})
+	svc := NewLocationService(destinations, &stubLocations{})
 
 	_, err := svc.UpdateDestination(context.Background(), id, request.UpdateDestinationRequest{Name: "nope"})
 	if !errors.Is(err, repository.ErrDestinationNotEditing) {
@@ -149,7 +149,7 @@ func TestForkLocationCopiesCoordinatesAndLink(t *testing.T) {
 		},
 	}}
 	destinations := &stubDestinations{}
-	svc := NewLocationService(destinations, nil, locations)
+	svc := NewLocationService(destinations, locations)
 
 	created, err := svc.ForkLocation(context.Background(), locationID, request.ForkLocationRequest{
 		Name:         "Morning stop",
@@ -184,7 +184,7 @@ func TestForkLocationCopiesCoordinatesAndLink(t *testing.T) {
 }
 
 func TestForkLocationMissingPlace(t *testing.T) {
-	svc := NewLocationService(&stubDestinations{}, nil, &stubLocations{byID: map[uuid.UUID]*model.Location{}})
+	svc := NewLocationService(&stubDestinations{}, &stubLocations{byID: map[uuid.UUID]*model.Location{}})
 	_, err := svc.ForkLocation(context.Background(), uuid.New(), request.ForkLocationRequest{})
 	if !errors.Is(err, repository.ErrLocationNotFound) {
 		t.Fatalf("got %v", err)

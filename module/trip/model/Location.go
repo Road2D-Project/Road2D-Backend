@@ -22,12 +22,12 @@ func (c *Compound) ToAddress() string {
 // place_id / address / compound / PlaceType are optional.
 type Location struct {
 	utils.Base
-	Name             string     `json:"name" gorm:"column:name;type:varchar(255);index:idx_location_name,unique;not null"`
+	Name             string     `json:"name" gorm:"column:name;type:varchar(255);index;not null"`
 	Lat              float64    `json:"lat" gorm:"column:lat;not null"`
 	Lng              float64    `json:"lng" gorm:"column:lng;not null"`
 	Address          *string    `json:"address,omitempty" gorm:"column:address;type:text"`
 	FormattedAddress *string    `json:"formattedAddress,omitempty" gorm:"column:formatted_address;type:text"`
-	PlaceID          *string    `json:"placeId,omitempty" gorm:"column:place_id;type:varchar(255);index"`
+	PlaceID          *string    `json:"placeId,omitempty" gorm:"column:place_id;type:varchar(255);uniqueIndex"`
 	Compound         *Compound  `json:"compound,omitempty" gorm:"column:compound;type:jsonb;serializer:json"`
 	IsVerified       bool       `json:"isVerified" gorm:"column:is_verified;not null;default:false"`
 	PlaceTypeID      *uuid.UUID `json:"placeTypeId,omitempty" gorm:"type:uuid;index"`

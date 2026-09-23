@@ -15,6 +15,9 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := ensureUsersIDIsUUID(db); err != nil {
 		return err
 	}
+	if err := dropUniqueLocationNameIndex(db); err != nil {
+		return err
+	}
 	return db.AutoMigrate(
 		&authModel.User{},
 		&authModel.RevokedRefreshToken{},
@@ -57,6 +60,21 @@ func ensureUsersIDIsUUID(db *gorm.DB) error {
 	log.Printf("users.id is %s; recreating users table as uuid", dataType)
 	if err := db.Migrator().DropTable("users"); err != nil {
 		return fmt.Errorf("drop users: %w", err)
+	}
+	return nil
+}
+
+// dropUniqueLocationNameIndex removes the old unique name index. Seeded Goong
+// results often share a display name; identity is place_id.
+func dropUniqueLocationNameIndex(db *gorm.DB) error {
+	if db == nil || !db.Migrator().HasTable("locations") {
+		return nil
+	}
+	if !db.Migrator().HasIndex(&model.Location{}, "idx_location_name") {
+		return nil
+	}
+	if err := db.Migrator().DropIndex(&model.Location{}, "idx_location_name"); err != nil {
+		return fmt.Errorf("drop idx_location_name: %w", err)
 	}
 	return nil
 }
