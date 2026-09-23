@@ -60,6 +60,52 @@ definitions:
       updatedTime:
         type: string
     type: object
+  enum.DestinationStatus:
+    enum:
+    - 0
+    - 1
+    - 2
+    type: integer
+    x-enum-varnames:
+    - Editing
+    - Confirm
+    - Deleted
+  model.Compound:
+    properties:
+      commune:
+        type: string
+      district:
+        type: string
+      province:
+        type: string
+    type: object
+  model.Destination:
+    properties:
+      arriveTime:
+        type: string
+      createdTime:
+        type: string
+      id:
+        format: uuid
+        type: string
+      lat:
+        type: number
+      lng:
+        type: number
+      location:
+        $ref: '#/definitions/model.Location'
+      locationId:
+        type: string
+      name:
+        type: string
+      status:
+        $ref: '#/definitions/enum.DestinationStatus'
+      stayOverTime:
+        description: đơn vị là phút
+        type: integer
+      updatedTime:
+        type: string
+    type: object
   model.LatLng:
     properties:
       lat:
@@ -107,6 +153,48 @@ definitions:
         type: string
       vehicle:
         example: bike
+        type: string
+    type: object
+  model.Location:
+    properties:
+      address:
+        type: string
+      compound:
+        $ref: '#/definitions/model.Compound'
+      createdTime:
+        type: string
+      formattedAddress:
+        type: string
+      id:
+        format: uuid
+        type: string
+      isVerified:
+        type: boolean
+      lat:
+        type: number
+      lng:
+        type: number
+      name:
+        type: string
+      placeId:
+        type: string
+      placeType:
+        $ref: '#/definitions/model.PlaceType'
+      placeTypeId:
+        type: string
+      updatedTime:
+        type: string
+    type: object
+  model.PlaceType:
+    properties:
+      createdTime:
+        type: string
+      id:
+        format: uuid
+        type: string
+      typeName:
+        type: string
+      updatedTime:
         type: string
     type: object
   model.RouteStep:
@@ -259,6 +347,15 @@ definitions:
     required:
     - mail
     type: object
+  request.ForkLocationRequest:
+    properties:
+      arriveTime:
+        type: string
+      name:
+        type: string
+      stayOverTime:
+        type: integer
+    type: object
   request.LoginRequest:
     properties:
       password:
@@ -330,6 +427,21 @@ definitions:
     required:
     - branches
     - openTail
+    type: object
+  request.UpdateDestinationRequest:
+    properties:
+      arriveTime:
+        type: string
+      lat:
+        type: number
+      lng:
+        type: number
+      name:
+        type: string
+      status:
+        $ref: '#/definitions/enum.DestinationStatus'
+      stayOverTime:
+        type: integer
     type: object
   request.UpdateGroupRequest:
     properties:
@@ -420,6 +532,15 @@ definitions:
         items:
           $ref: '#/definitions/response.StopResponse'
         type: array
+    type: object
+  response.CreateDestinationResponse:
+    properties:
+      destinationId:
+        type: string
+      locationId;omitempty:
+        type: string
+      placeId;omitempty:
+        type: string
     type: object
   response.ForgetPasswordResponse:
     properties:
@@ -1874,6 +1995,167 @@ paths:
       summary: List groups I have joined
       tags:
       - groups
+  /planing/destination/{destinationId}:
+    get:
+      description: Returns a destination. When locationId is set, lat/lng are locked
+        to that location.
+      parameters:
+      - description: Destination UUID
+        format: uuid
+        in: path
+        name: destinationId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Destination'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get destination
+      tags:
+      - planing
+    put:
+      consumes:
+      - application/json
+      description: Updates name, arrive time, stay, and status while the destination
+        is editing. lat/lng are applied only when locationId is empty; a forked or
+        verified pin keeps the linked location's coordinates.
+      parameters:
+      - description: Destination UUID
+        format: uuid
+        in: path
+        name: destinationId
+        required: true
+        type: string
+      - description: Fields to store
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdateDestinationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Destination'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update destination
+      tags:
+      - planing
+  /planing/fork/{locationId}:
+    post:
+      consumes:
+      - application/json
+      description: Creates an editing destination from a verified location. lat/lng
+        and the location link are copied from the location. Optional name overrides
+        the location name.
+      parameters:
+      - description: Location UUID
+        format: uuid
+        in: path
+        name: locationId
+        required: true
+        type: string
+      - description: Optional name, arrive time, and stay
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.ForkLocationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.CreateDestinationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Fork location
+      tags:
+      - planing
+  /planing/location/{locationId}:
+    get:
+      description: Returns a verified location. Planning copies it with fork; this
+        row itself is not updated here.
+      parameters:
+      - description: Location UUID
+        format: uuid
+        in: path
+        name: locationId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Location'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get location
+      tags:
+      - planing
   /trips:
     get:
       description: Returns trips where the caller is an active member (leader or member).
