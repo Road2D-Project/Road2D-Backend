@@ -12,17 +12,17 @@ type TripResponse struct {
 type GoongTrip struct {
 	Distance   float64   `json:"distance"`
 	Duration   float64   `json:"duration"`
-	Geometry   string     `json:"geometry"`
-	Legs       []TripLeg  `json:"legs"`
+	Geometry   string    `json:"geometry"`
+	Legs       []TripLeg `json:"legs"`
 	Weight     float64   `json:"weight"`
-	WeightName string     `json:"weight_name"`
+	WeightName string    `json:"weight_name"`
 }
 
 type TripLeg struct {
 	Distance float64    `json:"distance"`
 	Duration float64    `json:"duration"`
 	Steps    []TripStep `json:"steps"`
-	Summary  string      `json:"summary"`
+	Summary  string     `json:"summary"`
 	Weight   float64    `json:"weight"`
 }
 

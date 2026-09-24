@@ -769,7 +769,7 @@ const docTemplate = `{
                 "summary": "Create group",
                 "parameters": [
                     {
-                        "description": "Group name, optional description, optional admin usernames",
+                        "description": "Group name, optional description, optional policy, optional admin usernames",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -980,7 +980,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Owner or admin may change name and/or description. Members cannot update group info. Send only the fields to change.",
+                "description": "Owner or admin may change name, description, and/or policy (group rules text). Members cannot update group info. Send only the fields to change.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1382,6 +1382,1002 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/groups/{groupId}/leave": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The caller leaves (status left). If the owner leaves, ownership transfers to the earliest-joined admin, or the earliest-joined member if there is no admin. The last remaining owner must delete the group instead.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Leave group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Group UUID",
+                        "name": "groupId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Left the group"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/groups/{groupId}/members": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the active roster (owner, admin, member). Invited, pending, left, rejected, and kicked rows are omitted. Any active member may call this.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "List group members",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Group UUID",
+                        "name": "groupId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.GroupMemberListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/groups/{groupId}/members/{userId}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Owner may kick admin or member. Admin may kick member only. Cannot kick the owner or yourself (use leave). Target must be active. Status becomes kicked.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Kick a group member",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Group UUID",
+                        "name": "groupId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Member UUID",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Member kicked"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "An active member may change only their own nickname. Path userId must match the caller.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Update my nickname",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Group UUID",
+                        "name": "groupId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Member UUID",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New nickname",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.UpdateMemberRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.GroupMemberResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/planing/destination/{destinationId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a destination. When locationId is set, lat/lng are locked to that location.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "planing"
+                ],
+                "summary": "Get destination",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Destination UUID",
+                        "name": "destinationId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.Destination"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates name, arrive time, stay, and status while the destination is editing. lat/lng are applied only when locationId is empty; a forked or verified pin keeps the linked location's coordinates.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "planing"
+                ],
+                "summary": "Update destination",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Destination UUID",
+                        "name": "destinationId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to store",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.UpdateDestinationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.Destination"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/planing/fork/{locationId}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates an editing destination from a verified location. lat/lng and the location link are copied from the location. Optional name overrides the location name.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "planing"
+                ],
+                "summary": "Fork location",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Location UUID",
+                        "name": "locationId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Optional name, arrive time, and stay",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.ForkLocationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/response.CreateDestinationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/planing/location/{locationId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a verified location. Planning copies it with fork; this row itself is not updated here.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "planing"
+                ],
+                "summary": "Get location",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Location UUID",
+                        "name": "locationId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.Location"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/trips": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns trips where the caller is an active member (leader or member). Each item includes myRole. Left/kicked seats are omitted.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "List my trips",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.TripListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a planning trip under a group. The caller must be an active group member and becomes the trip leader. An invite token is minted immediately.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Create trip",
+                "parameters": [
+                    {
+                        "description": "Group id, name, optional note and times",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.CreateTripRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/Road-To-Destination-BE_module_trip_model_response.TripResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/trips/join/{token}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Authenticated caller joins the trip identified by the invite token as a member. Reuses a left/rejected/kicked row. Already-active members get 409.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Join trip via invite link",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Invite token (UUID)",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/Road-To-Destination-BE_module_trip_model_response.TripResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/trips/{tripId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns trip info. If the caller is an active member, myRole is set (leader/member). The invite token is never included.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Get trip",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Trip UUID",
+                        "name": "tripId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/Road-To-Destination-BE_module_trip_model_response.TripResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Leader only. Members cascade-delete with the trip.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Delete trip",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Trip UUID",
+                        "name": "tripId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Trip deleted"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Leader only. Change name, note, startTime, and/or endTime. Send only the fields to change. Status is not updated here.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Update trip",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Trip UUID",
+                        "name": "tripId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to update",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.UpdateTripRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/Road-To-Destination-BE_module_trip_model_response.TripResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/trips/{tripId}/graph": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Replace the route graph of a planning trip. branches[0] is the main branch. Every later branch splits at its first destination and merges at its last, unless openTail marks that branch as ending without rejoining. Only a leader can edit, and only while the trip is planning.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Set trip graph",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Trip id",
+                        "name": "tripId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Branches of destination ids and which tails stay open",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.SetTripGraphRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.TripDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/trips/{tripId}/invite-link": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Leader only. Returns the current invite token and join path. Set rotate=true to invalidate the previous link.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Create trip invite link",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Trip UUID",
+                        "name": "tripId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Mint a new token and drop the old one",
+                        "name": "rotate",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.TripInviteLinkResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/trips/{tripId}/leave": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The caller leaves (status left). If the leader leaves, leadership transfers to the earliest-joined remaining member. The last remaining leader must delete the trip instead.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Leave trip",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Trip UUID",
+                        "name": "tripId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Left the trip"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -1424,6 +2420,119 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/model.TripStop"
                     }
+                }
+            }
+        },
+        "Road-To-Destination-BE_module_trip_model_response.TripResponse": {
+            "type": "object",
+            "properties": {
+                "createdTime": {
+                    "type": "string"
+                },
+                "endTime": {
+                    "type": "string"
+                },
+                "groupId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "myRole": {
+                    "type": "string",
+                    "example": "leader"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "ownerId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "startTime": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "planning"
+                },
+                "totalDistance": {
+                    "type": "number"
+                },
+                "updatedTime": {
+                    "type": "string"
+                }
+            }
+        },
+        "enum.DestinationStatus": {
+            "type": "integer",
+            "enum": [
+                0,
+                1,
+                2
+            ],
+            "x-enum-varnames": [
+                "Editing",
+                "Confirm",
+                "Deleted"
+            ]
+        },
+        "model.Compound": {
+            "type": "object",
+            "properties": {
+                "commune": {
+                    "type": "string"
+                },
+                "district": {
+                    "type": "string"
+                },
+                "province": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.Destination": {
+            "type": "object",
+            "properties": {
+                "arriveTime": {
+                    "type": "string"
+                },
+                "createdTime": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "lat": {
+                    "type": "number"
+                },
+                "lng": {
+                    "type": "number"
+                },
+                "location": {
+                    "$ref": "#/definitions/model.Location"
+                },
+                "locationId": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/enum.DestinationStatus"
+                },
+                "stayOverTime": {
+                    "description": "đơn vị là phút",
+                    "type": "integer"
+                },
+                "updatedTime": {
+                    "type": "string"
                 }
             }
         },
@@ -1497,6 +2606,69 @@ const docTemplate = `{
                 "vehicle": {
                     "type": "string",
                     "example": "bike"
+                }
+            }
+        },
+        "model.Location": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "compound": {
+                    "$ref": "#/definitions/model.Compound"
+                },
+                "createdTime": {
+                    "type": "string"
+                },
+                "formattedAddress": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "isVerified": {
+                    "type": "boolean"
+                },
+                "lat": {
+                    "type": "number"
+                },
+                "lng": {
+                    "type": "number"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "placeId": {
+                    "type": "string"
+                },
+                "placeType": {
+                    "$ref": "#/definitions/model.PlaceType"
+                },
+                "placeTypeId": {
+                    "type": "string"
+                },
+                "updatedTime": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.PlaceType": {
+            "type": "object",
+            "properties": {
+                "createdTime": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "typeName": {
+                    "type": "string"
+                },
+                "updatedTime": {
+                    "type": "string"
                 }
             }
         },
@@ -1678,6 +2850,38 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 255,
                     "minLength": 1
+                },
+                "policy": {
+                    "type": "string",
+                    "maxLength": 4000
+                }
+            }
+        },
+        "request.CreateTripRequest": {
+            "type": "object",
+            "required": [
+                "groupId",
+                "name"
+            ],
+            "properties": {
+                "endTime": {
+                    "type": "string"
+                },
+                "groupId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
+                },
+                "note": {
+                    "type": "string",
+                    "maxLength": 4000
+                },
+                "startTime": {
+                    "type": "string"
                 }
             }
         },
@@ -1689,6 +2893,20 @@ const docTemplate = `{
             "properties": {
                 "mail": {
                     "type": "string"
+                }
+            }
+        },
+        "request.ForkLocationRequest": {
+            "type": "object",
+            "properties": {
+                "arriveTime": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "stayOverTime": {
+                    "type": "integer"
                 }
             }
         },
@@ -1770,6 +2988,54 @@ const docTemplate = `{
                 }
             }
         },
+        "request.SetTripGraphRequest": {
+            "type": "object",
+            "required": [
+                "branches",
+                "openTail"
+            ],
+            "properties": {
+                "branches": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "openTail": {
+                    "type": "array",
+                    "items": {
+                        "type": "boolean"
+                    }
+                }
+            }
+        },
+        "request.UpdateDestinationRequest": {
+            "type": "object",
+            "properties": {
+                "arriveTime": {
+                    "type": "string"
+                },
+                "lat": {
+                    "type": "number"
+                },
+                "lng": {
+                    "type": "number"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/enum.DestinationStatus"
+                },
+                "stayOverTime": {
+                    "type": "integer"
+                }
+            }
+        },
         "request.UpdateGroupRequest": {
             "type": "object",
             "properties": {
@@ -1781,6 +3047,43 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 255,
                     "minLength": 1
+                },
+                "policy": {
+                    "type": "string",
+                    "maxLength": 4000
+                }
+            }
+        },
+        "request.UpdateMemberRequest": {
+            "type": "object",
+            "required": [
+                "nickname"
+            ],
+            "properties": {
+                "nickname": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1
+                }
+            }
+        },
+        "request.UpdateTripRequest": {
+            "type": "object",
+            "properties": {
+                "endTime": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
+                },
+                "note": {
+                    "type": "string",
+                    "maxLength": 4000
+                },
+                "startTime": {
+                    "type": "string"
                 }
             }
         },
@@ -1836,6 +3139,46 @@ const docTemplate = `{
                     }
                 },
                 "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.BranchResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "mergeToDestinationId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "splitFromDestinationId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "stops": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.StopResponse"
+                    }
+                }
+            }
+        },
+        "response.CreateDestinationResponse": {
+            "type": "object",
+            "properties": {
+                "destinationId": {
+                    "type": "string"
+                },
+                "locationId;omitempty": {
+                    "type": "string"
+                },
+                "placeId;omitempty": {
                     "type": "string"
                 }
             }
@@ -1934,6 +3277,46 @@ const docTemplate = `{
                 }
             }
         },
+        "response.GroupMemberListResponse": {
+            "type": "object",
+            "properties": {
+                "members": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.GroupMemberResponse"
+                    }
+                }
+            }
+        },
+        "response.GroupMemberResponse": {
+            "type": "object",
+            "properties": {
+                "invitorName": {
+                    "type": "string"
+                },
+                "joinedAt": {
+                    "type": "string"
+                },
+                "nickname": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string",
+                    "example": "member"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "active"
+                },
+                "userId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "userName": {
+                    "type": "string"
+                }
+            }
+        },
         "response.GroupResponse": {
             "type": "object",
             "properties": {
@@ -1957,6 +3340,9 @@ const docTemplate = `{
                 "ownerId": {
                     "type": "string",
                     "format": "uuid"
+                },
+                "policy": {
+                    "type": "string"
                 },
                 "updatedTime": {
                     "type": "string"
@@ -2210,6 +3596,27 @@ const docTemplate = `{
                 }
             }
         },
+        "response.StopResponse": {
+            "type": "object",
+            "properties": {
+                "destinationId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "lat": {
+                    "type": "number"
+                },
+                "lng": {
+                    "type": "number"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "orderInBranch": {
+                    "type": "integer"
+                }
+            }
+        },
         "response.StructuredFormatting": {
             "type": "object",
             "properties": {
@@ -2233,6 +3640,81 @@ const docTemplate = `{
                 }
             }
         },
+        "response.TripDetailResponse": {
+            "type": "object",
+            "properties": {
+                "branches": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.BranchResponse"
+                    }
+                },
+                "createdTime": {
+                    "type": "string"
+                },
+                "endTime": {
+                    "type": "string"
+                },
+                "groupId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "myRole": {
+                    "type": "string",
+                    "example": "leader"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "ownerId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "startTime": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "planning"
+                },
+                "totalDistance": {
+                    "type": "number"
+                },
+                "updatedTime": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.TripInviteLinkResponse": {
+            "type": "object",
+            "properties": {
+                "joinPath": {
+                    "type": "string",
+                    "example": "/v1/trips/join/550e8400-e29b-41d4-a716-446655440000"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.TripListResponse": {
+            "type": "object",
+            "properties": {
+                "trips": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/Road-To-Destination-BE_module_trip_model_response.TripResponse"
+                    }
+                }
+            }
+        },
         "share.ErrorResponse": {
             "type": "object",
             "properties": {
@@ -2252,33 +3734,21 @@ const docTemplate = `{
                 }
             }
         }
-    },
-    "securityDefinitions": {
-        "BearerAuth": {
-            "description": "Type \"Bearer\" followed by a space and JWT token.",
-            "type": "apiKey",
-            "name": "Authorization",
-            "in": "header"
-        },
-        "PlaygroundKey": {
-            "description": "Shared secret from GOONG_PLAYGROUND_KEY. Scalar → Authorize.",
-            "type": "apiKey",
-            "name": "X-Playground-Key",
-            "in": "header"
-        }
     }
 }`
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "1.0",
+	Version:          "",
 	Host:             "",
-	BasePath:         "/v1",
+	BasePath:         "",
 	Schemes:          []string{},
-	Title:            "Road2D",
-	Description:      "Backend API for Road2D (team Vandra): collaborative multi-branch ride planning and group-ride safety in Vietnam. JWT auth, Goong Maps playground, trip graph models.",
+	Title:            "",
+	Description:      "",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
+	LeftDelim:        "{{",
+	RightDelim:       "}}",
 }
 
 func init() {

@@ -1,4 +1,4 @@
-package main
+package location
 
 import (
 	mapResponse "Road-To-Destination-BE/module/maps/model/response"

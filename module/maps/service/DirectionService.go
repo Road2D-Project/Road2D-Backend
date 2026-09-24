@@ -96,9 +96,9 @@ func locationLegFromRoute(req request.DirectionRequest, fromLat, fromLng, toLat,
 		DistanceM:      distanceM,
 		DurationS:      durationS,
 		Polyline:       route.OverviewPolyline.Points,
-	Steps:          steps,
+		Steps:          steps,
 		Source:         enum.LegSourceDirection,
-		LastComputedAt: time.Now().UTC(),	
+		LastComputedAt: time.Now().UTC(),
 	}
 	return leg, nil
 }

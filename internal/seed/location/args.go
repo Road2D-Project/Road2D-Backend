@@ -1,4 +1,4 @@
-package main
+package location
 
 import (
 	"strconv"
@@ -6,11 +6,10 @@ import (
 	"unicode"
 )
 
-// RepairSeedArgs undoes PowerShell + `go run --` damage:
+// RepairArgs undoes PowerShell + `go run --` damage:
 //
-//	-- -lat=10 .7486 -lng=106 .6601  →  -lat=10.7486 -lng=106.6601
-//	-- -coords=  10.79,106.78       →  -coords=10.79,106.78
-func RepairSeedArgs(args []string) []string {
+//	-- --lat=10 .7486 --lng=106 .6601  →  --lat=10.7486 --lng=106.6601
+func RepairArgs(args []string) []string {
 	stripped := make([]string, 0, len(args))
 	for _, arg := range args {
 		if arg == "--" {
@@ -48,7 +47,7 @@ func mergeEmptyEquals(args []string) []string {
 	return out
 }
 
-func numericArgs(args []string) []string {
+func NumericArgs(args []string) []string {
 	out := make([]string, 0, len(args))
 	for _, arg := range args {
 		if strings.HasPrefix(strings.TrimSpace(arg), "-") {

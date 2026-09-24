@@ -8,7 +8,7 @@ type GeocodeRequest struct {
 	LatLng                          string `form:"latlng"`
 	PlaceID                         string `form:"place_id"`
 	Limit                           int    `form:"limit"`
-	HasDeprecatedAdministrativeUnit bool `form:"has_deprecated_administrative_unit"`
+	HasDeprecatedAdministrativeUnit bool   `form:"has_deprecated_administrative_unit"`
 	HasVNID                         bool   `form:"has_vnid"`
 }
 

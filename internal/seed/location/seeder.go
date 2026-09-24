@@ -1,4 +1,4 @@
-package main
+package location
 
 import (
 	"context"
@@ -11,26 +11,26 @@ import (
 	"Road-To-Destination-BE/module/trip/repository"
 )
 
-const seedGeocodeLimit = 10
+const defaultGeocodeLimit = 10
 
 const (
-	seedStatusCreated        = "created"
-	seedStatusBackfilled     = "created_from_cache"
-	seedStatusAlreadyInDB    = "skipped_db"
-	seedStatusAlreadyCached  = "skipped_cache"
-	seedStatusDuplicateInRun = "skipped_seen"
-	seedStatusEmptyPlaceID   = "skipped_empty_place_id"
-	seedStatusUnmappedDetail = "skipped_unmapped_detail"
-	seedStatusEmptyDetail    = "skipped_empty_detail"
+	StatusCreated        = "created"
+	StatusBackfilled     = "created_from_cache"
+	StatusAlreadyInDB    = "skipped_db"
+	StatusAlreadyCached  = "skipped_cache"
+	StatusDuplicateInRun = "skipped_seen"
+	StatusEmptyPlaceID   = "skipped_empty_place_id"
+	StatusUnmappedDetail = "skipped_unmapped_detail"
+	StatusEmptyDetail    = "skipped_empty_detail"
 )
 
-type seedEvent struct {
+type Event struct {
 	PlaceID string
 	Name    string
 	Status  string
 }
 
-type seedReport struct {
+type Report struct {
 	Pins           int
 	GeocodeResults int
 	Created        int
@@ -40,68 +40,73 @@ type seedReport struct {
 	DuplicateInRun int
 	SkippedEmpty   int
 	UnmappedDetail int
-	Events         []seedEvent
+	Events         []Event
 }
 
-func (r *seedReport) add(placeID, name, status string) {
-	r.Events = append(r.Events, seedEvent{PlaceID: placeID, Name: name, Status: status})
+func (r *Report) add(placeID, name, status string) {
+	r.Events = append(r.Events, Event{PlaceID: placeID, Name: name, Status: status})
 	switch status {
-	case seedStatusCreated:
+	case StatusCreated:
 		r.Created++
-	case seedStatusBackfilled:
+	case StatusBackfilled:
 		r.Backfilled++
-	case seedStatusAlreadyInDB:
+	case StatusAlreadyInDB:
 		r.AlreadyInDB++
-	case seedStatusAlreadyCached:
+	case StatusAlreadyCached:
 		r.AlreadyCached++
-	case seedStatusDuplicateInRun:
+	case StatusDuplicateInRun:
 		r.DuplicateInRun++
-	case seedStatusEmptyPlaceID, seedStatusEmptyDetail:
+	case StatusEmptyPlaceID, StatusEmptyDetail:
 		r.SkippedEmpty++
-	case seedStatusUnmappedDetail:
+	case StatusUnmappedDetail:
 		r.UnmappedDetail++
 	}
 }
 
-func (r seedReport) Wrote() int {
+func (r Report) Wrote() int {
 	return r.Created + r.Backfilled
 }
 
-type seedMapClient interface {
+type MapClient interface {
 	Geocode(ctx context.Context, req mapRequest.GeocodeRequest) (*mapResponse.GeocodeResponse, error)
 	DetailPlace(ctx context.Context, req mapRequest.DetailPlaceRequest) (*mapResponse.PlaceDetailResponse, error)
 }
 
-type seedLocationStore interface {
+type Store interface {
 	FindLocationByPlaceID(ctx context.Context, placeID string) (*model.Location, error)
 	CreateLocation(ctx context.Context, location *model.Location) error
 }
 
-type seedPlaceCache interface {
+type Cache interface {
 	FindLocationByPlaceID(ctx context.Context, placeID string) (*model.Location, error)
 	SetLocation(ctx context.Context, location *model.Location) error
 }
 
-type locationSeeder struct {
-	maps      seedMapClient
-	locations seedLocationStore
-	cache     seedPlaceCache
+type Seeder struct {
+	maps      MapClient
+	locations Store
+	cache     Cache
+	Limit     int
 }
 
-func newLocationSeeder(maps seedMapClient, locations seedLocationStore, cache seedPlaceCache) *locationSeeder {
-	return &locationSeeder{maps: maps, locations: locations, cache: cache}
+func NewSeeder(maps MapClient, locations Store, cache Cache) *Seeder {
+	return &Seeder{maps: maps, locations: locations, cache: cache, Limit: defaultGeocodeLimit}
 }
 
-func (s *locationSeeder) seedFromCoords(ctx context.Context, coords []seedCoord) (*seedReport, error) {
-	report := &seedReport{Pins: len(coords)}
+func (s *Seeder) SeedFromCoords(ctx context.Context, coords []Coord) (*Report, error) {
+	report := &Report{Pins: len(coords)}
 	if s.maps == nil {
 		return report, errors.New("map client is not configured")
+	}
+	limit := s.Limit
+	if limit <= 0 {
+		limit = defaultGeocodeLimit
 	}
 	seen := make(map[string]struct{})
 	for _, coord := range coords {
 		geo, err := s.maps.Geocode(ctx, mapRequest.GeocodeRequest{
 			LatLng:                          fmt.Sprintf("%g,%g", coord.Lat, coord.Lng),
-			Limit:                           seedGeocodeLimit,
+			Limit:                           limit,
 			HasDeprecatedAdministrativeUnit: true,
 			HasVNID:                         true,
 		})
@@ -121,13 +126,13 @@ func (s *locationSeeder) seedFromCoords(ctx context.Context, coords []seedCoord)
 	return report, nil
 }
 
-func (s *locationSeeder) seedPlaceID(ctx context.Context, placeID, name string, seen map[string]struct{}, report *seedReport) error {
+func (s *Seeder) seedPlaceID(ctx context.Context, placeID, name string, seen map[string]struct{}, report *Report) error {
 	if placeID == "" {
-		report.add(placeID, name, seedStatusEmptyPlaceID)
+		report.add(placeID, name, StatusEmptyPlaceID)
 		return nil
 	}
 	if _, ok := seen[placeID]; ok {
-		report.add(placeID, name, seedStatusDuplicateInRun)
+		report.add(placeID, name, StatusDuplicateInRun)
 		return nil
 	}
 	if loc, err := s.lookupCachedPlace(ctx, placeID); err != nil {
@@ -139,17 +144,17 @@ func (s *locationSeeder) seedPlaceID(ctx context.Context, placeID, name string, 
 			return err
 		}
 		if created {
-			report.add(placeID, loc.Name, seedStatusBackfilled)
+			report.add(placeID, loc.Name, StatusBackfilled)
 			return nil
 		}
-		report.add(placeID, loc.Name, seedStatusAlreadyCached)
+		report.add(placeID, loc.Name, StatusAlreadyCached)
 		return nil
 	}
 
 	if loc, err := s.locations.FindLocationByPlaceID(ctx, placeID); err == nil {
 		seen[placeID] = struct{}{}
 		s.rememberPlace(ctx, loc)
-		report.add(placeID, loc.Name, seedStatusAlreadyInDB)
+		report.add(placeID, loc.Name, StatusAlreadyInDB)
 		return nil
 	} else if !errors.Is(err, repository.ErrLocationNotFound) {
 		return err
@@ -164,50 +169,50 @@ func (s *locationSeeder) seedPlaceID(ctx context.Context, placeID, name string, 
 	}
 	if detail == nil {
 		seen[placeID] = struct{}{}
-		report.add(placeID, name, seedStatusEmptyDetail)
+		report.add(placeID, name, StatusEmptyDetail)
 		return nil
 	}
-	location := detailToLocation(*detail)
-	if location == nil {
+	row := detailToLocation(*detail)
+	if row == nil {
 		seen[placeID] = struct{}{}
-		report.add(placeID, name, seedStatusUnmappedDetail)
+		report.add(placeID, name, StatusUnmappedDetail)
 		return nil
 	}
-	if err := s.locations.CreateLocation(ctx, location); err != nil {
+	if err := s.locations.CreateLocation(ctx, row); err != nil {
 		return fmt.Errorf("insert %s: %w", placeID, err)
 	}
 	seen[placeID] = struct{}{}
-	s.rememberPlace(ctx, location)
-	report.add(placeID, location.Name, seedStatusCreated)
+	s.rememberPlace(ctx, row)
+	report.add(placeID, row.Name, StatusCreated)
 	return nil
 }
 
-func (s *locationSeeder) lookupCachedPlace(ctx context.Context, placeID string) (*model.Location, error) {
+func (s *Seeder) lookupCachedPlace(ctx context.Context, placeID string) (*model.Location, error) {
 	if s.cache == nil {
 		return nil, nil
 	}
 	return s.cache.FindLocationByPlaceID(ctx, placeID)
 }
 
-func (s *locationSeeder) rememberPlace(ctx context.Context, location *model.Location) {
-	if s.cache == nil || location == nil {
+func (s *Seeder) rememberPlace(ctx context.Context, row *model.Location) {
+	if s.cache == nil || row == nil {
 		return
 	}
-	_ = s.cache.SetLocation(ctx, location)
+	_ = s.cache.SetLocation(ctx, row)
 }
 
-func (s *locationSeeder) ensureStoredLocation(ctx context.Context, location *model.Location) (bool, error) {
-	if location == nil || location.PlaceID == nil {
+func (s *Seeder) ensureStoredLocation(ctx context.Context, row *model.Location) (bool, error) {
+	if row == nil || row.PlaceID == nil {
 		return false, nil
 	}
-	_, err := s.locations.FindLocationByPlaceID(ctx, *location.PlaceID)
+	_, err := s.locations.FindLocationByPlaceID(ctx, *row.PlaceID)
 	if err == nil {
 		return false, nil
 	}
 	if !errors.Is(err, repository.ErrLocationNotFound) {
 		return false, err
 	}
-	if err := s.locations.CreateLocation(ctx, location); err != nil {
+	if err := s.locations.CreateLocation(ctx, row); err != nil {
 		return false, err
 	}
 	return true, nil

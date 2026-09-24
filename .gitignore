@@ -9,5 +9,5 @@ persistence/
 .idea
 .git
 .cursor/
+*.exe
 module/maps/test
-

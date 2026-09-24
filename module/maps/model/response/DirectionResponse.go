@@ -2,7 +2,7 @@ package response
 
 type DirectionResponse struct {
 	GeocodedWaypoints []GeocodedWaypoint `json:"geocoded_waypoints"`
-	Routes            []Route           `json:"routes"`
+	Routes            []Route            `json:"routes"`
 	Status            string             `json:"status"`
 }
 
@@ -12,11 +12,11 @@ type GeocodedWaypoint struct {
 }
 
 type Route struct {
-	Legs              []Leg             `json:"legs"`
-	OverviewPolyline  OverviewPolyline  `json:"overview_polyline"`
-	Summary           string            `json:"summary"`
-	Warnings          []string          `json:"warnings"`
-	WaypointOrder     []int            `json:"waypoint_order"`
+	Legs             []Leg            `json:"legs"`
+	OverviewPolyline OverviewPolyline `json:"overview_polyline"`
+	Summary          string           `json:"summary"`
+	Warnings         []string         `json:"warnings"`
+	WaypointOrder    []int            `json:"waypoint_order"`
 }
 
 type Leg struct {
@@ -34,10 +34,10 @@ type Step struct {
 	Duration         TextValue        `json:"duration"`
 	StartLocation    LatLng           `json:"start_location"`
 	EndLocation      LatLng           `json:"end_location"`
-	HTMLInstructions string            `json:"html_instructions"`
-	Maneuver         string            `json:"maneuver"`
-	Polyline         OverviewPolyline  `json:"polyline"`
-	TravelMode       string            `json:"travel_mode"`
+	HTMLInstructions string           `json:"html_instructions"`
+	Maneuver         string           `json:"maneuver"`
+	Polyline         OverviewPolyline `json:"polyline"`
+	TravelMode       string           `json:"travel_mode"`
 }
 
 type TextValue struct {

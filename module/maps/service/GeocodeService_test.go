@@ -27,7 +27,7 @@ func TestGeocodeServiceForward(t *testing.T) {
 			Status: "OK",
 			Results: []response.GeocodeResult{{
 				FormattedAddress: "91 Trung Kính, Yên Hòa, Hà Nội",
-				PlaceID:           "place-1",
+				PlaceID:          "place-1",
 				Geometry: &response.GeocodeGeometry{
 					Location: response.LatLng{Lat: 21.01367, Lng: 105.79825},
 				},
@@ -53,9 +53,9 @@ func TestGeocodeServiceForward(t *testing.T) {
 func TestGeocodeServiceReversePassesLimitAndVNID(t *testing.T) {
 	stub := &stubGeocodeClient{out: &response.GeocodeResponse{Status: "OK"}}
 	_, err := NewGeocodeService(stub).Lookup(context.Background(), request.GeocodeRequest{
-		LatLng: "15.765075, 108.204474",
-		Limit:  5,
-		HasVNID: true,
+		LatLng:                          "15.765075, 108.204474",
+		Limit:                           5,
+		HasVNID:                         true,
 		HasDeprecatedAdministrativeUnit: true,
 	})
 	if err != nil {

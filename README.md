@@ -52,19 +52,72 @@ Validation is deliberately loose: the backend only checks that endpoints connect
 
 `openTail[i] = true` makes the merge optional for sub branch `i`: the branch still splits at its first stop but ends without rejoining, so `mergeTo` stays nil and its last stop does not have to appear anywhere else. `openTail[0]` is always false, since the main branch has no merge. This covers a one-way detour such as a scout run or a rider dropping off. The graph can only be replaced while the trip is `planning`.
 
+## Process layout
+
+`main.go` is the unified binary. It calls `cmd.Execute()`, which dispatches `server`, `seeder`, and `migrate`. Each of those can also be started from its own `main` under `cmd/`. `internal/` is seeder domain logic: no HTTP, no cobra.
+
+```text
+main.go                      # cobra root: server | seeder | migrate
+cmd/
+├── root.go                  # load .env, repair PowerShell args, dispatch
+├── server/
+│   ├── main.go              # standalone API; swag comments live here
+│   └── run/run.go           # Postgres, Redis, Gin, /v1, /docs/public
+├── cli/
+│   ├── main.go              # standalone seeder; args start at the entity
+│   └── seed/
+│       ├── command.go       # `seeder`: Postgres + Redis, then AutoMigrate
+│       └── location.go      # `seeder location`: flags and the run report
+└── migrate/
+    ├── main.go              # standalone migrate
+    └── run/run.go           # Postgres, then AutoMigrate
+internal/
+└── seed/location/
+    ├── seeder.go            # geocode pins, skip known places, insert rows
+    ├── map.go               # Goong place detail → verified Location
+    ├── coords.go            # parse lat/lng tokens; fallback pins
+    └── args.go              # stitch decimals PowerShell splits apart
+```
+
+**server** listens on `HTTP_ADDR` (default `:8080`). It migrates when Postgres is configured. Without `DB_HOST`, `DB_USER`, `DB_NAME`, and `DB_PORT` the process still serves, and auth has no database. Redis is the cache and password-reset store. OpenAPI UI is `/docs/public`. Swagger comments are on `cmd/server/main.go` (`go generate` in the root `main.go`).
+
+**migrate** connects to Postgres and runs `AutoMigrate`. It does not start HTTP or call Goong.
+
+**seeder** is the parent for reference data. It requires Postgres, migrates, opens Redis as the place cache, then runs one entity. The only entity today is **location**.
+
+`seeder location` reverse-geocodes pins with Goong (`GOONG_MAP_CALC_API_KEY`) and inserts verified locations that are not already in Postgres. A place found only in Redis is written to Postgres. Each pin requests up to `--limit` results (default 10). With no pins, it uses `10.7725,106.6980` and `10.8721512,106.803008`.
+
+Pass pins as `--lat` and `--lng` together, as `--coords` (`lat,lng` pairs separated by `;`), or as bare numbers. `RepairArgs` runs before cobra so a PowerShell-split decimal (`10` `.7486`) is joined back into `10.7486`.
+
+A new seed entity is a file under `cmd/cli/seed/`, registered from `NewSeederCommand`. Put the Goong and persistence work in `internal/seed/<entity>/`.
+
 ## Run locally
 
 Go 1.26+, PostgreSQL, Redis.
 
-```bash
-cp .env.example .env
-go run .
-```
-
+Full file environment variable.
 Default `HTTP_ADDR=:8080`. Auth needs Postgres (`DB_HOST`, `DB_USER`, `DB_NAME`, `DB_PORT`). Redis is used for cache and password-reset tokens. See `.env.example` for the rest. Do not commit `.env`.
 
 ```bash
+cp .env.example .env
 go test ./...
+```
+
+Unified binary (`go run .` or `go build`, which writes `Road-To-Destination-BE.exe` on Windows):
+
+```bash
+go run . server
+go run . migrate
+go run . seeder location --lat 10.7486 --lng 106.6601
+go run . seeder location --coords "10.7486,106.6601;10.7725,106.6980"
+```
+
+Standalone mains. The CLI entry starts at the entity, so it does not take the word `seeder`:
+
+```bash
+go run ./cmd/server
+go run ./cmd/migrate
+go run ./cmd/cli location --lat 10.7486 --lng 106.6601
 ```
 
 ## API

@@ -19,8 +19,8 @@ const (
 	MaxIdleConnections    = 20
 	IdleConnectionTimeout = 30 * time.Second
 	RequestTimeout        = 10 * time.Second
-	defaultDomain          = "https://rsapi.goong.io"
-	freeRateLimit          = 5
+	defaultDomain         = "https://rsapi.goong.io"
+	freeRateLimit         = 5
 )
 
 type GoongClient struct {

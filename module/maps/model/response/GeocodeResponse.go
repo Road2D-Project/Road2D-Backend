@@ -6,19 +6,19 @@ type GeocodeResponse struct {
 }
 
 type GeocodeResult struct {
-	AddressComponents     []AddressComponent         `json:"address_components"`
-	FormattedAddress      string                      `json:"formatted_address"`
-	Geometry              *GeocodeGeometry           `json:"geometry,omitempty"`
-	PlaceID               string                      `json:"place_id"`
-	Reference             string                      `json:"reference,omitempty"`
+	AddressComponents     []AddressComponent        `json:"address_components"`
+	FormattedAddress      string                    `json:"formatted_address"`
+	Geometry              *GeocodeGeometry          `json:"geometry,omitempty"`
+	PlaceID               string                    `json:"place_id"`
+	Reference             string                    `json:"reference,omitempty"`
 	PlusCode              *PlusCode                 `json:"plus_code,omitempty"`
-	Compound              *AdministrativeCompound      `json:"compound,omitempty"`
-	Types                 []string                   `json:"types"`
-	Name                  string                      `json:"name,omitempty"`
-	Address               string                      `json:"address,omitempty"`
-	DeprecatedDescription string                      `json:"deprecated_description,omitempty"`
-	DeprecatedCompound    *AdministrativeCompound      `json:"deprecated_compound,omitempty"`
-	DeprecatedCompoundID *AdministrativeCompoundID     `json:"deprecated_compound_id,omitempty"`
+	Compound              *AdministrativeCompound   `json:"compound,omitempty"`
+	Types                 []string                  `json:"types"`
+	Name                  string                    `json:"name,omitempty"`
+	Address               string                    `json:"address,omitempty"`
+	DeprecatedDescription string                    `json:"deprecated_description,omitempty"`
+	DeprecatedCompound    *AdministrativeCompound   `json:"deprecated_compound,omitempty"`
+	DeprecatedCompoundID  *AdministrativeCompoundID `json:"deprecated_compound_id,omitempty"`
 }
 
 type GeocodeGeometry struct {
