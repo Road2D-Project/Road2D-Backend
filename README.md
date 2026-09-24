@@ -83,11 +83,15 @@ internal/
 
 **migrate** connects to Postgres and runs `AutoMigrate`. It does not start HTTP or call Goong.
 
-**seeder** is the parent for reference data. It requires Postgres, migrates, opens Redis as the place cache, then runs one entity. The only entity today is **location**.
+**seeder** is the parent for reference data. It requires Postgres, migrates, opens Redis as the place cache, then runs one entity. Entities today are **location** and **user**.
 
 `seeder location` reverse-geocodes pins with Goong (`GOONG_MAP_CALC_API_KEY`) and inserts verified locations that are not already in Postgres. A place found only in Redis is written to Postgres. Each pin requests up to `--limit` results (default 10). With no pins, it uses `10.7725,106.6980` and `10.8721512,106.803008`.
 
 Pass pins as `--lat` and `--lng` together, as `--coords` (`lat,lng` pairs separated by `;`), or as bare numbers. `RepairArgs` runs before cobra so a PowerShell-split decimal (`10` `.7486`) is joined back into `10.7486`.
+
+`seeder user --default` registers `USER_NAME` when that username is missing, then logs in with `USER_PASSWORD` and prints the access and refresh tokens. Set `USER_NAME`, `USER_EMAIL`, and `USER_PASSWORD` in `.env`.
+
+`seeder user --fake` registers every account in `internal/seed/user/users.json` (five sample riders; the file is a JSON array and is not capped). Usernames already in Postgres are skipped. `--file path.json` reads another array of `{username, email, password}` instead.
 
 A new seed entity is a file under `cmd/cli/seed/`, registered from `NewSeederCommand`. Put the Goong and persistence work in `internal/seed/<entity>/`.
 
@@ -110,6 +114,8 @@ go run . server
 go run . migrate
 go run . seeder location --lat 10.7486 --lng 106.6601
 go run . seeder location --coords "10.7486,106.6601;10.7725,106.6980"
+go run . seeder user --default
+go run . seeder user --fake
 ```
 
 Standalone mains. The CLI entry starts at the entity, so it does not take the word `seeder`:
