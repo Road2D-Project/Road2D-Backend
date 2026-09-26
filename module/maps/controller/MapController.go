@@ -17,6 +17,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
 )
 
 var _ share.PlaygroundRegistrar = (*MapController)(nil)
@@ -35,13 +36,17 @@ var (
 // Use-case services are constructed inside each handler — not in main.
 type MapController struct {
 	goong *client.GoongClient
-	legs  *repository.LocationLegMemoryStore
+	legs  repository.LegStore
 }
 
-func NewMapController(redisClient *redis.Client) *MapController {
+func NewMapController(db *gorm.DB, redisClient *redis.Client) *MapController {
+	var memory repository.LegStore
+	if redisClient != nil {
+		memory = repository.NewLocationLegMemoryStore(redisClient)
+	}
 	return &MapController{
 		goong: client.NewDefaultGoongClient(),
-		legs:  repository.NewLocationLegMemoryStore(redisClient),
+		legs:  repository.NewCachedLegStore(memory, repository.NewLegRepository(db)),
 	}
 }
 

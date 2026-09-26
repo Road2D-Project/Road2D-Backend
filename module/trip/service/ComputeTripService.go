@@ -4,8 +4,10 @@ import (
 	"context"
 	"strconv"
 	"sync"
+	"time"
 
 	"Road-To-Destination-BE/module/maps/model/request"
+	"Road-To-Destination-BE/module/share"
 	"Road-To-Destination-BE/module/trip/model"
 	"Road-To-Destination-BE/utils/enum"
 
@@ -15,25 +17,44 @@ import (
 // computeWorkers matches the Goong limiter burst in GoongClient.
 const computeWorkers = 5
 
+const defaultTravelTTLSeconds = 86400
+
 // LegRouter loads one A→B leg. *maps/service.DirectionService satisfies it.
 type LegRouter interface {
 	Route(ctx context.Context, req request.DirectionRequest) (*model.Leg, error)
 }
-type ComputeTripService struct {
-	routes LegRouter
+
+// TravelStore keeps the computed legs of one trip.
+type TravelStore interface {
+	FindTravelsByTrip(ctx context.Context, tripID uuid.UUID) ([]model.Travel, error)
+	UpsertTravels(ctx context.Context, tripID uuid.UUID, travels []model.Travel) error
 }
 
-func NewComputeTripService(routes LegRouter) *ComputeTripService {
-	return &ComputeTripService{routes: routes}
+type ComputeTripService struct {
+	routes    LegRouter
+	travels   TravelStore
+	travelTTL time.Duration
+}
+
+func NewComputeTripService(routes LegRouter, travels TravelStore) *ComputeTripService {
+	seconds := share.GetEnvIntDefault("TRAVEL_TTL_SECONDS", defaultTravelTTLSeconds)
+	return &ComputeTripService{
+		routes:    routes,
+		travels:   travels,
+		travelTTL: time.Duration(seconds) * time.Second,
+	}
 }
 
 // define which its branch and leg
 type routeSlot struct {
 	branchIndex int
 	legIndex    int
+	from        model.Destination
+	to          model.Destination
 }
 
 // routeJob is one unique bike leg. Slots are every branch row that needs it.
+// Coordinates are shared across the slots, destination ids are not.
 type routeJob struct {
 	from  model.Destination
 	to    model.Destination
@@ -45,12 +66,23 @@ type routedLeg struct {
 	leg *model.Leg
 }
 
-func (s *ComputeTripService) ComputeTrip(ctx context.Context, graph model.GraphBranch) (*model.TravelGraph, error) {
+func (s *ComputeTripService) ComputeTrip(ctx context.Context, tripID uuid.UUID, graph model.GraphBranch) (*model.TravelGraph, error) {
 	result, jobs := flattenRouteJobs(graph)
 	if len(jobs) == 0 {
 		return &result, nil
 	}
-	if err := s.routeJobs(ctx, graph, result, jobs); err != nil {
+	stored, err := s.storedTravels(ctx, tripID)
+	if err != nil {
+		return nil, err
+	}
+	pending := reuseStoredTravels(result, jobs, stored, time.Now().UTC(), s.travelTTL)
+	if len(pending) == 0 {
+		return &result, nil
+	}
+	if err := s.routeJobs(ctx, result, pending); err != nil {
+		return nil, err
+	}
+	if err := s.saveTravels(ctx, tripID, result, pending); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -73,7 +105,7 @@ func flattenRouteJobs(graph model.GraphBranch) (model.TravelGraph, []routeJob) {
 			from := branch[i]
 			to := branch[i+1]
 			key := routeDedupeKey(from.Lat, from.Lng, to.Lat, to.Lng)
-			slot := routeSlot{branchIndex: b, legIndex: i}
+			slot := routeSlot{branchIndex: b, legIndex: i, from: from, to: to}
 			if idx, ok := indexByKey[key]; ok {
 				jobs[idx].slots = append(jobs[idx].slots, slot)
 				continue
@@ -98,6 +130,47 @@ func formatLatLng(lat, lng float64) string {
 	return strconv.FormatFloat(lat, 'f', -1, 64) + "," + strconv.FormatFloat(lng, 'f', -1, 64)
 }
 
+// travelKey is the idx_travel_pair key without the trip: one graph belongs to one trip.
+func travelKey(from, to uuid.UUID, vehicle enum.Vehicle) string {
+	return from.String() + "|" + to.String() + "|" + vehicle.String()
+}
+
+func (s *ComputeTripService) storedTravels(ctx context.Context, tripID uuid.UUID) (map[string]model.Travel, error) {
+	rows, err := s.travels.FindTravelsByTrip(ctx, tripID)
+	if err != nil {
+		return nil, err
+	}
+	stored := make(map[string]model.Travel, len(rows))
+	for _, row := range rows {
+		stored[travelKey(row.FromDestinationID, row.ToDestinationID, row.Vehicle)] = row
+	}
+	return stored, nil
+}
+
+// reuseStoredTravels fills every slot that already has a usable row and returns the
+// jobs still worth routing, each trimmed to the slots that are missing or stale.
+// A frozen row never expires, so trip history is reused as it was shared.
+func reuseStoredTravels(result model.TravelGraph, jobs []routeJob, stored map[string]model.Travel, now time.Time, ttl time.Duration) []routeJob {
+	pending := make([]routeJob, 0, len(jobs))
+	for _, job := range jobs {
+		missing := make([]routeSlot, 0, len(job.slots))
+		for _, slot := range job.slots {
+			travel, ok := stored[travelKey(slot.from.ID, slot.to.ID, enum.BIKE)]
+			if ok && !travel.Expired(now, ttl) {
+				result[slot.branchIndex][slot.legIndex] = travel
+				continue
+			}
+			missing = append(missing, slot)
+		}
+		if len(missing) == 0 {
+			continue
+		}
+		job.slots = missing
+		pending = append(pending, job)
+	}
+	return pending
+}
+
 // travelFromLeg copies a computed leg onto one stop pair.
 // Ids come from the slot destinations: a leg only has coordinates.
 // IsFrozen stays false because freezing happens when the trip locks, not while computing.
@@ -120,7 +193,30 @@ func travelFromLeg(leg *model.Leg, from, to model.Destination) model.Travel {
 	return travel
 }
 
-func (s *ComputeTripService) routeJobs(ctx context.Context, graph model.GraphBranch, result model.TravelGraph, jobs []routeJob) error {
+// saveTravels writes only what was just computed. Two branches can walk the same
+// destination pair, and Postgres refuses a batch that hits one conflict key twice,
+// so the rows are collapsed before the upsert.
+func (s *ComputeTripService) saveTravels(ctx context.Context, tripID uuid.UUID, result model.TravelGraph, computed []routeJob) error {
+	rows := make([]model.Travel, 0, len(computed))
+	seen := make(map[string]bool, len(computed))
+	for _, job := range computed {
+		for _, slot := range job.slots {
+			travel := result[slot.branchIndex][slot.legIndex]
+			key := travelKey(travel.FromDestinationID, travel.ToDestinationID, travel.Vehicle)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			rows = append(rows, travel)
+		}
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	return s.travels.UpsertTravels(ctx, tripID, rows)
+}
+
+func (s *ComputeTripService) routeJobs(ctx context.Context, result model.TravelGraph, jobs []routeJob) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -202,9 +298,10 @@ func (s *ComputeTripService) routeWorker(ctx context.Context, jobs <-chan routeJ
 //		}
 //	}
 //
-// v2 Không phụ thuộc vào bên ngoài
+// v2 Không phụ thuộc vào bên ngoài. Mỗi slot mang cặp destination của riêng nó:
+// hai branch có thể trùng toạ độ nhưng khác pin, và cặp id đó là khoá của travels.
 func applyLeg(result model.TravelGraph, job routeJob, leg *model.Leg) {
 	for _, slot := range job.slots {
-		result[slot.branchIndex][slot.legIndex] = travelFromLeg(leg, job.from, job.to)
+		result[slot.branchIndex][slot.legIndex] = travelFromLeg(leg, slot.from, slot.to)
 	}
 }

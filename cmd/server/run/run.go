@@ -54,7 +54,7 @@ func Run() error {
 	playground := v1.Group("")
 	playground.Use(middleware.RequireHeaderPlaygroundKey())
 	sandboxes := []share.PlaygroundRegistrar{
-		mapsController.NewMapController(redisConfig.Client()),
+		mapsController.NewMapController(dbConfig.GetDatabase(), redisConfig.Client()),
 	}
 	for _, r := range sandboxes {
 		r.RegisterPlayground(playground)

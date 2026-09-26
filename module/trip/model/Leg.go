@@ -34,3 +34,16 @@ type Leg struct {
 func (Leg) TableName() string {
 	return "legs"
 }
+
+// Expired reports whether the cached route is too old to reuse.
+// TTLSeconds of 0 means the caller's default window applies.
+func (leg *Leg) Expired(now time.Time, fallback time.Duration) bool {
+	if leg == nil {
+		return true
+	}
+	ttl := fallback
+	if leg.TTLSeconds > 0 {
+		ttl = time.Duration(leg.TTLSeconds) * time.Second
+	}
+	return leg.LastComputedAt.Add(ttl).Before(now)
+}
