@@ -2180,6 +2180,95 @@
                 }
             }
         },
+        "/trips/{tripId}/compute": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Compute the bike route along one ordered list of stops. Each point is either a destinationId or a locationId. The result is not stored on the trip. A cache miss is kept in Redis for 15 minutes. Any active member may call this, and the trip does not have to be planning.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Preview a branch route",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Trip id",
+                        "name": "tripId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Ordered stops, each a destination or a location",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.ComputeBranchRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.ComputeBranchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/trips/{tripId}/graph": {
             "put": {
                 "security": [
@@ -2822,6 +2911,34 @@
                 }
             }
         },
+        "request.ComputeBranchPoint": {
+            "type": "object",
+            "properties": {
+                "destinationId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "locationId": {
+                    "type": "string",
+                    "format": "uuid"
+                }
+            }
+        },
+        "request.ComputeBranchRequest": {
+            "type": "object",
+            "required": [
+                "points"
+            ],
+            "properties": {
+                "points": {
+                    "type": "array",
+                    "minItems": 2,
+                    "items": {
+                        "$ref": "#/definitions/request.ComputeBranchPoint"
+                    }
+                }
+            }
+        },
         "request.CreateGroupRequest": {
             "type": "object",
             "required": [
@@ -3159,6 +3276,57 @@
                     "items": {
                         "$ref": "#/definitions/response.StopResponse"
                     }
+                }
+            }
+        },
+        "response.ComputeBranchLeg": {
+            "type": "object",
+            "properties": {
+                "distanceM": {
+                    "type": "number"
+                },
+                "durationS": {
+                    "type": "number"
+                },
+                "from": {
+                    "$ref": "#/definitions/response.ComputeBranchStop"
+                },
+                "polyline": {
+                    "type": "string"
+                },
+                "to": {
+                    "$ref": "#/definitions/response.ComputeBranchStop"
+                },
+                "vehicle": {
+                    "type": "string",
+                    "example": "bike"
+                }
+            }
+        },
+        "response.ComputeBranchResponse": {
+            "type": "object",
+            "properties": {
+                "legs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.ComputeBranchLeg"
+                    }
+                }
+            }
+        },
+        "response.ComputeBranchStop": {
+            "type": "object",
+            "properties": {
+                "destinationId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "locationId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "name": {
+                    "type": "string"
                 }
             }
         },

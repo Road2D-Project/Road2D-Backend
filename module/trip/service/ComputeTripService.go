@@ -30,18 +30,32 @@ type TravelStore interface {
 	UpsertTravels(ctx context.Context, tripID uuid.UUID, travels []model.Travel) error
 }
 
-type ComputeTripService struct {
-	routes    LegRouter
-	travels   TravelStore
-	travelTTL time.Duration
+// DestinationPointFinder loads one trip pin. Preview routing uses it; ComputeTrip does not.
+type DestinationPointFinder interface {
+	FindDestinationById(ctx context.Context, destinationId uuid.UUID) (*model.Destination, error)
 }
 
-func NewComputeTripService(routes LegRouter, travels TravelStore) *ComputeTripService {
+// LocationPointFinder loads one verified place. Preview routing uses it; ComputeTrip does not.
+type LocationPointFinder interface {
+	FindLocationById(ctx context.Context, locationId uuid.UUID) (*model.Location, error)
+}
+
+type ComputeTripService struct {
+	routes       LegRouter
+	travels      TravelStore
+	destinations DestinationPointFinder
+	locations    LocationPointFinder
+	travelTTL    time.Duration
+}
+
+func NewComputeTripService(routes LegRouter, travels TravelStore, destinations DestinationPointFinder, locations LocationPointFinder) *ComputeTripService {
 	seconds := share.GetEnvIntDefault("TRAVEL_TTL_SECONDS", defaultTravelTTLSeconds)
 	return &ComputeTripService{
-		routes:    routes,
-		travels:   travels,
-		travelTTL: time.Duration(seconds) * time.Second,
+		routes:       routes,
+		travels:      travels,
+		destinations: destinations,
+		locations:    locations,
+		travelTTL:    time.Duration(seconds) * time.Second,
 	}
 }
 

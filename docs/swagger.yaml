@@ -300,6 +300,25 @@ definitions:
       username:
         type: string
     type: object
+  request.ComputeBranchPoint:
+    properties:
+      destinationId:
+        format: uuid
+        type: string
+      locationId:
+        format: uuid
+        type: string
+    type: object
+  request.ComputeBranchRequest:
+    properties:
+      points:
+        items:
+          $ref: '#/definitions/request.ComputeBranchPoint'
+        minItems: 2
+        type: array
+    required:
+    - points
+    type: object
   request.CreateGroupRequest:
     properties:
       adminUsernames:
@@ -532,6 +551,40 @@ definitions:
         items:
           $ref: '#/definitions/response.StopResponse'
         type: array
+    type: object
+  response.ComputeBranchLeg:
+    properties:
+      distanceM:
+        type: number
+      durationS:
+        type: number
+      from:
+        $ref: '#/definitions/response.ComputeBranchStop'
+      polyline:
+        type: string
+      to:
+        $ref: '#/definitions/response.ComputeBranchStop'
+      vehicle:
+        example: bike
+        type: string
+    type: object
+  response.ComputeBranchResponse:
+    properties:
+      legs:
+        items:
+          $ref: '#/definitions/response.ComputeBranchLeg'
+        type: array
+    type: object
+  response.ComputeBranchStop:
+    properties:
+      destinationId:
+        format: uuid
+        type: string
+      locationId:
+        format: uuid
+        type: string
+      name:
+        type: string
     type: object
   response.CreateDestinationResponse:
     properties:
@@ -2330,6 +2383,67 @@ paths:
       security:
       - BearerAuth: []
       summary: Update trip
+      tags:
+      - trips
+  /trips/{tripId}/compute:
+    post:
+      consumes:
+      - application/json
+      description: Compute the bike route along one ordered list of stops. Each point
+        is either a destinationId or a locationId. The result is not stored on the
+        trip. A cache miss is kept in Redis for 15 minutes. Any active member may
+        call this, and the trip does not have to be planning.
+      parameters:
+      - description: Trip id
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      - description: Ordered stops, each a destination or a location
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.ComputeBranchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.ComputeBranchResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Preview a branch route
       tags:
       - trips
   /trips/{tripId}/graph:

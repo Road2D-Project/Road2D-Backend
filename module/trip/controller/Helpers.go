@@ -4,6 +4,9 @@ import (
 	"Road-To-Destination-BE/middleware"
 	authModel "Road-To-Destination-BE/module/authentication/model"
 	groupRepo "Road-To-Destination-BE/module/group/repository"
+	mapsclient "Road-To-Destination-BE/module/maps/client"
+	mapsrepo "Road-To-Destination-BE/module/maps/repository"
+	mapsservice "Road-To-Destination-BE/module/maps/service"
 	"Road-To-Destination-BE/module/share"
 	"Road-To-Destination-BE/module/trip/repository"
 	"Road-To-Destination-BE/module/trip/service"
@@ -45,6 +48,24 @@ func (ctrl *TripController) joinTripService() *service.JoinTripService {
 	)
 }
 
+func (ctrl *TripController) computeTrip() *service.ComputeTripService {
+	return service.NewComputeTripService(
+		mapsservice.NewDirectionService(ctrl.goong, ctrl.previewLegs()),
+		repository.NewTravelRepository(ctrl.db),
+		repository.NewDestinationRepository(ctrl.db),
+		repository.NewLocationRepository(ctrl.db),
+	)
+}
+
+// previewLegs is Redis only. A miss falls through to Goong inside DirectionService
+// and comes back here with a 15 minute TTL. Postgres is not on this path.
+func (ctrl *TripController) previewLegs() mapsrepo.LegStore {
+	if ctrl.redisClient == nil {
+		return noopLegStore{}
+	}
+	return shortTTLLegStore{inner: mapsrepo.NewLocationLegMemoryStore(ctrl.redisClient)}
+}
+
 func (ctrl *TripController) placeService() *service.PlaceService {
 	return service.NewLocationService(
 		repository.NewDestinationRepository(ctrl.db),
@@ -69,8 +90,15 @@ func mapTripError(c *gin.Context, err error) {
 		jsonError(c, http.StatusForbidden, err.Error())
 	case errors.Is(err, repository.ErrNoTripUpdate):
 		jsonError(c, http.StatusBadRequest, err.Error())
-	case errors.Is(err, repository.ErrInternalServerError):
+	case errors.Is(err, repository.ErrInternalServerError),
+		errors.Is(err, mapsclient.ErrMissingAPIKey):
 		jsonError(c, http.StatusInternalServerError, err.Error())
+	case errors.Is(err, mapsclient.ErrRateLimited):
+		jsonError(c, http.StatusTooManyRequests, err.Error())
+	case errors.Is(err, mapsclient.ErrEmptyRoute),
+		errors.Is(err, mapsclient.ErrEmptyTrip),
+		errors.Is(err, mapsclient.ErrGoongStatus):
+		jsonError(c, http.StatusBadGateway, err.Error())
 	default:
 		jsonError(c, http.StatusBadRequest, err.Error())
 	}

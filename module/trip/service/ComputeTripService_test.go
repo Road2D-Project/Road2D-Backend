@@ -9,6 +9,7 @@ import (
 
 	"Road-To-Destination-BE/module/maps/model/request"
 	"Road-To-Destination-BE/module/trip/model"
+	triprequest "Road-To-Destination-BE/module/trip/model/request"
 	"Road-To-Destination-BE/utils"
 	"Road-To-Destination-BE/utils/enum"
 
@@ -101,7 +102,7 @@ func TestComputeTripDedupesSharedCoordinates(t *testing.T) {
 		Steps:          []model.RouteStep{{Instruction: "turn left"}},
 	}}
 	travels := &stubTravelStore{}
-	svc := NewComputeTripService(router, travels)
+	svc := NewComputeTripService(router, travels, nil, nil)
 
 	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{a1, b1}, {a2, b2}})
 	if err != nil {
@@ -161,7 +162,7 @@ func TestComputeTripOrdersLegsOnOneBranch(t *testing.T) {
 		Polyline:  "plain",
 		DistanceM: 10,
 	}}
-	svc := NewComputeTripService(router, &stubTravelStore{})
+	svc := NewComputeTripService(router, &stubTravelStore{}, nil, nil)
 
 	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{a, b, c}})
 	if err != nil {
@@ -195,7 +196,7 @@ func TestComputeTripReturnsRouteError(t *testing.T) {
 	routeErr := errors.New("goong down")
 	router := &stubLegRouter{err: routeErr}
 	travels := &stubTravelStore{}
-	svc := NewComputeTripService(router, travels)
+	svc := NewComputeTripService(router, travels, nil, nil)
 
 	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{a, b}})
 	if !errors.Is(err, routeErr) {
@@ -211,7 +212,7 @@ func TestComputeTripReturnsRouteError(t *testing.T) {
 
 func TestComputeTripShortBranchSkipsRoute(t *testing.T) {
 	router := &stubLegRouter{}
-	svc := NewComputeTripService(router, &stubTravelStore{})
+	svc := NewComputeTripService(router, &stubTravelStore{}, nil, nil)
 
 	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{stop("a", 1, 1)}})
 	if err != nil {
@@ -227,7 +228,7 @@ func TestComputeTripShortBranchSkipsRoute(t *testing.T) {
 
 func TestComputeTripEmptyGraphSkipsRoute(t *testing.T) {
 	router := &stubLegRouter{}
-	svc := NewComputeTripService(router, &stubTravelStore{})
+	svc := NewComputeTripService(router, &stubTravelStore{}, nil, nil)
 
 	got, err := svc.ComputeTrip(context.Background(), uuid.New(), nil)
 	if err != nil {
@@ -255,7 +256,7 @@ func TestComputeTripReusesFreshTravel(t *testing.T) {
 		LastComputedAt:    time.Now().UTC().Add(-time.Minute),
 	}}}
 	router := &stubLegRouter{leg: &model.Leg{Vehicle: enum.BIKE, Polyline: "fresh-poly"}}
-	svc := NewComputeTripService(router, travels)
+	svc := NewComputeTripService(router, travels, nil, nil)
 
 	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{a, b}})
 	if err != nil {
@@ -285,7 +286,7 @@ func TestComputeTripRecomputesExpiredTravel(t *testing.T) {
 		LastComputedAt:    time.Now().UTC().Add(-48 * time.Hour),
 	}}}
 	router := &stubLegRouter{leg: &model.Leg{Vehicle: enum.BIKE, Polyline: "fresh-poly", DistanceM: 42}}
-	svc := NewComputeTripService(router, travels)
+	svc := NewComputeTripService(router, travels, nil, nil)
 
 	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{a, b}})
 	if err != nil {
@@ -315,7 +316,7 @@ func TestComputeTripKeepsFrozenTravel(t *testing.T) {
 		LastComputedAt:    time.Now().UTC().Add(-100 * 24 * time.Hour),
 	}}}
 	router := &stubLegRouter{leg: &model.Leg{Vehicle: enum.BIKE, Polyline: "fresh-poly"}}
-	svc := NewComputeTripService(router, travels)
+	svc := NewComputeTripService(router, travels, nil, nil)
 
 	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{a, b}})
 	if err != nil {
@@ -339,7 +340,7 @@ func TestComputeTripWritesSharedPairOnce(t *testing.T) {
 	c := stop("c", 3, 3)
 	travels := &stubTravelStore{}
 	router := &stubLegRouter{leg: &model.Leg{Vehicle: enum.BIKE, Polyline: "poly"}}
-	svc := NewComputeTripService(router, travels)
+	svc := NewComputeTripService(router, travels, nil, nil)
 
 	// Both branches walk the same pins a→b, so one row may reach the conflict key.
 	_, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{a, b}, {a, b, c}})
@@ -365,7 +366,7 @@ func TestComputeTripReturnsUpsertError(t *testing.T) {
 	upsertErr := errors.New("write failed")
 	travels := &stubTravelStore{upsertErr: upsertErr}
 	router := &stubLegRouter{leg: &model.Leg{Vehicle: enum.BIKE}}
-	svc := NewComputeTripService(router, travels)
+	svc := NewComputeTripService(router, travels, nil, nil)
 
 	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{a, b}})
 	if !errors.Is(err, upsertErr) {
@@ -381,7 +382,7 @@ func TestComputeTripReturnsLoadError(t *testing.T) {
 	b := stop("b", 2, 2)
 	findErr := errors.New("read failed")
 	router := &stubLegRouter{}
-	svc := NewComputeTripService(router, &stubTravelStore{findErr: findErr})
+	svc := NewComputeTripService(router, &stubTravelStore{findErr: findErr}, nil, nil)
 
 	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{a, b}})
 	if !errors.Is(err, findErr) {
@@ -392,5 +393,145 @@ func TestComputeTripReturnsLoadError(t *testing.T) {
 	}
 	if router.callCount() != 0 {
 		t.Fatal("must not route when the stored travels cannot be read")
+	}
+}
+
+type stubPreviewDestinations struct {
+	byID map[uuid.UUID]*model.Destination
+}
+
+func (s *stubPreviewDestinations) FindDestinationById(_ context.Context, id uuid.UUID) (*model.Destination, error) {
+	destination, ok := s.byID[id]
+	if !ok {
+		return nil, errors.New("missing destination")
+	}
+	return destination, nil
+}
+
+type stubPreviewLocations struct {
+	byID map[uuid.UUID]*model.Location
+}
+
+func (s *stubPreviewLocations) FindLocationById(_ context.Context, id uuid.UUID) (*model.Location, error) {
+	location, ok := s.byID[id]
+	if !ok {
+		return nil, errors.New("missing location")
+	}
+	return location, nil
+}
+
+func destinationPoint(id uuid.UUID) triprequest.ComputeBranchPoint {
+	return triprequest.ComputeBranchPoint{DestinationID: &id}
+}
+
+func locationPoint(id uuid.UUID) triprequest.ComputeBranchPoint {
+	return triprequest.ComputeBranchPoint{LocationID: &id}
+}
+
+func TestPreviewBranchRoutesOnePair(t *testing.T) {
+	from := stop("cafe", 10.5, 20.25)
+	to := stop("park", 11, 21)
+	router := &stubLegRouter{leg: &model.Leg{
+		Vehicle:   enum.BIKE,
+		Polyline:  "preview-poly",
+		DistanceM: 800,
+		DurationS: 200,
+	}}
+	travels := &stubTravelStore{}
+	svc := NewComputeTripService(router, travels, &stubPreviewDestinations{
+		byID: map[uuid.UUID]*model.Destination{from.ID: &from, to.ID: &to},
+	}, &stubPreviewLocations{})
+
+	got, err := svc.PreviewBranch(context.Background(), []triprequest.ComputeBranchPoint{
+		destinationPoint(from.ID),
+		destinationPoint(to.ID),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if router.callCount() != 1 {
+		t.Fatalf("Route calls = %d, want 1", router.callCount())
+	}
+	reqs := router.requests()
+	if reqs[0].Origin != "10.5,20.25" || reqs[0].Destination != "11,21" || reqs[0].Vehicle != enum.BIKE || reqs[0].Alternatives {
+		t.Fatalf("request = %+v", reqs[0])
+	}
+	if travels.upsertCall != 0 {
+		t.Fatal("a preview must not write travels")
+	}
+	if got == nil || len(got.Legs) != 1 {
+		t.Fatalf("legs = %#v", got)
+	}
+	leg := got.Legs[0]
+	if leg.From.Name != "cafe" || leg.To.Name != "park" || leg.Polyline != "preview-poly" || leg.DistanceM != 800 {
+		t.Fatalf("leg = %+v", leg)
+	}
+	if leg.From.DestinationID == nil || *leg.From.DestinationID != from.ID || leg.From.LocationID != nil {
+		t.Fatalf("from stop = %+v", leg.From)
+	}
+	if leg.To.DestinationID == nil || *leg.To.DestinationID != to.ID {
+		t.Fatalf("to stop = %+v", leg.To)
+	}
+}
+
+func TestPreviewBranchMixesDestinationAndLocation(t *testing.T) {
+	pin := stop("pin", 1.5, 2.5)
+	place := &model.Location{Base: utils.Base{ID: uuid.New()}, Name: "place", Lat: 3.5, Lng: 4.5}
+	end := stop("end", 5, 6)
+	router := &stubLegRouter{leg: &model.Leg{Vehicle: enum.BIKE, Polyline: "mixed"}}
+	svc := NewComputeTripService(router, &stubTravelStore{}, &stubPreviewDestinations{
+		byID: map[uuid.UUID]*model.Destination{pin.ID: &pin, end.ID: &end},
+	}, &stubPreviewLocations{
+		byID: map[uuid.UUID]*model.Location{place.ID: place},
+	})
+
+	got, err := svc.PreviewBranch(context.Background(), []triprequest.ComputeBranchPoint{
+		destinationPoint(pin.ID),
+		locationPoint(place.ID),
+		destinationPoint(end.ID),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if router.callCount() != 2 {
+		t.Fatalf("Route calls = %d, want 2", router.callCount())
+	}
+	seen := map[string]bool{}
+	for _, req := range router.requests() {
+		seen[req.Origin+"->"+req.Destination] = true
+	}
+	if !seen["1.5,2.5->3.5,4.5"] || !seen["3.5,4.5->5,6"] {
+		t.Fatalf("requests = %+v", router.requests())
+	}
+	if len(got.Legs) != 2 || got.Legs[0].To.LocationID == nil || *got.Legs[0].To.LocationID != place.ID {
+		t.Fatalf("legs = %+v", got.Legs)
+	}
+	if got.Legs[1].From.Name != "place" || got.Legs[1].To.Name != "end" {
+		t.Fatalf("second leg ends = %+v -> %+v", got.Legs[1].From, got.Legs[1].To)
+	}
+}
+
+func TestPreviewBranchRejectsAmbiguousPoint(t *testing.T) {
+	pin := stop("pin", 1, 1)
+	placeID := uuid.New()
+	both := pin.ID
+	router := &stubLegRouter{leg: &model.Leg{Vehicle: enum.BIKE}}
+	svc := NewComputeTripService(router, &stubTravelStore{}, &stubPreviewDestinations{
+		byID: map[uuid.UUID]*model.Destination{pin.ID: &pin},
+	}, &stubPreviewLocations{})
+
+	cases := [][]triprequest.ComputeBranchPoint{
+		{destinationPoint(pin.ID), {}},
+		{destinationPoint(pin.ID), {DestinationID: &both, LocationID: &placeID}},
+		{destinationPoint(pin.ID)},
+	}
+	for _, points := range cases {
+		_, err := svc.PreviewBranch(context.Background(), points)
+		if !errors.Is(err, ErrInvalidComputePoint) {
+			t.Fatalf("points %+v err = %v", points, err)
+		}
+	}
+	if router.callCount() != 0 {
+		t.Fatal("an invalid point must not call Route")
 	}
 }
