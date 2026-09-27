@@ -9,6 +9,7 @@ import (
 	"Road-To-Destination-BE/module/maps/model/request"
 	"Road-To-Destination-BE/module/share"
 	"Road-To-Destination-BE/module/trip/model"
+	"Road-To-Destination-BE/module/trip/repository"
 	"Road-To-Destination-BE/utils/enum"
 
 	"github.com/google/uuid"
@@ -40,21 +41,28 @@ type LocationPointFinder interface {
 	FindLocationById(ctx context.Context, locationId uuid.UUID) (*model.Location, error)
 }
 
+// TripWithBranchesFinder loads the saved graph, stops in travel order, destinations included.
+type TripWithBranchesFinder interface {
+	FindTripWithBranches(ctx context.Context, id uuid.UUID) (*model.Trip, error)
+}
+
 type ComputeTripService struct {
 	routes       LegRouter
 	travels      TravelStore
 	destinations DestinationPointFinder
 	locations    LocationPointFinder
+	graphs       TripWithBranchesFinder
 	travelTTL    time.Duration
 }
 
-func NewComputeTripService(routes LegRouter, travels TravelStore, destinations DestinationPointFinder, locations LocationPointFinder) *ComputeTripService {
+func NewComputeTripService(routes LegRouter, travels TravelStore, destinations DestinationPointFinder, locations LocationPointFinder, graphs TripWithBranchesFinder) *ComputeTripService {
 	seconds := share.GetEnvIntDefault("TRAVEL_TTL_SECONDS", defaultTravelTTLSeconds)
 	return &ComputeTripService{
 		routes:       routes,
 		travels:      travels,
 		destinations: destinations,
 		locations:    locations,
+		graphs:       graphs,
 		travelTTL:    time.Duration(seconds) * time.Second,
 	}
 }
@@ -78,6 +86,23 @@ type routeJob struct {
 type routedLeg struct {
 	job routeJob
 	leg *model.Leg
+}
+
+// ComputeStoredTrip routes the trip's saved graph and writes the travels.
+// Only a planning trip can be recomputed; a locked trip keeps the snapshot it has.
+func (s *ComputeTripService) ComputeStoredTrip(ctx context.Context, tripID uuid.UUID) (*model.TravelGraph, error) {
+	trip, err := s.graphs.FindTripWithBranches(ctx, tripID)
+	if err != nil {
+		return nil, err
+	}
+	if trip.Status != enum.TripPlanning {
+		return nil, repository.ErrInvalidTripGraph
+	}
+	graph, err := model.GraphFromTrip(trip)
+	if err != nil {
+		return nil, err
+	}
+	return s.ComputeTrip(ctx, tripID, graph)
 }
 
 func (s *ComputeTripService) ComputeTrip(ctx context.Context, tripID uuid.UUID, graph model.GraphBranch) (*model.TravelGraph, error) {

@@ -54,7 +54,28 @@ func (ctrl *TripController) computeTrip() *service.ComputeTripService {
 		repository.NewTravelRepository(ctrl.db),
 		repository.NewDestinationRepository(ctrl.db),
 		repository.NewLocationRepository(ctrl.db),
+		nil,
 	)
+}
+
+// computeStoredTrip routes the saved graph. Legs go through Redis and Postgres,
+// unlike the preview helper, which keeps a 15 minute Redis entry and nothing else.
+func (ctrl *TripController) computeStoredTrip() *service.ComputeTripService {
+	return service.NewComputeTripService(
+		mapsservice.NewDirectionService(ctrl.goong, ctrl.durableLegs()),
+		repository.NewTravelRepository(ctrl.db),
+		nil,
+		nil,
+		repository.NewTripBranchRepository(ctrl.db),
+	)
+}
+
+func (ctrl *TripController) durableLegs() mapsrepo.LegStore {
+	var memory mapsrepo.LegStore
+	if ctrl.redisClient != nil {
+		memory = mapsrepo.NewLocationLegMemoryStore(ctrl.redisClient)
+	}
+	return mapsrepo.NewCachedLegStore(memory, mapsrepo.NewLegRepository(ctrl.db))
 }
 
 // previewLegs is Redis only. A miss falls through to Goong inside DirectionService

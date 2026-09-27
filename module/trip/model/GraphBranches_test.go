@@ -117,6 +117,35 @@ func TestBuildTripBranchesRejectsDuplicateInBranch(t *testing.T) {
 	}
 }
 
+func TestGraphFromTripKeepsStopOrder(t *testing.T) {
+	d := destinations(3)
+	trip := &Trip{Branches: []TripBranch{{
+		Stops: []BranchDestination{
+			{Destination: &d[2], OrderInBranch: 0},
+			{Destination: &d[0], OrderInBranch: 1},
+		},
+	}}}
+	got, err := GraphFromTrip(trip)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || len(got[0]) != 2 || got[0][0].ID != d[2].ID || got[0][1].ID != d[0].ID {
+		t.Fatalf("graph = %+v", got)
+	}
+}
+
+func TestGraphFromTripRejectsMissingDestination(t *testing.T) {
+	_, err := GraphFromTrip(&Trip{Branches: []TripBranch{{
+		Stops: []BranchDestination{{}},
+	}}})
+	if !errors.Is(err, ErrNilDestination) {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := GraphFromTrip(nil); !errors.Is(err, ErrNilTrip) {
+		t.Fatalf("nil trip: %v", err)
+	}
+}
+
 func TestBuildTripBranchesRejectsNilTripAndEmptyGraph(t *testing.T) {
 	if _, err := BuildTripBranches(nil, GraphBranch{{}}, closedTail(1)); !errors.Is(err, ErrNilTrip) {
 		t.Fatalf("nil trip: got %v", err)

@@ -12,6 +12,28 @@ import (
 // travel order. Index 0 is the main branch.
 type GraphBranch [][]Destination
 
+// GraphFromTrip rebuilds that graph from branches already stored on the trip.
+// Stops must already be ordered by OrderInBranch. A stop with no destination
+// cannot be routed.
+func GraphFromTrip(trip *Trip) (GraphBranch, error) {
+	if trip == nil {
+		return nil, ErrNilTrip
+	}
+	graph := make(GraphBranch, len(trip.Branches))
+	for i := range trip.Branches {
+		stops := trip.Branches[i].Stops
+		row := make([]Destination, len(stops))
+		for j := range stops {
+			if stops[j].Destination == nil {
+				return nil, ErrNilDestination
+			}
+			row[j] = *stops[j].Destination
+		}
+		graph[i] = row
+	}
+	return graph, nil
+}
+
 var (
 	ErrEmptyGraphBranch = errors.New("Empty Graph Branch")
 	ErrNilTrip          = errors.New("Nil Trip Branch")

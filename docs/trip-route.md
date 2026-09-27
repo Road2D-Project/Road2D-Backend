@@ -32,7 +32,7 @@ flowchart TD
 2. Fork a verified `Location` into a `Destination`. The pin keeps its own lat/lng.
 3. The leader calls `PUT /trips/:tripId/graph` while the trip is `planning`. The body is destination ids per branch, plus `openTail`.
 4. Any active member calls `POST /trips/:tripId/compute` to preview one branch. That branch does not have to match the saved graph, and nothing is written onto the trip.
-5. `TripLocked` exists on the status enum. Nothing sets `Travel.IsFrozen`, and no handler calls `ComputeTrip` yet.
+5. The leader calls `POST /trips/:tripId/travels` while the trip is still `planning`. That routes the saved graph and upserts `travels`. `TripLocked` exists on the status enum. Nothing sets `Travel.IsFrozen` yet, so a locked trip cannot be recomputed and there is no freeze step.
 
 Goong Trip is not used. That API is a single-vehicle TSP: it needs at least 10 points and it reorders stops. A branch already has an order, so each hop is one Directions call, vehicle `bike`.
 
@@ -170,13 +170,16 @@ Goong errors: missing API key is 500, rate limit is 429, an empty route or a non
 
 ## Compute the saved graph
 
-`ComputeTrip(ctx, tripID, graph)` takes a resolved `GraphBranch` (`[][]Destination`), not raw ids. No handler calls it.
+`POST /v1/trips/{tripId}/travels`
 
-The result is a `TravelGraph`. Reused rows keep the database `ID` and `IsFrozen` flag. Fresh rows are built by `travelFromLeg`: pin ids come from the slot, metrics come from the leg, and `IsFrozen` is false.
+JWT, and the trip leader. No body. The trip must be `planning`; a locked trip returns 400 and is not recomputed.
+
+`ComputeStoredTrip` loads the branches with `FindTripWithBranches`, rebuilds a `GraphBranch` via `GraphFromTrip` (stops already ordered, a missing destination is an error), then calls `ComputeTrip`. The leg store on this path is `CachedLegStore`: Redis, then Postgres, then Goong. It is not the 15 minute preview cache.
+
+The response is `branches`, one slice per saved branch. Each hop has the destination ids, optional `legId`, vehicle, polyline, distance, duration, `isFrozen`, and `lastComputedAt`. Reused rows keep the database id and the frozen flag. Fresh rows come from `travelFromLeg`: pin ids from the slot, metrics from the leg, `IsFrozen` false.
 
 ## Not built yet
 
-- No HTTP route calls `ComputeTrip`, so `travels` is not written from a request.
 - Nothing sets `IsFrozen` to true.
 - Replacing the graph does not delete old travels.
 - Preview does not check that a point belongs to the trip's saved graph.

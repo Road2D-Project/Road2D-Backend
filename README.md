@@ -17,13 +17,21 @@ Consumer maps optimize a single rider on one line. Live-location apps only show 
 Trip
  └── TripBranch  (splitFrom / mergeTo Destination)
       └── BranchDestination (order) → Destination → Location?
-Leg  (A→B, vehicle, polyline, Redis cache)
-Travel (frozen Leg snapshot when the trip locks)
+Leg  (A→B by coordinates, Redis then Postgres)
+Travel (one trip's snapshot of a leg; frozen rows are history)
 ```
 
 - **authentication** — register, login, refresh, profile, forget / reset password
 - **maps** — Goong v2 playground: autocomplete, place detail, geocode, directions, trip TSP
-- **trip** — trip CRUD, membership, invite links, and `PUT /trips/:tripId/graph` to replace the route graph while the trip is planning
+- **trip** — trip CRUD, membership, and invite links. Planning and routing: [docs/trip-route.md](docs/trip-route.md)
+  - [How a ride is planned](docs/trip-route.md#how-a-ride-is-planned)
+  - [Location and destination](docs/trip-route.md#location-and-destination)
+  - [Leg and travel](docs/trip-route.md#leg-and-travel)
+  - [Services](docs/trip-route.md#services)
+  - [Worker pool](docs/trip-route.md#worker-pool)
+  - [Storage tiers](docs/trip-route.md#storage-tiers)
+  - [Preview one branch](docs/trip-route.md#preview-one-branch)
+  - [Compute the saved graph](docs/trip-route.md#compute-the-saved-graph) — `POST /trips/:tripId/travels`
 
 Goong stands in for Google Maps Platform in Vietnam. Directions default to `bike`. Goong Trip is a single-vehicle TSP, not the product branch graph.
 
