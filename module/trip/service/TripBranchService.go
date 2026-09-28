@@ -80,6 +80,21 @@ func (s *TripBranchService) SetTripGraph(ctx context.Context, tripID uuid.UUID, 
 	return &detail, nil
 }
 
+// GetTripGraph returns the trip and the branches already stored for it.
+// A trip that has not been given a graph yet still returns, with an empty branch list.
+// Locked trips stay readable; only writing the graph is limited to planning.
+func (s *TripBranchService) GetTripGraph(ctx context.Context, tripID uuid.UUID, myRole enum.TripRole) (*response.TripDetailResponse, error) {
+	stored, err := s.branches.FindTripWithBranches(ctx, tripID)
+	if err != nil {
+		return nil, err
+	}
+	if stored == nil {
+		return nil, repository.ErrTripNotFound
+	}
+	detail := response.FromTripDetail(stored, response.RolePtr(myRole))
+	return &detail, nil
+}
+
 // validateGraphShape checks the rules that do not need the database: the tail
 // flags line up with the branches, the main branch is never open ended, every
 // sub branch has two ends, and no destination repeats inside one branch.

@@ -60,6 +60,17 @@ func (ctrl *TripController) computeTrip() *service.ComputeTripService {
 
 // computeStoredTrip routes the saved graph. Legs go through Redis and Postgres,
 // unlike the preview helper, which keeps a 15 minute Redis entry and nothing else.
+// readStoredTrip loads travels already written for the saved graph. It does not route.
+func (ctrl *TripController) readStoredTrip() *service.ComputeTripService {
+	return service.NewComputeTripService(
+		nil,
+		repository.NewTravelRepository(ctrl.db),
+		nil,
+		nil,
+		repository.NewTripBranchRepository(ctrl.db),
+	)
+}
+
 func (ctrl *TripController) computeStoredTrip() *service.ComputeTripService {
 	return service.NewComputeTripService(
 		mapsservice.NewDirectionService(ctrl.goong, ctrl.durableLegs()),

@@ -37,6 +37,9 @@ func (g *graphRecords) ReplaceTripBranches(_ context.Context, _ uuid.UUID, branc
 }
 
 func (g *graphRecords) FindTripWithBranches(context.Context, uuid.UUID) (*model.Trip, error) {
+	if g.withBranches == nil {
+		return nil, repository.ErrTripNotFound
+	}
 	return g.withBranches, nil
 }
 
@@ -133,5 +136,78 @@ func TestSetTripGraphRequiresPlanningStatus(t *testing.T) {
 	}, enum.TripRoleLeader)
 	if !errors.Is(err, repository.ErrInvalidTripGraph) {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestGetTripGraphReturnsStoredBranches(t *testing.T) {
+	tripID := uuid.New()
+	d1, d2 := uuid.New(), uuid.New()
+	branchID := uuid.New()
+	records := &graphRecords{
+		withBranches: &model.Trip{
+			Base:   utils.Base{ID: tripID},
+			Name:   "ride",
+			Status: enum.TripLocked,
+			Branches: []model.TripBranch{{
+				Base:                   utils.Base{ID: branchID},
+				Label:                  "main",
+				SplitFromDestinationID: nil,
+				Stops: []model.BranchDestination{
+					{
+						DestinationID: d1,
+						OrderInBranch: 0,
+						Destination:   &model.Destination{Base: utils.Base{ID: d1}, Name: "start", Lat: 10.1, Lng: 106.2},
+					},
+					{
+						DestinationID: d2,
+						OrderInBranch: 1,
+						Destination:   &model.Destination{Base: utils.Base{ID: d2}, Name: "end", Lat: 10.3, Lng: 106.4},
+					},
+				},
+			}},
+		},
+	}
+
+	got, err := NewTripBranchService(records, records).GetTripGraph(context.Background(), tripID, enum.TripRoleMember)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != tripID || got.Name != "ride" || got.Status != enum.TripLocked {
+		t.Fatalf("trip = %+v", got.TripResponse)
+	}
+	if got.MyRole == nil || *got.MyRole != enum.TripRoleMember {
+		t.Fatalf("role = %v", got.MyRole)
+	}
+	if len(got.Branches) != 1 || len(got.Branches[0].Stops) != 2 {
+		t.Fatalf("branches = %+v", got.Branches)
+	}
+	stop := got.Branches[0].Stops[0]
+	if stop.DestinationID != d1 || stop.Name != "start" || stop.Lat != 10.1 || stop.OrderInBranch != 0 {
+		t.Fatalf("first stop = %+v", stop)
+	}
+	if got.Branches[0].MergeToDestinationID != nil {
+		t.Fatal("main branch has no merge")
+	}
+}
+
+func TestGetTripGraphMissingTrip(t *testing.T) {
+	records := &graphRecords{}
+	_, err := NewTripBranchService(records, records).GetTripGraph(context.Background(), uuid.New(), enum.TripRoleLeader)
+	if !errors.Is(err, repository.ErrTripNotFound) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestGetTripGraphEmptyStillReturnsTrip(t *testing.T) {
+	tripID := uuid.New()
+	records := &graphRecords{
+		withBranches: &model.Trip{Base: utils.Base{ID: tripID}, Status: enum.TripPlanning},
+	}
+	got, err := NewTripBranchService(records, records).GetTripGraph(context.Background(), tripID, enum.TripRoleLeader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Branches == nil || len(got.Branches) != 0 {
+		t.Fatalf("branches = %#v", got.Branches)
 	}
 }

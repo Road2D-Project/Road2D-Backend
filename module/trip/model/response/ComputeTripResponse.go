@@ -36,19 +36,23 @@ func FromTravelGraph(graph *model.TravelGraph) ComputeTripResponse {
 	for i, row := range *graph {
 		branches[i] = make([]TravelResponse, len(row))
 		for j, travel := range row {
-			branches[i][j] = TravelResponse{
-				ID:                travel.ID,
-				FromDestinationID: travel.FromDestinationID,
-				ToDestinationID:   travel.ToDestinationID,
-				LegID:             travel.LegID,
-				Vehicle:           travel.Vehicle,
-				Polyline:          travel.Polyline,
-				DistanceM:         travel.DistanceM,
-				DurationS:         travel.DurationS,
-				IsFrozen:          travel.IsFrozen,
-				LastComputedAt:    travel.LastComputedAt,
-			}
+			branches[i][j] = travelResponseFrom(travel)
 		}
 	}
 	return ComputeTripResponse{Branches: branches}
+}
+
+func travelResponseFrom(travel model.Travel) TravelResponse {
+	return TravelResponse{
+		ID:                travel.ID,
+		FromDestinationID: travel.FromDestinationID,
+		ToDestinationID:   travel.ToDestinationID,
+		LegID:             travel.LegID,
+		Vehicle:           travel.Vehicle,
+		Polyline:          travel.Polyline,
+		DistanceM:         travel.DistanceM,
+		DurationS:         travel.DurationS,
+		IsFrozen:          travel.IsFrozen,
+		LastComputedAt:    travel.LastComputedAt,
+	}
 }

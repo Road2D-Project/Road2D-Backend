@@ -10,6 +10,7 @@ import (
 	"Road-To-Destination-BE/module/maps/model/request"
 	"Road-To-Destination-BE/module/trip/model"
 	triprequest "Road-To-Destination-BE/module/trip/model/request"
+	"Road-To-Destination-BE/module/trip/model/response"
 	"Road-To-Destination-BE/module/trip/repository"
 	"Road-To-Destination-BE/utils"
 	"Road-To-Destination-BE/utils/enum"
@@ -604,5 +605,74 @@ func TestComputeStoredTripRefusesLockedTrip(t *testing.T) {
 	}
 	if router.callCount() != 0 || travels.upsertCall != 0 {
 		t.Fatal("a locked trip must not be recomputed")
+	}
+}
+
+func TestLoadStoredTravelsPlacesRowsWithoutRouting(t *testing.T) {
+	a := stop("a", 1, 2)
+	b := stop("b", 3, 4)
+	c := stop("c", 5, 6)
+	trip := &model.Trip{
+		Status: enum.TripLocked,
+		Branches: []model.TripBranch{
+			{Label: "main", Stops: []model.BranchDestination{
+				{Destination: &a, OrderInBranch: 0},
+				{Destination: &b, OrderInBranch: 1},
+				{Destination: &c, OrderInBranch: 2},
+			}},
+			{Label: "sub", Stops: []model.BranchDestination{
+				{Destination: &a, OrderInBranch: 0},
+				{Destination: &b, OrderInBranch: 1},
+			}},
+		},
+	}
+	storedID := uuid.New()
+	router := &stubLegRouter{leg: &model.Leg{Vehicle: enum.BIKE, Polyline: "should-not-run"}}
+	travels := &stubTravelStore{stored: []model.Travel{{
+		Base:              utils.Base{ID: storedID},
+		FromDestinationID: a.ID,
+		ToDestinationID:   b.ID,
+		Vehicle:           enum.BIKE,
+		Polyline:          "ab",
+		DistanceM:         12,
+		LastComputedAt:    time.Now().Add(-48 * time.Hour),
+	}}}
+	svc := NewComputeTripService(router, travels, nil, nil, &stubTripGraphs{trip: trip})
+
+	got, err := svc.LoadStoredTravels(context.Background(), uuid.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if router.callCount() != 0 || travels.upsertCall != 0 {
+		t.Fatal("reading stored travels must not route or write")
+	}
+	if len(*got) != 2 || len((*got)[0]) != 2 || len((*got)[1]) != 1 {
+		t.Fatalf("graph = %#v", got)
+	}
+	if (*got)[0][0].ID != storedID || (*got)[0][0].Polyline != "ab" || (*got)[1][0].Polyline != "ab" {
+		t.Fatal("the stored a→b hop should fill both branches")
+	}
+	missing := (*got)[0][1]
+	if missing.ID != uuid.Nil || missing.Polyline != "" || missing.FromDestinationID != b.ID || missing.ToDestinationID != c.ID {
+		t.Fatalf("uncomputed hop = %+v", missing)
+	}
+
+	detail := response.AttachTravels(response.FromTripDetail(trip, response.RolePtr(enum.TripRoleMember)), got)
+	if detail.Branches[0].Stops[0].Name != "a" || detail.Branches[0].Travels[0] == nil || detail.Branches[0].Travels[0].Polyline != "ab" {
+		t.Fatalf("main branch = %+v", detail.Branches[0])
+	}
+	if detail.Branches[0].Travels[1] != nil {
+		t.Fatal("an uncomputed hop must stay null on the branch")
+	}
+	if detail.Branches[1].Travels[0] == nil || detail.Branches[1].Travels[0].ID != storedID {
+		t.Fatal("the sub branch should reuse the same stored hop")
+	}
+}
+
+func TestLoadStoredTravelsMissingTrip(t *testing.T) {
+	svc := NewComputeTripService(nil, &stubTravelStore{}, nil, nil, &stubTripGraphs{err: repository.ErrTripNotFound})
+	_, err := svc.LoadStoredTravels(context.Background(), uuid.New())
+	if !errors.Is(err, repository.ErrTripNotFound) {
+		t.Fatalf("got %v", err)
 	}
 }

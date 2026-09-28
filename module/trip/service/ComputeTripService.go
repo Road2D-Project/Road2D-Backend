@@ -105,6 +105,53 @@ func (s *ComputeTripService) ComputeStoredTrip(ctx context.Context, tripID uuid.
 	return s.ComputeTrip(ctx, tripID, graph)
 }
 
+// LoadStoredTravels lays the travels already stored for this trip onto its saved branches.
+// It does not call Goong and does not write. A hop with no row keeps the destination ids
+// and an empty id, so the slice still lines up with consecutive stops. An old row is
+// returned as stored; expiry only decides whether a later compute may replace it.
+func (s *ComputeTripService) LoadStoredTravels(ctx context.Context, tripID uuid.UUID) (*model.TravelGraph, error) {
+	trip, err := s.graphs.FindTripWithBranches(ctx, tripID)
+	if err != nil {
+		return nil, err
+	}
+	if trip == nil {
+		return nil, repository.ErrTripNotFound
+	}
+	graph, err := model.GraphFromTrip(trip)
+	if err != nil {
+		return nil, err
+	}
+	result, jobs := flattenRouteJobs(graph)
+	if len(jobs) == 0 {
+		return &result, nil
+	}
+	stored, err := s.storedTravels(ctx, tripID)
+	if err != nil {
+		return nil, err
+	}
+	fillStoredTravels(result, jobs, stored)
+	return &result, nil
+}
+
+// fillStoredTravels copies a stored bike hop into every slot with the same destination pair.
+// A missing row stays a placeholder so the caller can tell that hop apart from a computed one.
+func fillStoredTravels(result model.TravelGraph, jobs []routeJob, stored map[string]model.Travel) {
+	for _, job := range jobs {
+		for _, slot := range job.slots {
+			travel, ok := stored[travelKey(slot.from.ID, slot.to.ID, enum.BIKE)]
+			if !ok {
+				result[slot.branchIndex][slot.legIndex] = model.Travel{
+					FromDestinationID: slot.from.ID,
+					ToDestinationID:   slot.to.ID,
+					Vehicle:           enum.BIKE,
+				}
+				continue
+			}
+			result[slot.branchIndex][slot.legIndex] = travel
+		}
+	}
+}
+
 func (s *ComputeTripService) ComputeTrip(ctx context.Context, tripID uuid.UUID, graph model.GraphBranch) (*model.TravelGraph, error) {
 	result, jobs := flattenRouteJobs(graph)
 	if len(jobs) == 0 {

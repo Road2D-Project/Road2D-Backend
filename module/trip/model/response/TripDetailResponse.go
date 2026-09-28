@@ -18,11 +18,12 @@ type TripDetailResponse struct {
 // the stops because an open-ended branch has no merge even though it still
 // has a last stop.
 type BranchResponse struct {
-	ID                     uuid.UUID      `json:"id" swaggertype:"string" format:"uuid"`
-	Label                  string         `json:"label"`
-	SplitFromDestinationID *uuid.UUID     `json:"splitFromDestinationId,omitempty" swaggertype:"string" format:"uuid"`
-	MergeToDestinationID   *uuid.UUID     `json:"mergeToDestinationId,omitempty" swaggertype:"string" format:"uuid"`
-	Stops                  []StopResponse `json:"stops"`
+	ID                     uuid.UUID         `json:"id" swaggertype:"string" format:"uuid"`
+	Label                  string            `json:"label"`
+	SplitFromDestinationID *uuid.UUID        `json:"splitFromDestinationId,omitempty" swaggertype:"string" format:"uuid"`
+	MergeToDestinationID   *uuid.UUID        `json:"mergeToDestinationId,omitempty" swaggertype:"string" format:"uuid"`
+	Stops                  []StopResponse    `json:"stops"`
+	Travels                []*TravelResponse `json:"travels,omitempty"`
 }
 
 // StopResponse is one ordered stop, reduced to what the client renders.
@@ -71,4 +72,31 @@ func stopResponse(stop *model.BranchDestination) StopResponse {
 		out.Lng = stop.Destination.Lng
 	}
 	return out
+}
+
+// AttachTravels sets branch.Travels[i] to the stored hop from stop i to stop i+1.
+// A nil entry is a hop that has not been computed. Branches keep their stop list.
+func AttachTravels(detail TripDetailResponse, graph *model.TravelGraph) TripDetailResponse {
+	if graph == nil {
+		return detail
+	}
+	for i := range detail.Branches {
+		if i >= len(*graph) {
+			break
+		}
+		row := (*graph)[i]
+		if len(row) == 0 {
+			continue
+		}
+		travels := make([]*TravelResponse, len(row))
+		for j, travel := range row {
+			if travel.ID == uuid.Nil {
+				continue
+			}
+			copied := travelResponseFrom(travel)
+			travels[j] = &copied
+		}
+		detail.Branches[i].Travels = travels
+	}
+	return detail
 }
