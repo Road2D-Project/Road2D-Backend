@@ -15,25 +15,27 @@ Covered work starts at `88a3f9c`.
 - [Preview one branch](#preview-one-branch)
 - [Compute the saved graph](#compute-the-saved-graph)
 - [Read the stored travels](#read-the-stored-travels)
+- [Draft inbox](#draft-inbox)
 - [Not built yet](#not-built-yet)
 
 ## How a ride is planned
 
 ```mermaid
 flowchart TD
-  create[Create trip] --> fork[Fork a location into a destination]
-  fork --> graph["PUT /trips/:id/graph"]
+  create[Create trip and its draft branch] --> fork[Fork a location into a destination]
+  fork --> draft["POST /trips/:id/draft"]
+  draft --> graph["PUT /trips/:id/graph"]
   graph --> preview["POST /trips/:id/compute"]
   preview --> look[Polyline only, trip unchanged]
   graph --> lock[Lock the trip]
   lock --> later[ComputeTrip reuses a frozen Travel]
 ```
 
-1. Create the trip and invite members.
-2. Fork a verified `Location` into a `Destination`. The pin keeps its own lat/lng.
-3. The leader calls `PUT /trips/:tripId/graph` while the trip is `planning`. The body is destination ids per branch, plus `openTail`. Any active member reads it back with `GET /trips/:tripId/graph`. Each branch has its stops and `travels`: `travels[i]` is the stored hop from `stops[i]` to `stops[i+1]`, or null when that hop has not been computed. A locked trip stays readable. `GET /trips/:tripId/travels` returns those same hops without the stop list.
+1. Create the trip and invite members. The same transaction inserts one draft branch (`IsDraft`, label `Draft`). That branch is an inbox. It is not a ride.
+2. Fork a verified `Location` into a `Destination`. The pin keeps its own lat/lng. `POST /trips/:tripId/draft` parks that pin on the inbox. The route graph does not change.
+3. The leader calls `PUT /trips/:tripId/graph` while the trip is `planning`. The body is destination ids per branch, plus `openTail`. That replace deletes only route branches (`is_draft = false`) and leaves the inbox. Any active member reads the route back with `GET /trips/:tripId/graph`. Each route branch has its stops and `travels`: `travels[i]` is the stored hop from `stops[i]` to `stops[i+1]`, or null when that hop has not been computed. A locked trip stays readable. `GET /trips/:tripId/travels` returns those same hops without the stop list. The draft branch is absent from both responses.
 4. Any active member calls `POST /trips/:tripId/compute` to preview one branch. That branch does not have to match the saved graph, and nothing is written onto the trip.
-5. The leader calls `POST /trips/:tripId/travels` while the trip is still `planning`. That routes the saved graph and upserts `travels`. `TripLocked` exists on the status enum. Nothing sets `Travel.IsFrozen` yet, so a locked trip cannot be recomputed and there is no freeze step.
+5. The leader calls `POST /trips/:tripId/travels` while the trip is still `planning`. That routes the saved route branches and upserts `travels`. The draft branch is left out. `TripLocked` exists on the status enum. Nothing sets `Travel.IsFrozen` yet, so a locked trip cannot be recomputed and there is no freeze step.
 
 Goong Trip is not used. That API is a single-vehicle TSP: it needs at least 10 points and it reorders stops. A branch already has an order, so each hop is one Directions call, vehicle `bike`.
 
@@ -41,9 +43,11 @@ Goong Trip is not used. That API is a single-vehicle TSP: it needs at least 10 p
 
 A `Location` is a verified place in the shared catalog (`place_id`, address, lat/lng). Seeding and place detail write it. Planning never updates it.
 
-A `Destination` is a pin on a ride. `PlaceService.ForkLocation` copies the location's name and coordinates onto a new pin, sets `LocationID`, and leaves the pin in `editing`. After the link is set, the pin's coordinates are a copy and are no longer editable. A destination has no `TripID`, so two trips can share one pin.
+A `Destination` is a pin. `PlaceService.ForkLocation` copies the location's name and coordinates onto a new pin, sets `LocationID`, and leaves the pin in `editing`. After the link is set, the pin's coordinates are a copy and are no longer editable. A destination has no `TripID` and no `GroupID`. The shared catalog is still `Location`. Membership in a trip is the branch that holds the pin.
 
-The saved graph stores destination ids only, through `TripBranch` and ordered `BranchDestination` rows. A location never sits on that graph. The preview endpoint is the one place that accepts either id, because a member may try a catalog place that has not been forked yet.
+The saved route stores destination ids only, through a route `TripBranch` and ordered `BranchDestination` rows. A location never sits on that graph. The preview endpoint is the one place that accepts either id, because a member may try a catalog place that has not been forked yet.
+
+Pins that are not on the ride yet sit on the trip's draft branch. `GET /trips/:tripId/draft` is how the UI lists them. Compute, the route graph, and stored travels never read that branch.
 
 ```text
 Location (catalog, shared)
@@ -51,9 +55,11 @@ Location (catalog, shared)
     ▼
 Destination (pin, no trip id)
     │ ordered by BranchDestination
-    ▼
-TripBranch → Trip
+    ├── draft TripBranch (IsDraft, hidden inbox) → Trip
+    └── route TripBranch (split / merge) → Trip
 ```
+
+`DELETE /planing/destination/:destinationId` follows where the pin sits. Only draft branches: delete the row, and the inbox stops cascade. Any route branch: the trip must still be `planning`, the stop is stripped, and the route is checked again. A locked trip that still has the pin on a route returns 409 and nothing is written. Disconnecting the route also writes nothing.
 
 ## Leg and travel
 
@@ -69,7 +75,7 @@ Handlers construct a service per request. The interfaces below are declared in t
 
 | Service | File | Does |
 | --- | --- | --- |
-| `TripBranchService` | `module/trip/service/TripBranchService.go` | Resolves destination ids, checks branch rules, replaces the trip's branches |
+| `TripBranchService` | `module/trip/service/TripBranchService.go` | Resolves destination ids, checks branch rules, replaces route branches, and lists or appends the draft inbox |
 | `PlaceService` | `module/trip/service/PlaceService.go` | Reads a location or destination, forks a location into a pin |
 | `ComputeTripService` | `module/trip/service/ComputeTripService.go` | `PreviewBranch` for one ad-hoc branch, `ComputeTrip` for a saved graph |
 | `DirectionService` | `module/maps/service/DirectionService.go` | One A→B route: cache, then Goong, then cache again |
@@ -175,7 +181,7 @@ Goong errors: missing API key is 500, rate limit is 429, an empty route or a non
 
 JWT, and the trip leader. No body. The trip must be `planning`; a locked trip returns 400 and is not recomputed.
 
-`ComputeStoredTrip` loads the branches with `FindTripWithBranches`, rebuilds a `GraphBranch` via `GraphFromTrip` (stops already ordered, a missing destination is an error), then calls `ComputeTrip`. The leg store on this path is `CachedLegStore`: Redis, then Postgres, then Goong. It is not the 15 minute preview cache.
+`ComputeStoredTrip` loads the branches with `FindTripWithBranches`, rebuilds a `GraphBranch` via `GraphFromTrip` (stops already ordered, a missing destination is an error), then calls `ComputeTrip`. `GraphFromTrip` skips every branch with `IsDraft`. A draft pin never becomes a hop. The leg store on this path is `CachedLegStore`: Redis, then Postgres, then Goong. It is not the 15 minute preview cache.
 
 The response is `branches`, one slice per saved branch. Each hop has the destination ids, optional `legId`, vehicle, polyline, distance, duration, `isFrozen`, and `lastComputedAt`. Reused rows keep the database id and the frozen flag. Fresh rows come from `travelFromLeg`: pin ids from the slot, metrics from the leg, `IsFrozen` false.
 
@@ -188,6 +194,20 @@ JWT, and an active member. Neither call routes or writes. A locked trip is reada
 `GET .../graph` is the screen payload: the trip, each branch's stops, and `travels` aligned to those stops. `travels[i]` is null when that pair has no stored row.
 
 `GET .../travels` is only the hops, one slice per branch, the same shape as the compute response. A hop that has not been computed keeps `fromDestinationId` and `toDestinationId` and an empty `id`. An expired unfrozen row is still returned; expiry only lets a later compute replace it. Rows whose pair is no longer on the saved graph are left out.
+
+Both reads use the same filter as compute. The draft branch is not a slice in either payload, so travel indexes stay aligned with the route branches that remain.
+
+## Draft inbox
+
+`GET /v1/trips/{tripId}/draft` and `POST /v1/trips/{tripId}/draft`
+
+The draft branch is created with the trip. `IsDraft` is the flag. The label `Draft` is only what the row displays. One trip has one inbox.
+
+`GET` returns `{ "destinations": [ ... ] }` in stop order: `destinationId`, `name`, `lat`, `lng`, `orderInBranch`. Any active member may call it, including after the trip leaves `planning`. A trip with no draft row returns an empty list.
+
+`POST` body is `{ "destinationId": "..." }`. Any active member may call it while the trip is `planning`. The pin must already exist. The call appends it and rewrites that one branch. Split and merge stay empty. A second copy of the same pin on the same inbox is rejected, because `idx_branch_dest` is unique per branch. This does not change the route graph or the stored travels.
+
+`PATCH` and `DELETE` on `/trips/{tripId}/branches/{branchId}/stops/{destinationId}` refuse a draft branch id. Removing an inbox pin is `DELETE /planing/destination/{destinationId}`.
 
 ## Not built yet
 

@@ -300,6 +300,14 @@ definitions:
       username:
         type: string
     type: object
+  request.AddDraftDestinationRequest:
+    properties:
+      destinationId:
+        format: uuid
+        type: string
+    required:
+    - destinationId
+    type: object
   request.ComputeBranchPoint:
     properties:
       destinationId:
@@ -318,6 +326,18 @@ definitions:
         type: array
     required:
     - points
+    type: object
+  request.ComputeTravelGraphRequest:
+    properties:
+      branches:
+        items:
+          items:
+            type: string
+          type: array
+        minItems: 1
+        type: array
+    required:
+    - branches
     type: object
   request.CreateGroupRequest:
     properties:
@@ -446,6 +466,14 @@ definitions:
     required:
     - branches
     - openTail
+    type: object
+  request.UpdateBranchStopRequest:
+    properties:
+      destinationId:
+        format: uuid
+        type: string
+      orderInBranch:
+        type: integer
     type: object
   request.UpdateDestinationRequest:
     properties:
@@ -603,10 +631,17 @@ definitions:
     properties:
       destinationId:
         type: string
-      locationId;omitempty:
+      locationId:
         type: string
-      placeId;omitempty:
+      placeId:
         type: string
+    type: object
+  response.DraftDestinationsResponse:
+    properties:
+      destinations:
+        items:
+          $ref: '#/definitions/response.StopResponse'
+        type: array
     type: object
   response.ForgetPasswordResponse:
     properties:
@@ -2090,6 +2125,45 @@ paths:
       tags:
       - groups
   /planing/destination/{destinationId}:
+    delete:
+      description: Deletes a destination that is still editing. A pin that sits only
+        on draft branches is removed immediately. A pin on a route branch is stripped
+        first; the delete is rejected when that would disconnect the graph or when
+        a trip that is no longer planning still uses the pin on a route. Travels that
+        pointed at the pin are removed with the row.
+      parameters:
+      - description: Destination UUID
+        format: uuid
+        in: path
+        name: destinationId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Destination deleted
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete destination
+      tags:
+      - planing
     get:
       description: Returns a destination. When locationId is set, lat/lng are locked
         to that location.
@@ -2426,6 +2500,119 @@ paths:
       summary: Update trip
       tags:
       - trips
+  /trips/{tripId}/branches/{branchId}/stops/{destinationId}:
+    delete:
+      description: Removes one destination from a saved branch and rewrites that branch's
+        stops. Split and merge follow the new ends. Only a leader can call this, and
+        only while the trip is planning. A removal that leaves the graph disconnected
+        is rejected and nothing is written.
+      parameters:
+      - description: Trip id
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      - description: Branch id
+        format: uuid
+        in: path
+        name: branchId
+        required: true
+        type: string
+      - description: Destination to remove from that branch
+        format: uuid
+        in: path
+        name: destinationId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TripDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a branch stop
+      tags:
+      - trips
+    patch:
+      consumes:
+      - application/json
+      description: Changes one stop on a saved branch. destinationId replaces the
+        pin. orderInBranch moves it within that branch, where 0 is the first stop.
+        At least one field is required. Split and merge are derived again from the
+        branch ends. Only a leader can call this, and only while the trip is planning.
+      parameters:
+      - description: Trip id
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      - description: Branch id
+        format: uuid
+        in: path
+        name: branchId
+        required: true
+        type: string
+      - description: Destination currently at that stop
+        format: uuid
+        in: path
+        name: destinationId
+        required: true
+        type: string
+      - description: Replacement pin and/or new order
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdateBranchStopRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TripDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a branch stop
+      tags:
+      - trips
   /trips/{tripId}/compute:
     post:
       consumes:
@@ -2485,6 +2672,94 @@ paths:
       security:
       - BearerAuth: []
       summary: Preview a branch route
+      tags:
+      - trips
+  /trips/{tripId}/draft:
+    get:
+      description: Returns every destination stored on the trip's hidden draft branch,
+        in inbox order. This branch is not routed and is omitted from GET /trips/{tripId}/graph
+        and GET /trips/{tripId}/travels. Any active member may call this.
+      parameters:
+      - description: Trip id
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.DraftDestinationsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List draft destinations
+      tags:
+      - trips
+    post:
+      consumes:
+      - application/json
+      description: Appends one destination to the trip's hidden draft branch. The
+        pin must already exist, usually from POST /planing/fork/{locationId}. Only
+        while the trip is planning. This does not change the route graph or the stored
+        travels.
+      parameters:
+      - description: Trip id
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      - description: Destination to park
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.AddDraftDestinationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.DraftDestinationsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Add a draft destination
       tags:
       - trips
   /trips/{tripId}/graph:
@@ -2749,6 +3024,67 @@ paths:
       security:
       - BearerAuth: []
       summary: Compute the saved trip graph
+      tags:
+      - trips
+  /trips/{tripId}/travels/graph:
+    post:
+      consumes:
+      - application/json
+      description: Route a graph sent as destination ids, one inner array per branch
+        in stop order, and upsert the travels. This does not replace the stored branches.
+        Only a leader can call this, and only while the trip is planning. POST /trips/{tripId}/travels
+        still routes whatever branches are already saved.
+      parameters:
+      - description: Trip id
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      - description: Branches of destination ids
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.ComputeTravelGraphRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.ComputeTripResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Compute travels from destination ids
       tags:
       - trips
   /trips/join/{token}:

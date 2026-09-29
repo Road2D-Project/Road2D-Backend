@@ -39,6 +39,10 @@ type StopResponse struct {
 func FromTripDetail(trip *model.Trip, role *enum.TripRole) TripDetailResponse {
 	branches := make([]BranchResponse, 0, len(trip.Branches))
 	for i := range trip.Branches {
+		// Draft pins are listed by GET /trips/{tripId}/draft, not drawn as a route.
+		if !trip.Branches[i].OnRoute() {
+			continue
+		}
 		branches = append(branches, branchResponse(&trip.Branches[i]))
 	}
 	return TripDetailResponse{

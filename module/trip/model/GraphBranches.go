@@ -19,8 +19,12 @@ func GraphFromTrip(trip *Trip) (GraphBranch, error) {
 	if trip == nil {
 		return nil, ErrNilTrip
 	}
-	graph := make(GraphBranch, len(trip.Branches))
+	graph := make(GraphBranch, 0, len(trip.Branches))
 	for i := range trip.Branches {
+		// The draft inbox is storage, not a ride. Routing it would turn loose pins into hops.
+		if !trip.Branches[i].OnRoute() {
+			continue
+		}
 		stops := trip.Branches[i].Stops
 		row := make([]Destination, len(stops))
 		for j := range stops {
@@ -29,7 +33,7 @@ func GraphFromTrip(trip *Trip) (GraphBranch, error) {
 			}
 			row[j] = *stops[j].Destination
 		}
-		graph[i] = row
+		graph = append(graph, row)
 	}
 	return graph, nil
 }

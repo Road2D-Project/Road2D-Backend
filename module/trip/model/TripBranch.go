@@ -7,24 +7,49 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	// DraftBranchLabel is the display name of the hidden inbox branch.
+	// Code decides what is a draft from IsDraft, not from this string.
+	DraftBranchLabel = "Draft"
+)
+
 var (
 	ErrNilDestination = errors.New("nil destination")
 )
 
 type TripBranch struct {
 	utils.Base
-	TripID                 uuid.UUID           `json:"tripId" gorm:"type:uuid;index;not null"`
-	Trip                   *Trip               `json:"-" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
-	SplitFromDestinationID *uuid.UUID          `json:"splitFromDestinationId,omitempty" gorm:"type:uuid;index"`
-	SplitFrom              *Destination        `json:"splitFrom,omitempty" gorm:"foreignKey:SplitFromDestinationID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
-	MergeToDestinationID   *uuid.UUID          `json:"mergeToDestinationId,omitempty" gorm:"type:uuid;index"`
-	MergeTo                *Destination        `json:"mergeTo,omitempty" gorm:"foreignKey:MergeToDestinationID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
-	Label                  string              `json:"label" gorm:"column:label;type:varchar(255)"`
-	Stops                  []BranchDestination `json:"stops,omitempty" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	TripID                 uuid.UUID    `json:"tripId" gorm:"type:uuid;index;not null"`
+	Trip                   *Trip        `json:"-" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	SplitFromDestinationID *uuid.UUID   `json:"splitFromDestinationId,omitempty" gorm:"type:uuid;index"`
+	SplitFrom              *Destination `json:"splitFrom,omitempty" gorm:"foreignKey:SplitFromDestinationID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
+	MergeToDestinationID   *uuid.UUID   `json:"mergeToDestinationId,omitempty" gorm:"type:uuid;index"`
+	MergeTo                *Destination `json:"mergeTo,omitempty" gorm:"foreignKey:MergeToDestinationID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
+	Label                  string       `json:"label" gorm:"column:label;type:varchar(255)"`
+	// IsDraft marks the inbox that holds pins before they are placed on the route.
+	// Compute, stored travels, and the route graph skip this branch.
+	IsDraft bool                `json:"isDraft" gorm:"column:is_draft;not null;default:false"`
+	Stops   []BranchDestination `json:"stops,omitempty" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
 func (TripBranch) TableName() string {
 	return "trip_branches"
+}
+
+// OnRoute reports whether this branch is part of the ride.
+// The draft inbox is stored on the trip but is not a route branch.
+func (branch *TripBranch) OnRoute() bool {
+	return branch != nil && !branch.IsDraft
+}
+
+// NewDraftBranch is the empty inbox created with a trip.
+func NewDraftBranch(tripID uuid.UUID) *TripBranch {
+	return &TripBranch{
+		TripID:  tripID,
+		Label:   DraftBranchLabel,
+		IsDraft: true,
+		Stops:   []BranchDestination{},
+	}
 }
 
 func (branch *TripBranch) IsSubBranch() bool {

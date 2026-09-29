@@ -41,9 +41,12 @@ type LocationPointFinder interface {
 	FindLocationById(ctx context.Context, locationId uuid.UUID) (*model.Location, error)
 }
 
-// TripWithBranchesFinder loads the saved graph, stops in travel order, destinations included.
+// TripWithBranchesFinder loads the saved graph and the destination rows a
+// request names. ComputeStoredTrip uses the saved graph. ComputeTravelGraph
+// uses the ids in the request and only reads the trip to confirm it is still planning.
 type TripWithBranchesFinder interface {
 	FindTripWithBranches(ctx context.Context, id uuid.UUID) (*model.Trip, error)
+	FindDestinationsByIDs(ctx context.Context, ids []uuid.UUID) ([]model.Destination, error)
 }
 
 type ComputeTripService struct {

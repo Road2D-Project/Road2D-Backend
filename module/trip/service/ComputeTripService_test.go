@@ -539,8 +539,9 @@ func TestPreviewBranchRejectsAmbiguousPoint(t *testing.T) {
 }
 
 type stubTripGraphs struct {
-	trip *model.Trip
-	err  error
+	trip         *model.Trip
+	err          error
+	destinations map[uuid.UUID]model.Destination
 }
 
 func (s *stubTripGraphs) FindTripWithBranches(context.Context, uuid.UUID) (*model.Trip, error) {
@@ -548,6 +549,16 @@ func (s *stubTripGraphs) FindTripWithBranches(context.Context, uuid.UUID) (*mode
 		return nil, s.err
 	}
 	return s.trip, nil
+}
+
+func (s *stubTripGraphs) FindDestinationsByIDs(_ context.Context, ids []uuid.UUID) ([]model.Destination, error) {
+	out := make([]model.Destination, 0, len(ids))
+	for _, id := range ids {
+		if d, ok := s.destinations[id]; ok {
+			out = append(out, d)
+		}
+	}
+	return out, nil
 }
 
 func plannedTrip(stops ...model.Destination) *model.Trip {

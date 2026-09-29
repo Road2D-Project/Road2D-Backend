@@ -110,6 +110,18 @@ func (s *stubTripRecords) FindTripWithBranches(context.Context, uuid.UUID) (*mod
 	return nil, repository.ErrTripNotFound
 }
 
+func (s *stubTripRecords) UpdateBranchStops(context.Context, model.TripBranch) error {
+	return nil
+}
+
+func (s *stubTripRecords) ListTripIDsByDestination(context.Context, uuid.UUID) ([]uuid.UUID, error) {
+	return []uuid.UUID{}, nil
+}
+
+func (s *stubTripRecords) DeleteDestination(context.Context, uuid.UUID) error {
+	return nil
+}
+
 type stubGroups struct {
 	byID map[uuid.UUID]*groupModel.Group
 }

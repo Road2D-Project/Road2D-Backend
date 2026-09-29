@@ -63,10 +63,11 @@ func Run() error {
 	authMw := middleware.NewAuthenticationMiddleware(
 		authenRepo.NewCacheUserRepository(dbConfig.GetDatabase(), redisConfig.Client()),
 	)
+	responseCacheMw := middleware.NewResponseCache(redisConfig.Client())
 	routerRegistrars := []share.RouterRegistrar{
 		authenController.NewAuthenticationController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator),
 		groupController.NewGroupController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw),
-		tripController.NewTripController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw),
+		tripController.NewTripController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw, responseCacheMw),
 	}
 	for _, r := range routerRegistrars {
 		r.RegisterRoutes(v1)

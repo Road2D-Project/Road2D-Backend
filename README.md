@@ -15,7 +15,8 @@ Consumer maps optimize a single rider on one line. Live-location apps only show 
 
 ```text
 Trip
- └── TripBranch  (splitFrom / mergeTo Destination)
+ ├── TripBranch draft (IsDraft, hidden inbox of Destination pins)
+ └── TripBranch route (splitFrom / mergeTo Destination)
       └── BranchDestination (order) → Destination → Location?
 Leg  (A→B by coordinates, Redis then Postgres)
 Travel (one trip's snapshot of a leg; frozen rows are history)
@@ -33,12 +34,15 @@ Travel (one trip's snapshot of a leg; frozen rows are history)
   - [Preview one branch](docs/trip-route.md#preview-one-branch)
   - [Compute the saved graph](docs/trip-route.md#compute-the-saved-graph) — `POST /trips/:tripId/travels`
   - [Read the stored travels](docs/trip-route.md#read-the-stored-travels) — `GET /trips/:tripId/graph`, `GET /trips/:tripId/travels`
+  - [Draft inbox](docs/trip-route.md#draft-inbox) — `GET` and `POST /trips/:tripId/draft`
 
 Goong stands in for Google Maps Platform in Vietnam. Directions default to `bike`. Goong Trip is a single-vehicle TSP, not the product branch graph.
 
 ### Trip graph input: `GraphBranch`
 
-The client sends the graph through `PUT /trips/:tripId/graph` as destination ids (`SetTripGraphRequest.Branches`, a `[][]uuid`) plus an `openTail` flag per branch. `GET /trips/:tripId/graph` returns that graph for any active member, including after the trip leaves `planning`. Each branch lists its stops and the stored travels between them; a missing hop is null. `GET /trips/:tripId/travels` returns only those stored hops and does not recompute. The service resolves those ids to `Destination` rows and `BuildTripBranches` (`module/trip/model/GraphBranches.go`) turns the resolved `GraphBranch` (`[][]Destination`) into `TripBranch` + `BranchDestination` rows. The write response is a `TripDetailResponse`: the trip plus its branches with the audit columns dropped.
+The client sends the graph through `PUT /trips/:tripId/graph` as destination ids (`SetTripGraphRequest.Branches`, a `[][]uuid`) plus an `openTail` flag per branch. `GET /trips/:tripId/graph` returns that route for any active member, including after the trip leaves `planning`. Each route branch lists its stops and the stored travels between them; a missing hop is null. `GET /trips/:tripId/travels` returns only those stored hops and does not recompute. The service resolves those ids to `Destination` rows and `BuildTripBranches` (`module/trip/model/GraphBranches.go`) turns the resolved `GraphBranch` (`[][]Destination`) into `TripBranch` + `BranchDestination` rows. The write response is a `TripDetailResponse`: the trip plus its route branches with the audit columns dropped.
+
+Creating a trip also inserts one **draft** branch (`IsDraft`, label `Draft`). It is an inbox for pins that are not on the ride yet. Compute, `GET .../graph`, and `GET .../travels` skip it. Replacing the route graph does not delete it. `GET /trips/:tripId/draft` lists those pins; `POST /trips/:tripId/draft` appends one that already exists. Deleting a destination that sits only on draft branches removes the row immediately. A destination that also sits on a route branch still goes through the route-graph checks.
 
 Rules:
 

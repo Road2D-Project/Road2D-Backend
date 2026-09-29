@@ -15,6 +15,9 @@ type TripBranchRecordRepository interface {
 	FindDestinationsByIDs(ctx context.Context, ids []uuid.UUID) ([]model.Destination, error)
 	ReplaceTripBranches(ctx context.Context, tripID uuid.UUID, branches []model.TripBranch) error
 	FindTripWithBranches(ctx context.Context, id uuid.UUID) (*model.Trip, error)
+	UpdateBranchStops(ctx context.Context, branch model.TripBranch) error
+	ListTripIDsByDestination(ctx context.Context, destinationID uuid.UUID) ([]uuid.UUID, error)
+	DeleteDestination(ctx context.Context, destinationID uuid.UUID) error
 }
 type TripFinderRepository interface {
 	FindTripByID(ctx context.Context, id uuid.UUID) (*model.Trip, error)
@@ -48,21 +51,9 @@ func (s *TripBranchService) SetTripGraph(ctx context.Context, tripID uuid.UUID, 
 	if err != nil {
 		return nil, err
 	}
-	byID := make(map[uuid.UUID]model.Destination, len(destinations))
-	for _, d := range destinations {
-		byID[d.ID] = d
-	}
-	graph := make(model.GraphBranch, len(req.Branches))
-	for i, branch := range req.Branches {
-		resolved := make([]model.Destination, len(branch))
-		for j, id := range branch {
-			d, ok := byID[id]
-			if !ok {
-				return nil, repository.ErrDestinationNotFound
-			}
-			resolved[j] = d
-		}
-		graph[i] = resolved
+	graph, err := resolveGraph(req.Branches, destinations)
+	if err != nil {
+		return nil, err
 	}
 
 	branches, err := model.BuildTripBranches(trip, graph, req.OpenTail)
@@ -72,18 +63,17 @@ func (s *TripBranchService) SetTripGraph(ctx context.Context, tripID uuid.UUID, 
 	if err := s.branches.ReplaceTripBranches(ctx, tripID, branches); err != nil {
 		return nil, err
 	}
-	stored, err := s.branches.FindTripWithBranches(ctx, tripID)
-	if err != nil {
-		return nil, err
-	}
-	detail := response.FromTripDetail(stored, response.RolePtr(myRole))
-	return &detail, nil
+	return s.reloadGraph(ctx, tripID, myRole)
 }
 
 // GetTripGraph returns the trip and the branches already stored for it.
 // A trip that has not been given a graph yet still returns, with an empty branch list.
 // Locked trips stay readable; only writing the graph is limited to planning.
 func (s *TripBranchService) GetTripGraph(ctx context.Context, tripID uuid.UUID, myRole enum.TripRole) (*response.TripDetailResponse, error) {
+	return s.reloadGraph(ctx, tripID, myRole)
+}
+
+func (s *TripBranchService) reloadGraph(ctx context.Context, tripID uuid.UUID, myRole enum.TripRole) (*response.TripDetailResponse, error) {
 	stored, err := s.branches.FindTripWithBranches(ctx, tripID)
 	if err != nil {
 		return nil, err
@@ -115,6 +105,28 @@ func validateGraphShape(req request.SetTripGraphRequest) error {
 		}
 	}
 	return nil
+}
+
+// resolveGraph turns destination ids into the branch rows ComputeTrip and
+// BuildTripBranches walk. A missing id is an unknown pin, not an empty stop.
+func resolveGraph(branches [][]uuid.UUID, destinations []model.Destination) (model.GraphBranch, error) {
+	byID := make(map[uuid.UUID]model.Destination, len(destinations))
+	for _, d := range destinations {
+		byID[d.ID] = d
+	}
+	graph := make(model.GraphBranch, len(branches))
+	for i, branch := range branches {
+		resolved := make([]model.Destination, len(branch))
+		for j, id := range branch {
+			d, ok := byID[id]
+			if !ok {
+				return nil, repository.ErrDestinationNotFound
+			}
+			resolved[j] = d
+		}
+		graph[i] = resolved
+	}
+	return graph, nil
 }
 
 // referencedDestinationIDs collects each destination id once, in first-seen

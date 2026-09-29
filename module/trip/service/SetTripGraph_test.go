@@ -16,9 +16,12 @@ import (
 // graphRecords extends the shared trip stub with the three graph operations.
 type graphRecords struct {
 	stubTripRecords
-	destinations map[uuid.UUID]model.Destination
-	replaced     []model.TripBranch
-	withBranches *model.Trip
+	destinations       map[uuid.UUID]model.Destination
+	replaced           []model.TripBranch
+	withBranches       *model.Trip
+	updated            []model.TripBranch
+	tripsByDestination map[uuid.UUID][]uuid.UUID
+	deleted            []uuid.UUID
 }
 
 func (g *graphRecords) FindDestinationsByIDs(_ context.Context, ids []uuid.UUID) ([]model.Destination, error) {
@@ -41,6 +44,49 @@ func (g *graphRecords) FindTripWithBranches(context.Context, uuid.UUID) (*model.
 		return nil, repository.ErrTripNotFound
 	}
 	return g.withBranches, nil
+}
+
+func (g *graphRecords) ListTripIDsByDestination(_ context.Context, destinationID uuid.UUID) ([]uuid.UUID, error) {
+	if g.tripsByDestination == nil {
+		return []uuid.UUID{}, nil
+	}
+	ids := g.tripsByDestination[destinationID]
+	if ids == nil {
+		return []uuid.UUID{}, nil
+	}
+	return ids, nil
+}
+
+func (g *graphRecords) DeleteDestination(_ context.Context, destinationID uuid.UUID) error {
+	if _, ok := g.destinations[destinationID]; !ok {
+		return repository.ErrDestinationNotFound
+	}
+	delete(g.destinations, destinationID)
+	g.deleted = append(g.deleted, destinationID)
+	return nil
+}
+
+func (g *graphRecords) UpdateBranchStops(_ context.Context, branch model.TripBranch) error {
+	g.updated = append(g.updated, branch)
+	if g.withBranches == nil {
+		return nil
+	}
+	for i := range g.withBranches.Branches {
+		if g.withBranches.Branches[i].ID != branch.ID {
+			continue
+		}
+		g.withBranches.Branches[i].SplitFromDestinationID = branch.SplitFromDestinationID
+		g.withBranches.Branches[i].MergeToDestinationID = branch.MergeToDestinationID
+		g.withBranches.Branches[i].Stops = branch.Stops
+		for j := range g.withBranches.Branches[i].Stops {
+			id := g.withBranches.Branches[i].Stops[j].DestinationID
+			if d, ok := g.destinations[id]; ok {
+				copied := d
+				g.withBranches.Branches[i].Stops[j].Destination = &copied
+			}
+		}
+	}
+	return nil
 }
 
 func planningTrip(id uuid.UUID) *model.Trip {

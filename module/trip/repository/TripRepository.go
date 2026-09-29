@@ -36,7 +36,11 @@ func (r *TripRepository) CreateTripWithMembers(ctx context.Context, trip *model.
 		if len(members) == 0 {
 			return ErrUserNotTripMember
 		}
-		return tx.Create(&members).Error
+		if err := tx.Create(&members).Error; err != nil {
+			return err
+		}
+		// Every trip starts with an empty draft inbox. The route graph is added later.
+		return tx.Create(model.NewDraftBranch(trip.ID)).Error
 	})
 }
 

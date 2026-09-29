@@ -111,16 +111,20 @@ func mapTripError(c *gin.Context, err error) {
 		errors.Is(err, repository.ErrGroupNotFound),
 		errors.Is(err, repository.ErrInviteNotFound),
 		errors.Is(err, repository.ErrDestinationNotFound),
-		errors.Is(err, repository.ErrLocationNotFound):
+		errors.Is(err, repository.ErrLocationNotFound),
+		errors.Is(err, repository.ErrBranchNotFound),
+		errors.Is(err, repository.ErrBranchStopNotFound):
 		jsonError(c, http.StatusNotFound, err.Error())
 	case errors.Is(err, repository.ErrAlreadyTripMember),
 		errors.Is(err, repository.ErrNoSuccessorToTransfer),
-		errors.Is(err, repository.ErrDestinationNotEditing):
+		errors.Is(err, repository.ErrDestinationNotEditing),
+		errors.Is(err, repository.ErrDestinationInUse):
 		jsonError(c, http.StatusConflict, err.Error())
 	case errors.Is(err, repository.ErrUserNotTripMember),
 		errors.Is(err, repository.ErrUserNotGroupMember):
 		jsonError(c, http.StatusForbidden, err.Error())
-	case errors.Is(err, repository.ErrNoTripUpdate):
+	case errors.Is(err, repository.ErrNoTripUpdate),
+		errors.Is(err, repository.ErrNoBranchStopUpdate):
 		jsonError(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, repository.ErrInternalServerError),
 		errors.Is(err, mapsclient.ErrMissingAPIKey):
@@ -146,6 +150,10 @@ func parseLocationID(c *gin.Context) (uuid.UUID, bool) {
 
 func parseDestinationID(c *gin.Context) (uuid.UUID, bool) {
 	return parsePathID(c, "destinationId")
+}
+
+func parseBranchID(c *gin.Context) (uuid.UUID, bool) {
+	return parsePathID(c, "branchId")
 }
 
 func parsePathID(c *gin.Context, name string) (uuid.UUID, bool) {
