@@ -551,6 +551,10 @@ definitions:
         items:
           $ref: '#/definitions/response.StopResponse'
         type: array
+      travels:
+        items:
+          $ref: '#/definitions/response.TravelResponse'
+        type: array
     type: object
   response.ComputeBranchLeg:
     properties:
@@ -585,6 +589,15 @@ definitions:
         type: string
       name:
         type: string
+    type: object
+  response.ComputeTripResponse:
+    properties:
+      branches:
+        items:
+          items:
+            $ref: '#/definitions/response.TravelResponse'
+          type: array
+        type: array
     type: object
   response.CreateDestinationResponse:
     properties:
@@ -894,6 +907,34 @@ definitions:
         items:
           $ref: '#/definitions/response.MatchedSubstring'
         type: array
+    type: object
+  response.TravelResponse:
+    properties:
+      distanceM:
+        type: number
+      durationS:
+        type: number
+      fromDestinationId:
+        format: uuid
+        type: string
+      id:
+        format: uuid
+        type: string
+      isFrozen:
+        type: boolean
+      lastComputedAt:
+        type: string
+      legId:
+        format: uuid
+        type: string
+      polyline:
+        type: string
+      toDestinationId:
+        format: uuid
+        type: string
+      vehicle:
+        example: bike
+        type: string
     type: object
   response.TripDetailResponse:
     properties:
@@ -2447,6 +2488,46 @@ paths:
       tags:
       - trips
   /trips/{tripId}/graph:
+    get:
+      description: Returns the trip, its saved branches, and the travels already stored
+        on each branch. travels[i] is the hop from stops[i] to stops[i+1]; null means
+        that hop has not been computed. Any active member may call this, whether the
+        trip is planning or locked. This does not recompute routes.
+      parameters:
+      - description: Trip id
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TripDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get trip graph
+      tags:
+      - trips
     put:
       consumes:
       - application/json
@@ -2574,6 +2655,100 @@ paths:
       security:
       - BearerAuth: []
       summary: Leave trip
+      tags:
+      - trips
+  /trips/{tripId}/travels:
+    get:
+      description: Returns the travels already stored for the saved branches, one
+        slice per branch, in stop order. A hop that has not been computed keeps its
+        destination ids and an empty id. Any active member may call this, whether
+        the trip is planning or locked. This does not call the map provider and does
+        not write. POST /trips/{tripId}/travels is the call that computes.
+      parameters:
+      - description: Trip id
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.ComputeTripResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get stored travels
+      tags:
+      - trips
+    post:
+      description: Route every consecutive pair on the trip's stored branches and
+        upsert the travels. Only a leader can call this, and only while the trip is
+        planning. Reused frozen rows are not rewritten. This is not the preview at
+        POST /trips/{tripId}/compute.
+      parameters:
+      - description: Trip id
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.ComputeTripResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Compute the saved trip graph
       tags:
       - trips
   /trips/join/{token}:

@@ -32,12 +32,13 @@ Travel (one trip's snapshot of a leg; frozen rows are history)
   - [Storage tiers](docs/trip-route.md#storage-tiers)
   - [Preview one branch](docs/trip-route.md#preview-one-branch)
   - [Compute the saved graph](docs/trip-route.md#compute-the-saved-graph) — `POST /trips/:tripId/travels`
+  - [Read the stored travels](docs/trip-route.md#read-the-stored-travels) — `GET /trips/:tripId/graph`, `GET /trips/:tripId/travels`
 
 Goong stands in for Google Maps Platform in Vietnam. Directions default to `bike`. Goong Trip is a single-vehicle TSP, not the product branch graph.
 
 ### Trip graph input: `GraphBranch`
 
-The client sends the graph through `PUT /trips/:tripId/graph` as destination ids (`SetTripGraphRequest.Branches`, a `[][]uuid`) plus an `openTail` flag per branch. The service resolves those ids to `Destination` rows and `BuildTripBranches` (`module/trip/model/GraphBranches.go`) turns the resolved `GraphBranch` (`[][]Destination`) into `TripBranch` + `BranchDestination` rows. The response is a `TripDetailResponse`: the trip plus its branches with the audit columns dropped.
+The client sends the graph through `PUT /trips/:tripId/graph` as destination ids (`SetTripGraphRequest.Branches`, a `[][]uuid`) plus an `openTail` flag per branch. `GET /trips/:tripId/graph` returns that graph for any active member, including after the trip leaves `planning`. Each branch lists its stops and the stored travels between them; a missing hop is null. `GET /trips/:tripId/travels` returns only those stored hops and does not recompute. The service resolves those ids to `Destination` rows and `BuildTripBranches` (`module/trip/model/GraphBranches.go`) turns the resolved `GraphBranch` (`[][]Destination`) into `TripBranch` + `BranchDestination` rows. The write response is a `TripDetailResponse`: the trip plus its branches with the audit columns dropped.
 
 Rules:
 

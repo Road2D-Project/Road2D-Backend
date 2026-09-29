@@ -14,6 +14,7 @@ Covered work starts at `88a3f9c`.
 - [Storage tiers](#storage-tiers)
 - [Preview one branch](#preview-one-branch)
 - [Compute the saved graph](#compute-the-saved-graph)
+- [Read the stored travels](#read-the-stored-travels)
 - [Not built yet](#not-built-yet)
 
 ## How a ride is planned
@@ -30,7 +31,7 @@ flowchart TD
 
 1. Create the trip and invite members.
 2. Fork a verified `Location` into a `Destination`. The pin keeps its own lat/lng.
-3. The leader calls `PUT /trips/:tripId/graph` while the trip is `planning`. The body is destination ids per branch, plus `openTail`.
+3. The leader calls `PUT /trips/:tripId/graph` while the trip is `planning`. The body is destination ids per branch, plus `openTail`. Any active member reads it back with `GET /trips/:tripId/graph`. Each branch has its stops and `travels`: `travels[i]` is the stored hop from `stops[i]` to `stops[i+1]`, or null when that hop has not been computed. A locked trip stays readable. `GET /trips/:tripId/travels` returns those same hops without the stop list.
 4. Any active member calls `POST /trips/:tripId/compute` to preview one branch. That branch does not have to match the saved graph, and nothing is written onto the trip.
 5. The leader calls `POST /trips/:tripId/travels` while the trip is still `planning`. That routes the saved graph and upserts `travels`. `TripLocked` exists on the status enum. Nothing sets `Travel.IsFrozen` yet, so a locked trip cannot be recomputed and there is no freeze step.
 
@@ -177,6 +178,16 @@ JWT, and the trip leader. No body. The trip must be `planning`; a locked trip re
 `ComputeStoredTrip` loads the branches with `FindTripWithBranches`, rebuilds a `GraphBranch` via `GraphFromTrip` (stops already ordered, a missing destination is an error), then calls `ComputeTrip`. The leg store on this path is `CachedLegStore`: Redis, then Postgres, then Goong. It is not the 15 minute preview cache.
 
 The response is `branches`, one slice per saved branch. Each hop has the destination ids, optional `legId`, vehicle, polyline, distance, duration, `isFrozen`, and `lastComputedAt`. Reused rows keep the database id and the frozen flag. Fresh rows come from `travelFromLeg`: pin ids from the slot, metrics from the leg, `IsFrozen` false.
+
+## Read the stored travels
+
+`GET /v1/trips/{tripId}/graph` and `GET /v1/trips/{tripId}/travels`
+
+JWT, and an active member. Neither call routes or writes. A locked trip is readable.
+
+`GET .../graph` is the screen payload: the trip, each branch's stops, and `travels` aligned to those stops. `travels[i]` is null when that pair has no stored row.
+
+`GET .../travels` is only the hops, one slice per branch, the same shape as the compute response. A hop that has not been computed keeps `fromDestinationId` and `toDestinationId` and an empty `id`. An expired unfrozen row is still returned; expiry only lets a later compute replace it. Rows whose pair is no longer on the saved graph are left out.
 
 ## Not built yet
 

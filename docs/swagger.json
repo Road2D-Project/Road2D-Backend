@@ -2270,6 +2270,63 @@
             }
         },
         "/trips/{tripId}/graph": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the trip, its saved branches, and the travels already stored on each branch. travels[i] is the hop from stops[i] to stops[i+1]; null means that hop has not been computed. Any active member may call this, whether the trip is planning or locked. This does not recompute routes.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Get trip graph",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Trip id",
+                        "name": "tripId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.TripDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            },
             "put": {
                 "security": [
                     {
@@ -2454,6 +2511,140 @@
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/trips/{tripId}/travels": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the travels already stored for the saved branches, one slice per branch, in stop order. A hop that has not been computed keeps its destination ids and an empty id. Any active member may call this, whether the trip is planning or locked. This does not call the map provider and does not write. POST /trips/{tripId}/travels is the call that computes.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Get stored travels",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Trip id",
+                        "name": "tripId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.ComputeTripResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Route every consecutive pair on the trip's stored branches and upsert the travels. Only a leader can call this, and only while the trip is planning. Reused frozen rows are not rewritten. This is not the preview at POST /trips/{tripId}/compute.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Compute the saved trip graph",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Trip id",
+                        "name": "tripId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.ComputeTripResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
                         "schema": {
                             "$ref": "#/definitions/share.ErrorResponse"
                         }
@@ -3276,6 +3467,12 @@
                     "items": {
                         "$ref": "#/definitions/response.StopResponse"
                     }
+                },
+                "travels": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.TravelResponse"
+                    }
                 }
             }
         },
@@ -3327,6 +3524,20 @@
                 },
                 "name": {
                     "type": "string"
+                }
+            }
+        },
+        "response.ComputeTripResponse": {
+            "type": "object",
+            "properties": {
+                "branches": {
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/definitions/response.TravelResponse"
+                        }
+                    }
                 }
             }
         },
@@ -3798,6 +4009,46 @@
                     "items": {
                         "$ref": "#/definitions/response.MatchedSubstring"
                     }
+                }
+            }
+        },
+        "response.TravelResponse": {
+            "type": "object",
+            "properties": {
+                "distanceM": {
+                    "type": "number"
+                },
+                "durationS": {
+                    "type": "number"
+                },
+                "fromDestinationId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "isFrozen": {
+                    "type": "boolean"
+                },
+                "lastComputedAt": {
+                    "type": "string"
+                },
+                "legId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "polyline": {
+                    "type": "string"
+                },
+                "toDestinationId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "vehicle": {
+                    "type": "string",
+                    "example": "bike"
                 }
             }
         },
