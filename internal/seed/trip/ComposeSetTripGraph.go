@@ -11,6 +11,18 @@ import (
 	"gorm.io/gorm"
 )
 
+// ComposeMainBranch is one route branch, in the order of the destination ids.
+// Those ids are the pins just forked from location ids, not a later name lookup.
+func ComposeMainBranch(destinationIDs []uuid.UUID) (request.SetTripGraphRequest, error) {
+	if len(destinationIDs) == 0 {
+		return request.SetTripGraphRequest{}, errors.New("no destinations to place on the main branch")
+	}
+	return request.SetTripGraphRequest{
+		Branches: [][]uuid.UUID{destinationIDs},
+		OpenTail: []bool{false},
+	}, nil
+}
+
 // ComposeSetTripGraph builds one main branch from destination names.
 // names[i] must be the name stored when that pin was forked. The lookup uses the name,
 // not the id returned by fork, and the slice index is the stop order.

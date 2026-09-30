@@ -10,10 +10,10 @@ import (
 
 var _ = response.TripResponse{}
 
-// HandleUpdateTrip applies the leader's patch to name, note, and/or times.
+// HandleUpdateTrip applies a leader or admin patch to name, note, times, and visibility.
 //
 // @Summary      Update trip
-// @Description  Leader only. Change name, note, startTime, and/or endTime. Send only the fields to change. Status is not updated here.
+// @Description  Leader or admin. Change name, note, startTime, endTime, and/or visibility. Trip type and member limit are not accepted. Status is not updated here.
 // @Tags         trips
 // @Accept       json
 // @Produce      json

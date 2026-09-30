@@ -25,7 +25,7 @@ func NewTripRepository(db *gorm.DB) *TripRepository {
 	return &TripRepository{db: db}
 }
 
-func (r *TripRepository) CreateTripWithMembers(ctx context.Context, trip *model.Trip, members []model.TripMember) error {
+func (r *TripRepository) CreateTripWithMembers(ctx context.Context, trip *model.Trip, members []model.TripMember, main *model.InitialMainBranch) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(trip).Error; err != nil {
 			return err
@@ -39,9 +39,47 @@ func (r *TripRepository) CreateTripWithMembers(ctx context.Context, trip *model.
 		if err := tx.Create(&members).Error; err != nil {
 			return err
 		}
-		// Every trip starts with an empty draft inbox. The route graph is added later.
-		return tx.Create(model.NewDraftBranch(trip.ID)).Error
+		// Every trip starts with an empty draft inbox. A reviewed main branch is optional.
+		if err := tx.Create(model.NewDraftBranch(trip.ID)).Error; err != nil {
+			return err
+		}
+		return insertInitialMainBranch(tx, trip, main)
 	})
+}
+
+// insertInitialMainBranch forks the reviewed pins onto one main branch and
+// stores the hops the caller already reviewed. A nil branch leaves only the draft.
+func insertInitialMainBranch(tx *gorm.DB, trip *model.Trip, main *model.InitialMainBranch) error {
+	if main == nil {
+		return nil
+	}
+	if err := tx.Omit("Location").Create(&main.Destinations).Error; err != nil {
+		return err
+	}
+	built, err := model.BuildTripBranches(trip, model.GraphBranch{main.Destinations}, []bool{false})
+	if err != nil {
+		return err
+	}
+	branch := built[0]
+	branch.ID = uuid.New()
+	branch.Trip = nil
+	branch.SplitFrom = nil
+	branch.MergeTo = nil
+	for i := range branch.Stops {
+		branch.Stops[i].TripBranchID = branch.ID
+		branch.Stops[i].Destination = nil
+		branch.Stops[i].TripBranch = nil
+	}
+	if err := tx.Omit("Trip", "SplitFrom", "MergeTo", "Stops.Destination", "Stops.TripBranch").Create(&branch).Error; err != nil {
+		return err
+	}
+	if len(main.Travels) == 0 {
+		return nil
+	}
+	for i := range main.Travels {
+		main.Travels[i].TripID = trip.ID
+	}
+	return tx.Omit("Trip", "FromDestination", "ToDestination", "Leg").Create(&main.Travels).Error
 }
 
 func (r *TripRepository) FindTripByID(ctx context.Context, id uuid.UUID) (*model.Trip, error) {
@@ -102,6 +140,22 @@ func (r *TripRepository) DeleteTrip(ctx context.Context, id uuid.UUID) error {
 		return ErrTripNotFound
 	}
 	return nil
+}
+
+func (r *TripRepository) ListPublicTrips(ctx context.Context, limit int) ([]model.Trip, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	var trips []model.Trip
+	err := r.db.WithContext(ctx).
+		Where("visibility = ?", true).
+		Order("updated_at DESC").
+		Limit(limit).
+		Find(&trips).Error
+	if err != nil {
+		return nil, err
+	}
+	return trips, nil
 }
 
 func (r *TripRepository) ListActiveTripByUser(ctx context.Context, userID uuid.UUID) ([]ActiveTripByUser, error) {

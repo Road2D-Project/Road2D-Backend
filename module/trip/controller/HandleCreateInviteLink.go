@@ -13,7 +13,7 @@ var _ = response.TripInviteLinkResponse{}
 // mint a new token so previous links stop working.
 //
 // @Summary      Create trip invite link
-// @Description  Leader only. Returns the current invite token and join path. Set rotate=true to invalidate the previous link.
+// @Description  Leader or admin. Returns the current invite token and join path. Set rotate=true to invalidate the previous link.
 // @Tags         trips
 // @Produce      json
 // @Security     BearerAuth

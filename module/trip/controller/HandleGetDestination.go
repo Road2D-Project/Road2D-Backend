@@ -13,7 +13,7 @@ var _ = model.Destination{}
 //
 // @Summary      Get destination
 // @Description  Returns a destination. When locationId is set, lat/lng are locked to that location.
-// @Tags         planing
+// @Tags         planning
 // @Produce      json
 // @Security     BearerAuth
 // @Param        destinationId  path      string  true  "Destination UUID"  format(uuid)
@@ -21,7 +21,7 @@ var _ = model.Destination{}
 // @Failure      400            {object}  share.ErrorResponse
 // @Failure      401            {object}  share.ErrorResponse
 // @Failure      404            {object}  share.ErrorResponse
-// @Router       /planing/destination/{destinationId} [get]
+// @Router       /planning/destination/{destinationId} [get]
 func (ctrl *TripController) HandleGetDestination() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if currentUserOrAbort(c) == nil {

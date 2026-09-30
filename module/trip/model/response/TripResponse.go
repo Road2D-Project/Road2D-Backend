@@ -8,12 +8,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// TripResponse is the non-sensitive trip payload. The invite token is never
+// included; mint it with the invite-link endpoint.
 type TripResponse struct {
 	ID            uuid.UUID       `json:"id" swaggertype:"string" format:"uuid"`
-	GroupID       *uuid.UUID      `json:"groupId,omitempty" swaggertype:"string" format:"uuid"`
 	OwnerID       uuid.UUID       `json:"ownerId" swaggertype:"string" format:"uuid"`
 	Name          string          `json:"name"`
 	Status        enum.TripStatus `json:"status" swaggertype:"string" example:"planning"`
+	TripType      enum.TripType   `json:"tripType" swaggertype:"string" example:"bronze"`
+	MemberLimit   int             `json:"memberLimit" example:"15"`
+	Visibility    bool            `json:"visibility"`
 	StartTime     *time.Time      `json:"startTime,omitempty"`
 	EndTime       *time.Time      `json:"endTime,omitempty"`
 	TotalDistance float64         `json:"totalDistance"`
@@ -30,10 +34,12 @@ type TripListResponse struct {
 func FromTrip(trip *model.Trip, role *enum.TripRole) TripResponse {
 	return TripResponse{
 		ID:            trip.ID,
-		GroupID:       trip.GroupID,
 		OwnerID:       trip.OwnerID,
 		Name:          trip.Name,
 		Status:        trip.Status,
+		TripType:      trip.TripType,
+		MemberLimit:   trip.MemberLimit,
+		Visibility:    trip.Visibility,
 		StartTime:     trip.StartTime,
 		EndTime:       trip.EndTime,
 		TotalDistance: trip.TotalDistance,

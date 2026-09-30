@@ -1621,7 +1621,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/planing/destination/{destinationId}": {
+        "/planning/destination/{destinationId}": {
             "get": {
                 "security": [
                     {
@@ -1633,7 +1633,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "planing"
+                    "planning"
                 ],
                 "summary": "Get destination",
                 "parameters": [
@@ -1687,7 +1687,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "planing"
+                    "planning"
                 ],
                 "summary": "Update destination",
                 "parameters": [
@@ -1743,7 +1743,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/planing/fork/{locationId}": {
+        "/planning/fork/{locationId}": {
             "post": {
                 "security": [
                     {
@@ -1758,7 +1758,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "planing"
+                    "planning"
                 ],
                 "summary": "Fork location",
                 "parameters": [
@@ -1808,7 +1808,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/planing/location/{locationId}": {
+        "/planning/location/{locationId}": {
             "get": {
                 "security": [
                     {
@@ -1820,7 +1820,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "planing"
+                    "planning"
                 ],
                 "summary": "Get location",
                 "parameters": [

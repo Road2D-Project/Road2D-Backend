@@ -67,17 +67,26 @@ func (s *LeaveTripService) Leave(ctx context.Context, userId, tripId uuid.UUID) 
 }
 
 func pickLeadershipSuccessor(members []model.TripMember, leavingUserID uuid.UUID) *model.TripMember {
-	var earliest *model.TripMember
+	var earliestAdmin, earliestMember *model.TripMember
 	for i := range members {
 		m := &members[i]
 		if m.UserID == leavingUserID || !m.Status.IsActive() || m.Role.IsLeader() {
 			continue
 		}
-		if tripJoinedEarlier(m, earliest) {
-			earliest = m
+		if m.Role.IsAdmin() {
+			if tripJoinedEarlier(m, earliestAdmin) {
+				earliestAdmin = m
+			}
+			continue
+		}
+		if tripJoinedEarlier(m, earliestMember) {
+			earliestMember = m
 		}
 	}
-	return earliest
+	if earliestAdmin != nil {
+		return earliestAdmin
+	}
+	return earliestMember
 }
 
 func tripJoinedEarlier(candidate, current *model.TripMember) bool {

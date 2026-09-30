@@ -37,6 +37,47 @@ type previewResult struct {
 	leg   *model.Leg
 }
 
+// PreviewLocations routes ordered catalog places before a trip exists.
+// It never reads or writes travels. The response is the mainBranch of create.
+func (s *ComputeTripService) PreviewLocations(ctx context.Context, locationIDs []uuid.UUID) (*response.PreviewLocationsResponse, error) {
+	if len(locationIDs) < 2 {
+		return nil, ErrInvalidComputePoint
+	}
+	stops := make([]previewStop, len(locationIDs))
+	places := make([]response.PreviewLocation, len(locationIDs))
+	for i, id := range locationIDs {
+		if id == uuid.Nil {
+			return nil, ErrInvalidComputePoint
+		}
+		location, err := s.locations.FindLocationById(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if location == nil {
+			return nil, ErrInvalidComputePoint
+		}
+		locID := location.ID
+		stops[i] = previewStop{
+			name:       location.Name,
+			lat:        location.Lat,
+			lng:        location.Lng,
+			locationID: &locID,
+		}
+		places[i] = response.PreviewLocation{
+			LocationID: locID,
+			Name:       location.Name,
+			Lat:        location.Lat,
+			Lng:        location.Lng,
+		}
+	}
+	legs := make([]model.Leg, len(stops)-1)
+	if err := s.previewRoutes(ctx, stops, legs); err != nil {
+		return nil, err
+	}
+	preview := previewResponse(stops, legs)
+	return &response.PreviewLocationsResponse{Locations: places, Legs: preview.Legs}, nil
+}
+
 // PreviewBranch routes one ordered branch and returns the hops.
 // It never reads or writes travels: the caller only wanted a look at the route.
 func (s *ComputeTripService) PreviewBranch(ctx context.Context, points []triprequest.ComputeBranchPoint) (*response.ComputeBranchResponse, error) {

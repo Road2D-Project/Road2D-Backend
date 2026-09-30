@@ -27,6 +27,8 @@ func (r *TripMemberRepository) FindMemberById(ctx context.Context, userId uuid.U
 	}
 	var member model.TripMember
 	err := r.db.WithContext(ctx).
+		Preload("Trip").
+		Preload("User").
 		Where("user_id = ? AND trip_id = ?", userId, tripId).
 		First(&member).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -61,6 +63,7 @@ func (r *TripMemberRepository) ListActiveMembers(ctx context.Context, tripId uui
 	}
 	var members []model.TripMember
 	err := r.db.WithContext(ctx).
+		Preload("User").
 		Where("trip_id = ? AND status = ?", tripId, enum.MembershipActive).
 		Order("joined_at ASC").
 		Find(&members).Error
@@ -75,7 +78,7 @@ func (r *TripMemberRepository) UpdateMember(ctx context.Context, member *model.T
 		return ErrInternalServerError
 	}
 	result := r.db.WithContext(ctx).Model(member).
-		Select("Role", "Status", "JoinedAt", "Nickname").
+		Select("Role", "Status", "JoinedAt", "Nickname", "InvitorName").
 		Updates(member)
 	if result.Error != nil {
 		return result.Error
@@ -87,6 +90,10 @@ func (r *TripMemberRepository) UpdateMember(ctx context.Context, member *model.T
 }
 
 func (r *TripMemberRepository) AddActiveMember(ctx context.Context, userId uuid.UUID, tripId uuid.UUID, role enum.TripRole, nickname string) (*model.TripMember, error) {
+	return r.AddMember(ctx, userId, tripId, role, enum.MembershipActive, nickname, nil)
+}
+
+func (r *TripMemberRepository) AddMember(ctx context.Context, userId uuid.UUID, tripId uuid.UUID, role enum.TripRole, status enum.MembershipStatus, nickname string, invitorName *string) (*model.TripMember, error) {
 	if r == nil || r.db == nil {
 		return nil, ErrInternalServerError
 	}
@@ -94,27 +101,109 @@ func (r *TripMemberRepository) AddActiveMember(ctx context.Context, userId uuid.
 	var user authenModel.User
 	err := ctxDb.Where("id = ?", userId).First(&user).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, ErrUserNotTripMember
+		return nil, ErrUserNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
+	var trip model.Trip
+	err = ctxDb.Where("id = ?", tripId).First(&trip).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrTripNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
 	member := model.TripMember{
-		TripID:   tripId,
-		UserID:   userId,
-		Role:     role,
-		Status:   enum.MembershipActive,
-		Nickname: nickname,
-		JoinedAt: &now,
+		TripID:      tripId,
+		UserID:      userId,
+		Role:        role,
+		Status:      status,
+		Nickname:    nickname,
+		InvitorName: invitorName,
 	}
 	if member.Nickname == "" {
 		member.Nickname = user.Username
 	}
+	if status.IsActive() {
+		now := time.Now().UTC()
+		member.JoinedAt = &now
+	}
 	if err := ctxDb.Create(&member).Error; err != nil {
 		return nil, err
 	}
+	member.User = &user
+	member.Trip = &trip
 	return &member, nil
+}
+
+func (r *TripMemberRepository) CountActiveMembers(ctx context.Context, tripId uuid.UUID) (int, error) {
+	if r == nil || r.db == nil {
+		return 0, ErrInternalServerError
+	}
+	var n int64
+	err := r.db.WithContext(ctx).Model(&model.TripMember{}).
+		Where("trip_id = ? AND status = ?", tripId, enum.MembershipActive).
+		Count(&n).Error
+	if err != nil {
+		return 0, err
+	}
+	return int(n), nil
+}
+
+func (r *TripMemberRepository) ListPendingMembers(ctx context.Context, tripId uuid.UUID) ([]model.TripMember, error) {
+	if r == nil || r.db == nil {
+		return nil, ErrInternalServerError
+	}
+	var members []model.TripMember
+	err := r.db.WithContext(ctx).
+		Preload("User").
+		Preload("Trip").
+		Where("trip_id = ? AND status = ?", tripId, enum.MembershipPending).
+		Order("updated_at DESC").
+		Find(&members).Error
+	if err != nil {
+		return nil, err
+	}
+	return members, nil
+}
+
+func (r *TripMemberRepository) ListInvitedMembers(ctx context.Context, userId uuid.UUID) ([]model.TripMember, error) {
+	if r == nil || r.db == nil {
+		return nil, ErrInternalServerError
+	}
+	var members []model.TripMember
+	err := r.db.WithContext(ctx).
+		Preload("User").
+		Preload("Trip").
+		Where("user_id = ? AND status = ?", userId, enum.MembershipInvited).
+		Order("updated_at DESC").
+		Find(&members).Error
+	if err != nil {
+		return nil, err
+	}
+	return members, nil
+}
+
+func (r *TripMemberRepository) ApplyKick(ctx context.Context, member *model.TripMember) error {
+	if r == nil || r.db == nil {
+		return ErrInternalServerError
+	}
+	if member == nil {
+		return ErrUserNotTripMember
+	}
+	result := r.db.WithContext(ctx).Model(&model.TripMember{}).Where("id = ?", member.ID).Updates(map[string]any{
+		"role":      enum.TripRoleMember,
+		"status":    enum.MembershipKicked,
+		"joined_at": nil,
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrUserNotTripMember
+	}
+	return nil
 }
 
 func (r *TripMemberRepository) ApplyLeave(ctx context.Context, leaver *model.TripMember, successor *model.TripMember) error {

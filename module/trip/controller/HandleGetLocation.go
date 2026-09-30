@@ -13,7 +13,7 @@ var _ = model.Location{}
 //
 // @Summary      Get location
 // @Description  Returns a verified location. Planning copies it with fork; this row itself is not updated here.
-// @Tags         planing
+// @Tags         planning
 // @Produce      json
 // @Security     BearerAuth
 // @Param        locationId  path      string  true  "Location UUID"  format(uuid)
@@ -21,7 +21,7 @@ var _ = model.Location{}
 // @Failure      400         {object}  share.ErrorResponse
 // @Failure      401         {object}  share.ErrorResponse
 // @Failure      404         {object}  share.ErrorResponse
-// @Router       /planing/location/{locationId} [get]
+// @Router       /planning/location/{locationId} [get]
 func (ctrl *TripController) HandleGetLocation() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if currentUserOrAbort(c) == nil {

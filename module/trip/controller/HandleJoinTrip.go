@@ -9,18 +9,18 @@ import (
 	"github.com/google/uuid"
 )
 
-var _ = response.TripResponse{}
+var _ = response.TripMemberResponse{}
 
-// HandleJoinTrip looks up the trip by invite token and seats the caller as an
-// active member. A left row is reused; an already-active seat is a conflict.
+// HandleJoinTrip looks up the trip by invite token and records a pending join
+// request. A leader or admin must approve it before the caller has a seat.
 //
-// @Summary      Join trip via invite link
-// @Description  Authenticated caller joins the trip identified by the invite token as a member. Reuses a left/rejected/kicked row. Already-active members get 409.
+// @Summary      Request to join a trip via invite link
+// @Description  Authenticated caller opens a pending join request for the invite token. A leader or admin approves it. Already-active members, existing invites, and a full trip return 409.
 // @Tags         trips
 // @Produce      json
 // @Security     BearerAuth
 // @Param        token  path      string  true  "Invite token (UUID)"
-// @Success      200    {object}  response.TripResponse
+// @Success      200    {object}  response.TripMemberResponse
 // @Failure      400    {object}  share.ErrorResponse
 // @Failure      401    {object}  share.ErrorResponse
 // @Failure      404    {object}  share.ErrorResponse

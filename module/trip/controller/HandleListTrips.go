@@ -12,7 +12,7 @@ var _ = response.TripListResponse{}
 // HandleListTrips returns trips where the caller currently holds an active seat.
 //
 // @Summary      List my trips
-// @Description  Returns trips where the caller is an active member (leader or member). Each item includes myRole. Left/kicked seats are omitted.
+// @Description  Returns trips where the caller is an active member (leader, admin, or member). Each item includes myRole. Left/kicked seats are omitted.
 // @Tags         trips
 // @Produce      json
 // @Security     BearerAuth

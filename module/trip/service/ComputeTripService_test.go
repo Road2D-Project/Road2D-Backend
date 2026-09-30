@@ -513,6 +513,50 @@ func TestPreviewBranchMixesDestinationAndLocation(t *testing.T) {
 	}
 }
 
+func TestPreviewLocationsRoutesOrderedPlaces(t *testing.T) {
+	from := &model.Location{Base: utils.Base{ID: uuid.New()}, Name: "cafe", Lat: 10.5, Lng: 20.25}
+	to := &model.Location{Base: utils.Base{ID: uuid.New()}, Name: "park", Lat: 11, Lng: 21}
+	router := &stubLegRouter{leg: &model.Leg{
+		Vehicle:   enum.BIKE,
+		Polyline:  "preview-poly",
+		DistanceM: 800,
+		DurationS: 200,
+	}}
+	travels := &stubTravelStore{}
+	svc := NewComputeTripService(router, travels, nil, &stubPreviewLocations{
+		byID: map[uuid.UUID]*model.Location{from.ID: from, to.ID: to},
+	}, nil)
+
+	got, err := svc.PreviewLocations(context.Background(), []uuid.UUID{from.ID, to.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if travels.upsertCall != 0 {
+		t.Fatal("a location preview must not write travels")
+	}
+	if got == nil || len(got.Locations) != 2 || len(got.Legs) != 1 {
+		t.Fatalf("preview = %+v", got)
+	}
+	if got.Locations[0].LocationID != from.ID || got.Locations[0].Name != "cafe" || got.Locations[0].Lat != 10.5 {
+		t.Fatalf("first place = %+v", got.Locations[0])
+	}
+	leg := got.Legs[0]
+	if leg.Polyline != "preview-poly" || leg.From.LocationID == nil || *leg.From.LocationID != from.ID || leg.From.DestinationID != nil {
+		t.Fatalf("leg = %+v", leg)
+	}
+	if leg.To.LocationID == nil || *leg.To.LocationID != to.ID {
+		t.Fatalf("to = %+v", leg.To)
+	}
+}
+
+func TestPreviewLocationsRejectsASinglePlace(t *testing.T) {
+	svc := NewComputeTripService(&stubLegRouter{leg: &model.Leg{Vehicle: enum.BIKE}}, &stubTravelStore{}, nil, &stubPreviewLocations{}, nil)
+	_, err := svc.PreviewLocations(context.Background(), []uuid.UUID{uuid.New()})
+	if !errors.Is(err, ErrInvalidComputePoint) {
+		t.Fatalf("got %v", err)
+	}
+}
+
 func TestPreviewBranchRejectsAmbiguousPoint(t *testing.T) {
 	pin := stop("pin", 1, 1)
 	placeID := uuid.New()

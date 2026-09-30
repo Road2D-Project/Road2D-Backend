@@ -9,11 +9,11 @@ import (
 	"strings"
 )
 
-const _TripRoleName = "leadermember"
+const _TripRoleName = "leadermemberadmin"
 
-var _TripRoleIndex = [...]uint8{0, 6, 12}
+var _TripRoleIndex = [...]uint8{0, 6, 12, 17}
 
-const _TripRoleLowerName = "leadermember"
+const _TripRoleLowerName = "leadermemberadmin"
 
 func (i TripRole) String() string {
 	if i < 0 || i >= TripRole(len(_TripRoleIndex)-1) {
@@ -28,20 +28,24 @@ func _TripRoleNoOp() {
 	var x [1]struct{}
 	_ = x[TripRoleLeader-(0)]
 	_ = x[TripRoleMember-(1)]
+	_ = x[TripRoleAdmin-(2)]
 }
 
-var _TripRoleValues = []TripRole{TripRoleLeader, TripRoleMember}
+var _TripRoleValues = []TripRole{TripRoleLeader, TripRoleMember, TripRoleAdmin}
 
 var _TripRoleNameToValueMap = map[string]TripRole{
-	_TripRoleName[0:6]:       TripRoleLeader,
-	_TripRoleLowerName[0:6]:  TripRoleLeader,
-	_TripRoleName[6:12]:      TripRoleMember,
-	_TripRoleLowerName[6:12]: TripRoleMember,
+	_TripRoleName[0:6]:        TripRoleLeader,
+	_TripRoleLowerName[0:6]:   TripRoleLeader,
+	_TripRoleName[6:12]:       TripRoleMember,
+	_TripRoleLowerName[6:12]:  TripRoleMember,
+	_TripRoleName[12:17]:      TripRoleAdmin,
+	_TripRoleLowerName[12:17]: TripRoleAdmin,
 }
 
 var _TripRoleNames = []string{
 	_TripRoleName[0:6],
 	_TripRoleName[6:12],
+	_TripRoleName[12:17],
 }
 
 // TripRoleString retrieves an enum value from the enum constants string name.

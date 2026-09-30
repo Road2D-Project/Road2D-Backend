@@ -93,8 +93,6 @@ func TestCreateBranch(t *testing.T) {
 	}
 	trip := model.Trip{
 		Base:          utils.Base{},
-		GroupID:       nil,
-		Group:         nil,
 		OwnerID:       uuid.UUID{},
 		Owner:         nil,
 		Name:          "",

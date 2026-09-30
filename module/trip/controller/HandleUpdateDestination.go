@@ -14,7 +14,7 @@ var _ = request.UpdateDestinationRequest{}
 //
 // @Summary      Update destination
 // @Description  Updates name, arrive time, stay, and status while the destination is editing. lat/lng are applied only when locationId is empty; a forked or verified pin keeps the linked location's coordinates.
-// @Tags         planing
+// @Tags         planning
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
@@ -25,7 +25,7 @@ var _ = request.UpdateDestinationRequest{}
 // @Failure      401            {object}  share.ErrorResponse
 // @Failure      404            {object}  share.ErrorResponse
 // @Failure      409            {object}  share.ErrorResponse
-// @Router       /planing/destination/{destinationId} [put]
+// @Router       /planning/destination/{destinationId} [put]
 func (ctrl *TripController) HandleUpdateDestination() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if currentUserOrAbort(c) == nil {

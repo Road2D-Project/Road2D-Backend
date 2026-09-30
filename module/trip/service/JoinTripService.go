@@ -8,7 +8,6 @@ import (
 	"Road-To-Destination-BE/utils/enum"
 	"context"
 	"errors"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -20,26 +19,22 @@ type JoinTripFinder interface {
 type JoinTripMemberRepository interface {
 	FindMemberById(ctx context.Context, userId uuid.UUID, tripId uuid.UUID) (*model.TripMember, error)
 	UpdateMember(ctx context.Context, member *model.TripMember) error
-	AddActiveMember(ctx context.Context, userId uuid.UUID, tripId uuid.UUID, role enum.TripRole, nickname string) (*model.TripMember, error)
-}
-
-type JoinTripRoleCache interface {
-	SetCachedTripMemberRole(ctx context.Context, tripId uuid.UUID, userId uuid.UUID, role enum.TripRole) error
+	AddMember(ctx context.Context, userId uuid.UUID, tripId uuid.UUID, role enum.TripRole, status enum.MembershipStatus, nickname string, invitorName *string) (*model.TripMember, error)
+	CountActiveMembers(ctx context.Context, tripId uuid.UUID) (int, error)
 }
 
 type JoinTripService struct {
-	trips     JoinTripFinder
-	members   JoinTripMemberRepository
-	roleCache JoinTripRoleCache
+	trips   JoinTripFinder
+	members JoinTripMemberRepository
 }
 
-func NewJoinTripService(trips JoinTripFinder, members JoinTripMemberRepository, roleCache JoinTripRoleCache) *JoinTripService {
-	return &JoinTripService{trips: trips, members: members, roleCache: roleCache}
+func NewJoinTripService(trips JoinTripFinder, members JoinTripMemberRepository) *JoinTripService {
+	return &JoinTripService{trips: trips, members: members}
 }
 
-// Join resolves the trip from the invite token, then either inserts an active
-// member row or reactivates a left/rejected/kicked row. Already-active seats fail.
-func (s *JoinTripService) Join(ctx context.Context, user *authModel.User, token string) (*response.TripResponse, error) {
+// Join records a pending request for the trip behind the invite token.
+// A leader or admin still has to approve it before the caller has a seat.
+func (s *JoinTripService) Join(ctx context.Context, user *authModel.User, token string) (*response.TripMemberResponse, error) {
 	if user == nil {
 		return nil, errors.New("missing current user")
 	}
@@ -47,36 +42,49 @@ func (s *JoinTripService) Join(ctx context.Context, user *authModel.User, token 
 	if err != nil {
 		return nil, err
 	}
+	active, err := s.members.CountActiveMembers(ctx, trip.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := seatsFit(active+1, trip.MemberLimit); err != nil {
+		return nil, err
+	}
 	member, err := s.members.FindMemberById(ctx, user.ID, trip.ID)
 	if err != nil && !errors.Is(err, repository.ErrUserNotTripMember) {
 		return nil, err
 	}
 	if member != nil {
-		if err := s.reactivateMembership(ctx, member, user.Username); err != nil {
+		updated, err := s.reuseMembershipForJoin(ctx, member)
+		if err != nil {
 			return nil, err
 		}
-	} else {
-		if _, err := s.members.AddActiveMember(ctx, user.ID, trip.ID, enum.TripRoleMember, user.Username); err != nil {
-			return nil, err
-		}
+		return response.FromTripMemberPtr(updated), nil
 	}
-	if s.roleCache != nil {
-		_ = s.roleCache.SetCachedTripMemberRole(ctx, trip.ID, user.ID, enum.TripRoleMember)
+	created, err := s.members.AddMember(ctx, user.ID, trip.ID, enum.TripRoleMember, enum.MembershipPending, user.Username, nil)
+	if err != nil {
+		return nil, err
 	}
-	return response.FromTripPtr(trip, response.RolePtr(enum.TripRoleMember)), nil
+	return response.FromTripMemberPtr(created), nil
 }
 
-func (s *JoinTripService) reactivateMembership(ctx context.Context, member *model.TripMember, nickname string) error {
-	if member.Status.IsActive() {
-		return repository.ErrAlreadyTripMember
+func (s *JoinTripService) reuseMembershipForJoin(ctx context.Context, member *model.TripMember) (*model.TripMember, error) {
+	switch {
+	case member.Status.IsActive():
+		return nil, repository.ErrAlreadyTripMember
+	case member.Status.IsInvited():
+		return nil, repository.ErrAlreadyInvited
+	case member.Status.IsPending():
+		return nil, repository.ErrJoinRequestPending
+	case member.Status.CanRejoin():
+		member.InvitorName = nil
+		member.Role = enum.TripRoleMember
+		member.Status = enum.MembershipPending
+		member.JoinedAt = nil
+		if err := s.members.UpdateMember(ctx, member); err != nil {
+			return nil, err
+		}
+		return member, nil
+	default:
+		return nil, repository.ErrAlreadyTripMember
 	}
-	if !member.Status.CanRejoin() && !member.Status.IsInvited() && !member.Status.IsPending() {
-		return repository.ErrAlreadyTripMember
-	}
-	now := time.Now().UTC()
-	member.Role = enum.TripRoleMember
-	member.Status = enum.MembershipActive
-	member.Nickname = nickname
-	member.JoinedAt = &now
-	return s.members.UpdateMember(ctx, member)
 }

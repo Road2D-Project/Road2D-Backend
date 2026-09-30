@@ -10,10 +10,8 @@ import (
 	authRequest "Road-To-Destination-BE/module/authentication/model/request"
 	authRepo "Road-To-Destination-BE/module/authentication/repository"
 	authService "Road-To-Destination-BE/module/authentication/service"
-	groupRequest "Road-To-Destination-BE/module/group/model/request"
-	groupRepo "Road-To-Destination-BE/module/group/repository"
-	groupService "Road-To-Destination-BE/module/group/service"
 	tripRequest "Road-To-Destination-BE/module/trip/model/request"
+	tripModel "Road-To-Destination-BE/module/trip/model/response"
 	tripRepo "Road-To-Destination-BE/module/trip/repository"
 	tripService "Road-To-Destination-BE/module/trip/service"
 	"Road-To-Destination-BE/utils/enum"
@@ -23,54 +21,70 @@ import (
 	"gorm.io/gorm"
 )
 
-const (
-	seedGroupName = "Seed group"
-	seedTripName  = "Seed trip"
-)
-
-// Report is what one seeder trip run created.
-type Report struct {
-	Username string
-	GroupID  uuid.UUID
-	TripID   uuid.UUID
-	Pins     []ForkedPin
+// Options is the seeder input. Empty MemberUsernames seats every bundled fake
+// rider except the owner. Empty LocationIDs uses the earliest catalog places.
+type Options struct {
+	Name            string
+	Note            string
+	TripType        enum.TripType
+	Visibility      bool
+	MemberUsernames []string
+	LocationIDs     []uuid.UUID
 }
 
-// Seed registers the default user when missing, then creates a group and a trip
-// owned by that user. It forks up to DestinationLimit locations and writes them
-// as the trip's main branch.
-func Seed(ctx context.Context, db *gorm.DB, redisClient *redis.Client) (*Report, error) {
+// Report is the non-sensitive trip plus the join token. Passwords are omitted.
+type Report struct {
+	Trip        tripModel.TripResponse         `json:"trip"`
+	InviteToken string                         `json:"inviteToken"`
+	JoinPath    string                         `json:"joinPath"`
+	Members     []tripModel.TripMemberResponse `json:"members"`
+	Pins        []ForkedPin                    `json:"pins"`
+}
+
+// Seed registers the default user when missing, seats the member list, and
+// writes one main branch from location ids (forked in that order).
+func Seed(ctx context.Context, db *gorm.DB, redisClient *redis.Client, opts Options) (*Report, error) {
+	if opts.Name == "" {
+		opts.Name = "Seed trip"
+	}
+	if opts.Note == "" {
+		opts.Note = "Main branch of the chosen locations"
+	}
 	owner, err := defaultOwner(ctx, db)
 	if err != nil {
 		return nil, err
 	}
-
-	groups := groupService.NewGroupService(
-		groupRepo.NewGroupRepository(db),
+	memberIDs, err := memberUserIDs(ctx, db, owner, opts.MemberUsernames)
+	if err != nil {
+		return nil, err
+	}
+	tripType := opts.TripType
+	trips := tripService.NewTripService(
+		tripRepo.NewTripRepository(db),
 		authRepo.NewUserRepository(db),
-		groupRepo.NewGroupMemberRepository(db),
-		groupRepo.NewGroupMemberStore(redisClient),
+		tripRepo.NewTripMemberRepository(db),
+		tripRepo.NewTripMemberRepository(db),
+		tripRepo.NewTripMemberStore(redisClient),
+		tripRepo.NewLocationRepository(db),
 	)
-	createdGroup, err := groups.CreateGroup(ctx, owner, groupRequest.CreateGroupRequest{
-		Name:        seedGroupName,
-		Description: "Created by seeder trip",
+	createdTrip, err := trips.CreateTrip(ctx, owner, tripRequest.CreateTripRequest{
+		Name:          opts.Name,
+		Note:          opts.Note,
+		TripType:      &tripType,
+		Visibility:    opts.Visibility,
+		MemberUserIDs: memberIDs,
 	})
 	if err != nil {
 		return nil, err
 	}
-
-	trips := tripService.NewTripService(
-		tripRepo.NewTripRepository(db),
-		groupRepo.NewGroupRepository(db),
-		groupRepo.NewGroupMemberRepository(db),
+	link, err := trips.CreateInviteLink(ctx, createdTrip.ID, false)
+	if err != nil {
+		return nil, err
+	}
+	roster, err := tripService.NewTripMemberService(
 		tripRepo.NewTripMemberRepository(db),
 		tripRepo.NewTripMemberStore(redisClient),
-	)
-	createdTrip, err := trips.CreateTrip(ctx, owner, tripRequest.CreateTripRequest{
-		GroupID: createdGroup.ID,
-		Name:    seedTripName,
-		Note:    "Main branch of the first forked destinations",
-	})
+	).ListActiveMembers(ctx, createdTrip.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -79,15 +93,15 @@ func Seed(ctx context.Context, db *gorm.DB, redisClient *redis.Client) (*Report,
 		tripRepo.NewDestinationRepository(db),
 		tripRepo.NewLocationRepository(db),
 	)
-	pins, err := ForkDestinations(ctx, places, db)
+	pins, err := ForkLocations(ctx, places, db, opts.LocationIDs)
 	if err != nil {
 		return nil, err
 	}
-	names := make([]string, len(pins))
+	ids := make([]uuid.UUID, len(pins))
 	for i := range pins {
-		names[i] = pins[i].Name
+		ids[i] = pins[i].ID
 	}
-	graph, err := ComposeSetTripGraph(db, names)
+	graph, err := ComposeMainBranch(ids)
 	if err != nil {
 		return nil, err
 	}
@@ -99,10 +113,11 @@ func Seed(ctx context.Context, db *gorm.DB, redisClient *redis.Client) (*Report,
 		return nil, fmt.Errorf("set trip graph: %w", err)
 	}
 	return &Report{
-		Username: owner.Username,
-		GroupID:  createdGroup.ID,
-		TripID:   createdTrip.ID,
-		Pins:     pins,
+		Trip:        *createdTrip,
+		InviteToken: link.Token,
+		JoinPath:    link.JoinPath,
+		Members:     roster.Members,
+		Pins:        pins,
 	}, nil
 }
 
@@ -128,4 +143,49 @@ func defaultOwner(ctx context.Context, db *gorm.DB) (*authModel.User, error) {
 		return nil, err
 	}
 	return users.FindUserByUsername(ctx, creds.Username)
+}
+
+func memberUserIDs(ctx context.Context, db *gorm.DB, owner *authModel.User, names []string) ([]uuid.UUID, error) {
+	fakes, err := user.DefaultFakeUsers()
+	if err != nil {
+		return nil, err
+	}
+	users := authRepo.NewUserRepository(db)
+	if _, err := user.SeedFakeUsers(ctx, authService.NewRegisterService(users), users, fakes); err != nil {
+		return nil, err
+	}
+	if len(names) == 0 {
+		for _, account := range fakes {
+			if account.Username == owner.Username {
+				continue
+			}
+			names = append(names, account.Username)
+		}
+	}
+	ids := make([]uuid.UUID, 0, len(names))
+	seen := map[uuid.UUID]struct{}{}
+	for _, name := range names {
+		if name == "" || name == owner.Username {
+			continue
+		}
+		found, err := users.FindUserByUsername(ctx, name)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, fmt.Errorf("member %q was not found", name)
+			}
+			return nil, err
+		}
+		if found.ID == owner.ID {
+			continue
+		}
+		if _, ok := seen[found.ID]; ok {
+			continue
+		}
+		seen[found.ID] = struct{}{}
+		ids = append(ids, found.ID)
+	}
+	if len(ids) == 0 {
+		return nil, errors.New("name at least one member besides the trip leader")
+	}
+	return ids, nil
 }

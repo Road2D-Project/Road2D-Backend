@@ -34,12 +34,12 @@ definitions:
         type: string
       endTime:
         type: string
-      groupId:
-        format: uuid
-        type: string
       id:
         format: uuid
         type: string
+      memberLimit:
+        example: 15
+        type: integer
       myRole:
         example: leader
         type: string
@@ -57,8 +57,13 @@ definitions:
         type: string
       totalDistance:
         type: number
+      tripType:
+        example: bronze
+        type: string
       updatedTime:
         type: string
+      visibility:
+        type: boolean
     type: object
   enum.DestinationStatus:
     enum:
@@ -363,9 +368,13 @@ definitions:
     properties:
       endTime:
         type: string
-      groupId:
-        format: uuid
-        type: string
+      mainBranch:
+        $ref: '#/definitions/response.PreviewLocationsResponse'
+      memberUserIds:
+        items:
+          type: string
+        minItems: 1
+        type: array
       name:
         maxLength: 255
         minLength: 1
@@ -375,9 +384,15 @@ definitions:
         type: string
       startTime:
         type: string
+      tripType:
+        example: bronze
+        type: string
+      visibility:
+        type: boolean
     required:
-    - groupId
+    - memberUserIds
     - name
+    - tripType
     type: object
   request.ForgetPasswordRequest:
     properties:
@@ -394,6 +409,31 @@ definitions:
         type: string
       stayOverTime:
         type: integer
+    type: object
+  request.ForkTripRequest:
+    properties:
+      endTime:
+        type: string
+      excludeUserIds:
+        items:
+          type: string
+        type: array
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      note:
+        maxLength: 4000
+        type: string
+      startTime:
+        type: string
+      tripType:
+        example: bronze
+        type: string
+      visibility:
+        type: boolean
+    required:
+    - excludeUserIds
     type: object
   request.LoginRequest:
     properties:
@@ -415,6 +455,16 @@ definitions:
         type: string
     required:
     - refreshToken
+    type: object
+  request.PreviewLocationsRequest:
+    properties:
+      locationIds:
+        items:
+          type: string
+        minItems: 2
+        type: array
+    required:
+    - locationIds
     type: object
   request.RefreshRequest:
     properties:
@@ -512,6 +562,16 @@ definitions:
     required:
     - nickname
     type: object
+  request.UpdateTripMemberRequest:
+    properties:
+      nickname:
+        maxLength: 64
+        minLength: 1
+        type: string
+      role:
+        example: admin
+        type: string
+    type: object
   request.UpdateTripRequest:
     properties:
       endTime:
@@ -525,6 +585,8 @@ definitions:
         type: string
       startTime:
         type: string
+      visibility:
+        type: boolean
     type: object
   response.AddressComponent:
     properties:
@@ -898,6 +960,29 @@ definitions:
       global_code:
         type: string
     type: object
+  response.PreviewLocation:
+    properties:
+      lat:
+        type: number
+      lng:
+        type: number
+      locationId:
+        format: uuid
+        type: string
+      name:
+        type: string
+    type: object
+  response.PreviewLocationsResponse:
+    properties:
+      legs:
+        items:
+          $ref: '#/definitions/response.ComputeBranchLeg'
+        type: array
+      locations:
+        items:
+          $ref: '#/definitions/response.PreviewLocation'
+        type: array
+    type: object
   response.RefreshResponse:
     properties:
       accessToken:
@@ -981,12 +1066,12 @@ definitions:
         type: string
       endTime:
         type: string
-      groupId:
-        format: uuid
-        type: string
       id:
         format: uuid
         type: string
+      memberLimit:
+        example: 15
+        type: integer
       myRole:
         example: leader
         type: string
@@ -1004,8 +1089,20 @@ definitions:
         type: string
       totalDistance:
         type: number
+      tripType:
+        example: bronze
+        type: string
       updatedTime:
         type: string
+      visibility:
+        type: boolean
+    type: object
+  response.TripInvitationListResponse:
+    properties:
+      invitations:
+        items:
+          $ref: '#/definitions/response.TripMemberResponse'
+        type: array
     type: object
   response.TripInviteLinkResponse:
     properties:
@@ -1015,12 +1112,51 @@ definitions:
       token:
         type: string
     type: object
+  response.TripJoinRequestListResponse:
+    properties:
+      joinRequests:
+        items:
+          $ref: '#/definitions/response.TripMemberResponse'
+        type: array
+    type: object
   response.TripListResponse:
     properties:
       trips:
         items:
           $ref: '#/definitions/Road-To-Destination-BE_module_trip_model_response.TripResponse'
         type: array
+    type: object
+  response.TripMemberListResponse:
+    properties:
+      members:
+        items:
+          $ref: '#/definitions/response.TripMemberResponse'
+        type: array
+    type: object
+  response.TripMemberResponse:
+    properties:
+      invitorName:
+        type: string
+      joinedAt:
+        type: string
+      nickname:
+        type: string
+      role:
+        example: member
+        type: string
+      status:
+        example: active
+        type: string
+      tripId:
+        format: uuid
+        type: string
+      tripName:
+        type: string
+      userId:
+        format: uuid
+        type: string
+      username:
+        type: string
     type: object
   share.ErrorResponse:
     properties:
@@ -1577,8 +1713,8 @@ paths:
       - groups
   /groups/{groupId}:
     delete:
-      description: Owner only. Fails with 409 if the group still has trips (trips.group_id).
-        Members cascade-delete with the group.
+      description: Owner only. Members cascade-delete with the group. Trips are not
+        tied to a group.
       parameters:
       - description: Group UUID
         format: uuid
@@ -1605,10 +1741,6 @@ paths:
             $ref: '#/definitions/share.ErrorResponse'
         "404":
           description: Not Found
-          schema:
-            $ref: '#/definitions/share.ErrorResponse'
-        "409":
-          description: Conflict
           schema:
             $ref: '#/definitions/share.ErrorResponse'
       security:
@@ -2124,7 +2256,7 @@ paths:
       summary: List groups I have joined
       tags:
       - groups
-  /planing/destination/{destinationId}:
+  /planning/destination/{destinationId}:
     delete:
       description: Deletes a destination that is still editing. A pin that sits only
         on draft branches is removed immediately. A pin on a route branch is stripped
@@ -2163,7 +2295,7 @@ paths:
       - BearerAuth: []
       summary: Delete destination
       tags:
-      - planing
+      - planning
     get:
       description: Returns a destination. When locationId is set, lat/lng are locked
         to that location.
@@ -2197,7 +2329,7 @@ paths:
       - BearerAuth: []
       summary: Get destination
       tags:
-      - planing
+      - planning
     put:
       consumes:
       - application/json
@@ -2244,8 +2376,8 @@ paths:
       - BearerAuth: []
       summary: Update destination
       tags:
-      - planing
-  /planing/fork/{locationId}:
+      - planning
+  /planning/fork/{locationId}:
     post:
       consumes:
       - application/json
@@ -2288,8 +2420,8 @@ paths:
       - BearerAuth: []
       summary: Fork location
       tags:
-      - planing
-  /planing/location/{locationId}:
+      - planning
+  /planning/location/{locationId}:
     get:
       description: Returns a verified location. Planning copies it with fork; this
         row itself is not updated here.
@@ -2323,11 +2455,61 @@ paths:
       - BearerAuth: []
       summary: Get location
       tags:
-      - planing
+      - planning
+  /planning/preview:
+    post:
+      consumes:
+      - application/json
+      description: Compute the bike route along ordered location ids before a trip
+        exists. Nothing is stored. Pass this response as mainBranch on POST /trips
+        to open the trip on that main branch.
+      parameters:
+      - description: Ordered location ids
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.PreviewLocationsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.PreviewLocationsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Preview locations
+      tags:
+      - planning
   /trips:
     get:
-      description: Returns trips where the caller is an active member (leader or member).
-        Each item includes myRole. Left/kicked seats are omitted.
+      description: Returns trips where the caller is an active member (leader, admin,
+        or member). Each item includes myRole. Left/kicked seats are omitted.
       produces:
       - application/json
       responses:
@@ -2347,10 +2529,14 @@ paths:
     post:
       consumes:
       - application/json
-      description: Create a planning trip under a group. The caller must be an active
-        group member and becomes the trip leader. An invite token is minted immediately.
+      description: Create a planning trip. The caller becomes leader and must name
+        at least one other user, seated as a member. Bronze caps the trip at 15 seats.
+        Trip type and member limit cannot be changed later. Optional mainBranch is
+        the response of POST /planning/preview and becomes the trip's initial main
+        branch. A group chat is not created yet.
       parameters:
-      - description: Group id, name, optional note and times
+      - description: Name, trip type, members, optional note, times, visibility, and
+          reviewed main branch
         in: body
         name: body
         required: true
@@ -2421,8 +2607,9 @@ paths:
       tags:
       - trips
     get:
-      description: Returns trip info. If the caller is an active member, myRole is
-        set (leader/member). The invite token is never included.
+      description: Returns trip info without the invite token. Active members get
+        myRole. Private trips are 404 for non-members. Public trips are readable by
+        any authenticated user.
       parameters:
       - description: Trip UUID
         format: uuid
@@ -2457,8 +2644,9 @@ paths:
     patch:
       consumes:
       - application/json
-      description: Leader only. Change name, note, startTime, and/or endTime. Send
-        only the fields to change. Status is not updated here.
+      description: Leader or admin. Change name, note, startTime, endTime, and/or
+        visibility. Trip type and member limit are not accepted. Status is not updated
+        here.
       parameters:
       - description: Trip UUID
         format: uuid
@@ -2718,7 +2906,7 @@ paths:
       consumes:
       - application/json
       description: Appends one destination to the trip's hidden draft branch. The
-        pin must already exist, usually from POST /planing/fork/{locationId}. Only
+        pin must already exist, usually from POST /planning/fork/{locationId}. Only
         while the trip is planning. This does not change the route graph or the stored
         travels.
       parameters:
@@ -2760,6 +2948,58 @@ paths:
       security:
       - BearerAuth: []
       summary: Add a draft destination
+      tags:
+      - trips
+  /trips/{tripId}/fork:
+    post:
+      consumes:
+      - application/json
+      description: Any active member forks the trip. The caller is the new leader.
+        Other active members are copied as members, minus excludeUserIds. Trip type
+        and member limit follow the new trip's tier and cannot be set freely. The
+        route graph is not copied.
+      parameters:
+      - description: Source trip UUID
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      - description: Optional overrides and members to drop
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/request.ForkTripRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/Road-To-Destination-BE_module_trip_model_response.TripResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Fork trip
       tags:
       - trips
   /trips/{tripId}/graph:
@@ -2851,10 +3091,57 @@ paths:
       summary: Set trip graph
       tags:
       - trips
+  /trips/{tripId}/invitations:
+    post:
+      description: The invited user responds with ?action=accept|reject. Accept seats
+        them as a member when the trip is not full.
+      parameters:
+      - description: Trip UUID
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      - description: accept or reject
+        enum:
+        - accept
+        - reject
+        in: query
+        name: action
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TripMemberResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Accept or decline a trip invitation
+      tags:
+      - trips
   /trips/{tripId}/invite-link:
     post:
-      description: Leader only. Returns the current invite token and join path. Set
-        rotate=true to invalidate the previous link.
+      description: Leader or admin. Returns the current invite token and join path.
+        Set rotate=true to invalidate the previous link.
       parameters:
       - description: Trip UUID
         format: uuid
@@ -2894,6 +3181,143 @@ paths:
       summary: Create trip invite link
       tags:
       - trips
+  /trips/{tripId}/invite/{userId}:
+    post:
+      description: Any active member may invite by user id. Leader or admin invites
+        are status invited (the invitee accepts). Member invites are status pending
+        until a leader or admin approves. There is no friend check yet.
+      parameters:
+      - description: Trip UUID
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      - description: User UUID
+        format: uuid
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TripMemberResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Invite a user to a trip
+      tags:
+      - trips
+  /trips/{tripId}/join-requests:
+    get:
+      description: Leader or admin. Pending rows only.
+      parameters:
+      - description: Trip UUID
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TripJoinRequestListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List trip join requests
+      tags:
+      - trips
+  /trips/{tripId}/join-requests/{userId}:
+    post:
+      description: Leader or admin. ?action=accept seats the user; reject sets status
+        rejected. Accept fails with 409 when the member limit is already full.
+      parameters:
+      - description: Trip UUID
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      - description: Applicant UUID
+        format: uuid
+        in: path
+        name: userId
+        required: true
+        type: string
+      - description: accept or reject
+        enum:
+        - accept
+        - reject
+        in: query
+        name: action
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TripMemberResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Approve or reject a trip join request
+      tags:
+      - trips
   /trips/{tripId}/leave:
     post:
       description: The caller leaves (status left). If the leader leaves, leadership
@@ -2930,6 +3354,129 @@ paths:
       security:
       - BearerAuth: []
       summary: Leave trip
+      tags:
+      - trips
+  /trips/{tripId}/members:
+    get:
+      description: Active members only. Pending invites and join requests are separate
+        lists.
+      parameters:
+      - description: Trip UUID
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TripMemberListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List trip members
+      tags:
+      - trips
+  /trips/{tripId}/members/{userId}:
+    delete:
+      description: Leader or admin. Cannot kick yourself, the leader, or (as an admin)
+        another admin. The row stays as kicked so the user can be invited again.
+      parameters:
+      - description: Trip UUID
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      - description: Member UUID
+        format: uuid
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Member kicked
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Kick trip member
+      tags:
+      - trips
+    patch:
+      consumes:
+      - application/json
+      description: An active member may change only their own nickname. The leader
+        may also set another member's role to admin or member. Leadership is not assigned
+        here.
+      parameters:
+      - description: Trip UUID
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      - description: Member UUID
+        format: uuid
+        in: path
+        name: userId
+        required: true
+        type: string
+      - description: Nickname and/or role
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdateTripMemberRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TripMemberResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update trip member
       tags:
       - trips
   /trips/{tripId}/travels:
@@ -3087,11 +3634,31 @@ paths:
       summary: Compute travels from destination ids
       tags:
       - trips
+  /trips/invitations:
+    get:
+      description: Invitations a leader or admin sent to the caller. Pending join
+        requests are not included.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TripInvitationListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List my trip invitations
+      tags:
+      - trips
   /trips/join/{token}:
     post:
-      description: Authenticated caller joins the trip identified by the invite token
-        as a member. Reuses a left/rejected/kicked row. Already-active members get
-        409.
+      description: Authenticated caller opens a pending join request for the invite
+        token. A leader or admin approves it. Already-active members, existing invites,
+        and a full trip return 409.
       parameters:
       - description: Invite token (UUID)
         in: path
@@ -3104,7 +3671,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/Road-To-Destination-BE_module_trip_model_response.TripResponse'
+            $ref: '#/definitions/response.TripMemberResponse'
         "400":
           description: Bad Request
           schema:
@@ -3123,7 +3690,27 @@ paths:
             $ref: '#/definitions/share.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Join trip via invite link
+      summary: Request to join a trip via invite link
+      tags:
+      - trips
+  /trips/public:
+    get:
+      description: Authenticated callers can browse trips marked public. Private trips
+        are hidden. Invite tokens are never returned.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TripListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List public trips
       tags:
       - trips
 securityDefinitions:

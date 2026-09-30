@@ -13,6 +13,7 @@ Covered work starts at `88a3f9c`.
 - [Worker pool](#worker-pool)
 - [Storage tiers](#storage-tiers)
 - [Preview one branch](#preview-one-branch)
+- [Preview locations before a trip](#preview-locations-before-a-trip)
 - [Compute the saved graph](#compute-the-saved-graph)
 - [Read the stored travels](#read-the-stored-travels)
 - [Draft inbox](#draft-inbox)
@@ -59,7 +60,7 @@ Destination (pin, no trip id)
     └── route TripBranch (split / merge) → Trip
 ```
 
-`DELETE /planing/destination/:destinationId` follows where the pin sits. Only draft branches: delete the row, and the inbox stops cascade. Any route branch: the trip must still be `planning`, the stop is stripped, and the route is checked again. A locked trip that still has the pin on a route returns 409 and nothing is written. Disconnecting the route also writes nothing.
+`DELETE /planning/destination/:destinationId` follows where the pin sits. Only draft branches: delete the row, and the inbox stops cascade. Any route branch: the trip must still be `planning`, the stop is stripped, and the route is checked again. A locked trip that still has the pin on a route returns 409 and nothing is written. Disconnecting the route also writes nothing.
 
 ## Leg and travel
 
@@ -175,6 +176,22 @@ Each point carries exactly one id. Neither id, or both, is 400 (`ErrInvalidCompu
 
 Goong errors: missing API key is 500, rate limit is 429, an empty route or a non-OK status is 502.
 
+## Preview locations before a trip
+
+`POST /v1/planning/preview`
+
+JWT. No trip id and no membership check. The body is ordered catalog location ids, at least two. Each id is a verified place. An unknown id is 404. The call uses the same preview pool and the 15 minute Redis leg cache. Nothing is written to a trip.
+
+```json
+{
+  "locationIds": ["…", "…"]
+}
+```
+
+The response is `locations` in that order (`locationId`, `name`, `lat`, `lng`) and `legs` in the same shape as a branch preview. Only `locationId` is set on each end.
+
+That response is the optional `mainBranch` of `POST /v1/trips`. When it is present, create forks each location into a destination, in order, and stores that sequence as the trip's initial main branch. The reviewed hops are stored as travels between those new pins. The catalog coordinates are copied from the location rows; names and coordinates in the payload are not the ones written. The legs must line up with consecutive location ids, use vehicle `bike`, and carry a polyline. A trip created without `mainBranch` still opens with only the draft inbox.
+
 ## Compute the saved graph
 
 `POST /v1/trips/{tripId}/travels`
@@ -207,10 +224,12 @@ The draft branch is created with the trip. `IsDraft` is the flag. The label `Dra
 
 `POST` body is `{ "destinationId": "..." }`. Any active member may call it while the trip is `planning`. The pin must already exist. The call appends it and rewrites that one branch. Split and merge stay empty. A second copy of the same pin on the same inbox is rejected, because `idx_branch_dest` is unique per branch. This does not change the route graph or the stored travels.
 
-`PATCH` and `DELETE` on `/trips/{tripId}/branches/{branchId}/stops/{destinationId}` refuse a draft branch id. Removing an inbox pin is `DELETE /planing/destination/{destinationId}`.
+`PATCH` and `DELETE` on `/trips/{tripId}/branches/{branchId}/stops/{destinationId}` refuse a draft branch id. Removing an inbox pin is `DELETE /planning/destination/{destinationId}`.
 
 ## Not built yet
 
 - Nothing sets `IsFrozen` to true.
 - Replacing the graph does not delete old travels.
 - Preview does not check that a point belongs to the trip's saved graph.
+- Friend graph. Trip create and invite still take raw user ids. See [trip membership](trip-members.md).
+- Group chat. A trip should be created with one chat whose members match the trip. That object is not stored yet. See [trip membership](trip-members.md).

@@ -15,7 +15,7 @@ import (
 //
 // @Summary      Delete destination
 // @Description  Deletes a destination that is still editing. A pin that sits only on draft branches is removed immediately. A pin on a route branch is stripped first; the delete is rejected when that would disconnect the graph or when a trip that is no longer planning still uses the pin on a route. Travels that pointed at the pin are removed with the row.
-// @Tags         planing
+// @Tags         planning
 // @Produce      json
 // @Security     BearerAuth
 // @Param        destinationId  path  string  true  "Destination UUID"  format(uuid)
@@ -24,7 +24,7 @@ import (
 // @Failure      401            {object}  share.ErrorResponse
 // @Failure      404            {object}  share.ErrorResponse
 // @Failure      409            {object}  share.ErrorResponse
-// @Router       /planing/destination/{destinationId} [delete]
+// @Router       /planning/destination/{destinationId} [delete]
 func (ctrl *TripController) HandleDeleteDestination() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if currentUserOrAbort(c) == nil {

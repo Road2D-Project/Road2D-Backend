@@ -1,11 +1,11 @@
 package enum
 
-// MembershipStatus is the lifecycle of one (group_id, user_id) row.
+// MembershipStatus is the lifecycle of one membership row, on a group or a trip.
 // JSON and Postgres store the lowercase name:
 // "invited" | "pending" | "active" | "rejected" | "left" | "kicked".
 //
-// The pair (group_id, user_id) is unique. A later join reuses the same row
-// instead of inserting a duplicate.
+// The pair (group_id, user_id) or (trip_id, user_id) is unique. A later join
+// reuses the same row instead of inserting a duplicate.
 //
 // invited  — An admin/owner invited this user; waiting for accept or decline.
 // pending  — The user requested to join; waiting for admin/owner approval.

@@ -13,10 +13,11 @@ import (
 )
 
 // ForkedPin is one destination created for the seed route.
-// Name is the value stored at fork time. ComposeSetTripGraph looks that name up again.
+// ID is the pin written onto the main branch. LocationID is the catalog row it was copied from.
 type ForkedPin struct {
-	ID   uuid.UUID
-	Name string
+	LocationID uuid.UUID `json:"locationId"`
+	ID         uuid.UUID `json:"destinationId"`
+	Name       string    `json:"name"`
 }
 
 // DefaultDestinationName is the pin name written at fork.
@@ -30,10 +31,10 @@ func DefaultDestinationName(idx int, locationName string) string {
 	return fmt.Sprintf("%d. %s", idx, locationName)
 }
 
-// ForkDestinations copies up to DestinationLimit locations into pins.
-// Each pin is named with DefaultDestinationName for its index in that list.
-func ForkDestinations(ctx context.Context, svc *service.PlaceService, db *gorm.DB) ([]ForkedPin, error) {
-	list, err := listSeedLocations(db, DestinationLimit)
+// ForkLocations copies catalog places into pins, in the given order.
+// An empty id list uses the earliest locations, capped by DestinationLimit.
+func ForkLocations(ctx context.Context, svc *service.PlaceService, db *gorm.DB, locationIDs []uuid.UUID) ([]ForkedPin, error) {
+	list, err := seedLocations(db, locationIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +48,7 @@ func ForkDestinations(ctx context.Context, svc *service.PlaceService, db *gorm.D
 		if err != nil {
 			return nil, fmt.Errorf("fork destination %d: %w", idx, err)
 		}
-		forked = append(forked, ForkedPin{ID: created.DestinationId, Name: name})
+		forked = append(forked, ForkedPin{LocationID: loc.ID, ID: created.DestinationId, Name: name})
 	}
 	return forked, nil
 }

@@ -9,11 +9,11 @@ import (
 
 var _ = response.TripResponse{}
 
-// HandleGetTrip loads the trip by id. Active members get myRole; others still
-// receive the public name/status so they can decide to join via an invite link.
+// HandleGetTrip loads the trip by id. Active members get myRole. A private trip
+// is hidden from everyone else. A public trip is readable without a seat.
 //
 // @Summary      Get trip
-// @Description  Returns trip info. If the caller is an active member, myRole is set (leader/member). The invite token is never included.
+// @Description  Returns trip info without the invite token. Active members get myRole. Private trips are 404 for non-members. Public trips are readable by any authenticated user.
 // @Tags         trips
 // @Produce      json
 // @Security     BearerAuth

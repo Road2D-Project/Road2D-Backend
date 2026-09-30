@@ -913,7 +913,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Owner only. Fails with 409 if the group still has trips (trips.group_id). Members cascade-delete with the group.",
+                "description": "Owner only. Members cascade-delete with the group. Trips are not tied to a group.",
                 "produces": [
                     "application/json"
                 ],
@@ -955,12 +955,6 @@
                     },
                     "404": {
                         "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/share.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/share.ErrorResponse"
                         }
@@ -1614,7 +1608,7 @@
                 }
             }
         },
-        "/planing/destination/{destinationId}": {
+        "/planning/destination/{destinationId}": {
             "get": {
                 "security": [
                     {
@@ -1626,7 +1620,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "planing"
+                    "planning"
                 ],
                 "summary": "Get destination",
                 "parameters": [
@@ -1680,7 +1674,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "planing"
+                    "planning"
                 ],
                 "summary": "Update destination",
                 "parameters": [
@@ -1746,7 +1740,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "planing"
+                    "planning"
                 ],
                 "summary": "Delete destination",
                 "parameters": [
@@ -1790,7 +1784,7 @@
                 }
             }
         },
-        "/planing/fork/{locationId}": {
+        "/planning/fork/{locationId}": {
             "post": {
                 "security": [
                     {
@@ -1805,7 +1799,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "planing"
+                    "planning"
                 ],
                 "summary": "Fork location",
                 "parameters": [
@@ -1855,7 +1849,7 @@
                 }
             }
         },
-        "/planing/location/{locationId}": {
+        "/planning/location/{locationId}": {
             "get": {
                 "security": [
                     {
@@ -1867,7 +1861,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "planing"
+                    "planning"
                 ],
                 "summary": "Get location",
                 "parameters": [
@@ -1908,6 +1902,81 @@
                 }
             }
         },
+        "/planning/preview": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Compute the bike route along ordered location ids before a trip exists. Nothing is stored. Pass this response as mainBranch on POST /trips to open the trip on that main branch.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "planning"
+                ],
+                "summary": "Preview locations",
+                "parameters": [
+                    {
+                        "description": "Ordered location ids",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.PreviewLocationsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.PreviewLocationsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/trips": {
             "get": {
                 "security": [
@@ -1915,7 +1984,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns trips where the caller is an active member (leader or member). Each item includes myRole. Left/kicked seats are omitted.",
+                "description": "Returns trips where the caller is an active member (leader, admin, or member). Each item includes myRole. Left/kicked seats are omitted.",
                 "produces": [
                     "application/json"
                 ],
@@ -1944,7 +2013,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Create a planning trip under a group. The caller must be an active group member and becomes the trip leader. An invite token is minted immediately.",
+                "description": "Create a planning trip. The caller becomes leader and must name at least one other user, seated as a member. Bronze caps the trip at 15 seats. Trip type and member limit cannot be changed later. Optional mainBranch is the response of POST /planning/preview and becomes the trip's initial main branch. A group chat is not created yet.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1957,7 +2026,7 @@
                 "summary": "Create trip",
                 "parameters": [
                     {
-                        "description": "Group id, name, optional note and times",
+                        "description": "Name, trip type, members, optional note, times, visibility, and reviewed main branch",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -2000,6 +2069,37 @@
                 }
             }
         },
+        "/trips/invitations": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Invitations a leader or admin sent to the caller. Pending join requests are not included.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "List my trip invitations",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.TripInvitationListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/trips/join/{token}": {
             "post": {
                 "security": [
@@ -2007,14 +2107,14 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Authenticated caller joins the trip identified by the invite token as a member. Reuses a left/rejected/kicked row. Already-active members get 409.",
+                "description": "Authenticated caller opens a pending join request for the invite token. A leader or admin approves it. Already-active members, existing invites, and a full trip return 409.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "trips"
                 ],
-                "summary": "Join trip via invite link",
+                "summary": "Request to join a trip via invite link",
                 "parameters": [
                     {
                         "type": "string",
@@ -2028,7 +2128,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/Road-To-Destination-BE_module_trip_model_response.TripResponse"
+                            "$ref": "#/definitions/response.TripMemberResponse"
                         }
                     },
                     "400": {
@@ -2058,6 +2158,37 @@
                 }
             }
         },
+        "/trips/public": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Authenticated callers can browse trips marked public. Private trips are hidden. Invite tokens are never returned.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "List public trips",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.TripListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/trips/{tripId}": {
             "get": {
                 "security": [
@@ -2065,7 +2196,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns trip info. If the caller is an active member, myRole is set (leader/member). The invite token is never included.",
+                "description": "Returns trip info without the invite token. Active members get myRole. Private trips are 404 for non-members. Public trips are readable by any authenticated user.",
                 "produces": [
                     "application/json"
                 ],
@@ -2170,7 +2301,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Leader only. Change name, note, startTime, and/or endTime. Send only the fields to change. Status is not updated here.",
+                "description": "Leader or admin. Change name, note, startTime, endTime, and/or visibility. Trip type and member limit are not accepted. Status is not updated here.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2547,7 +2678,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Appends one destination to the trip's hidden draft branch. The pin must already exist, usually from POST /planing/fork/{locationId}. Only while the trip is planning. This does not change the route graph or the stored travels.",
+                "description": "Appends one destination to the trip's hidden draft branch. The pin must already exist, usually from POST /planning/fork/{locationId}. Only while the trip is planning. This does not change the route graph or the stored travels.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2604,6 +2735,82 @@
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/trips/{tripId}/fork": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Any active member forks the trip. The caller is the new leader. Other active members are copied as members, minus excludeUserIds. Trip type and member limit follow the new trip's tier and cannot be set freely. The route graph is not copied.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Fork trip",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Source trip UUID",
+                        "name": "tripId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Optional overrides and members to drop",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/request.ForkTripRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/Road-To-Destination-BE_module_trip_model_response.TripResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/share.ErrorResponse"
                         }
@@ -2739,6 +2946,76 @@
                 }
             }
         },
+        "/trips/{tripId}/invitations": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The invited user responds with ?action=accept|reject. Accept seats them as a member when the trip is not full.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Accept or decline a trip invitation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Trip UUID",
+                        "name": "tripId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "accept",
+                            "reject"
+                        ],
+                        "type": "string",
+                        "description": "accept or reject",
+                        "name": "action",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.TripMemberResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/trips/{tripId}/invite-link": {
             "post": {
                 "security": [
@@ -2746,7 +3023,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Leader only. Returns the current invite token and join path. Set rotate=true to invalidate the previous link.",
+                "description": "Leader or admin. Returns the current invite token and join path. Set rotate=true to invalidate the previous link.",
                 "produces": [
                     "application/json"
                 ],
@@ -2804,6 +3081,210 @@
                 }
             }
         },
+        "/trips/{tripId}/invite/{userId}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Any active member may invite by user id. Leader or admin invites are status invited (the invitee accepts). Member invites are status pending until a leader or admin approves. There is no friend check yet.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Invite a user to a trip",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Trip UUID",
+                        "name": "tripId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "User UUID",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.TripMemberResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/trips/{tripId}/join-requests": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Leader or admin. Pending rows only.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "List trip join requests",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Trip UUID",
+                        "name": "tripId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.TripJoinRequestListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/trips/{tripId}/join-requests/{userId}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Leader or admin. ?action=accept seats the user; reject sets status rejected. Accept fails with 409 when the member limit is already full.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Approve or reject a trip join request",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Trip UUID",
+                        "name": "tripId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Applicant UUID",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "accept",
+                            "reject"
+                        ],
+                        "type": "string",
+                        "description": "accept or reject",
+                        "name": "action",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.TripMemberResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/trips/{tripId}/leave": {
             "post": {
                 "security": [
@@ -2853,6 +3334,188 @@
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/trips/{tripId}/members": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Active members only. Pending invites and join requests are separate lists.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "List trip members",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Trip UUID",
+                        "name": "tripId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.TripMemberListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/trips/{tripId}/members/{userId}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Leader or admin. Cannot kick yourself, the leader, or (as an admin) another admin. The row stays as kicked so the user can be invited again.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Kick trip member",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Trip UUID",
+                        "name": "tripId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Member UUID",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Member kicked"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "An active member may change only their own nickname. The leader may also set another member's role to admin or member. Leadership is not assigned here.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trips"
+                ],
+                "summary": "Update trip member",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Trip UUID",
+                        "name": "tripId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Member UUID",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Nickname and/or role",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.UpdateTripMemberRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.TripMemberResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/share.ErrorResponse"
                         }
@@ -3136,13 +3799,13 @@
                 "endTime": {
                     "type": "string"
                 },
-                "groupId": {
-                    "type": "string",
-                    "format": "uuid"
-                },
                 "id": {
                     "type": "string",
                     "format": "uuid"
+                },
+                "memberLimit": {
+                    "type": "integer",
+                    "example": 15
                 },
                 "myRole": {
                     "type": "string",
@@ -3168,8 +3831,15 @@
                 "totalDistance": {
                     "type": "number"
                 },
+                "tripType": {
+                    "type": "string",
+                    "example": "bronze"
+                },
                 "updatedTime": {
                     "type": "string"
+                },
+                "visibility": {
+                    "type": "boolean"
                 }
             }
         },
@@ -3622,16 +4292,23 @@
         "request.CreateTripRequest": {
             "type": "object",
             "required": [
-                "groupId",
-                "name"
+                "memberUserIds",
+                "name",
+                "tripType"
             ],
             "properties": {
                 "endTime": {
                     "type": "string"
                 },
-                "groupId": {
-                    "type": "string",
-                    "format": "uuid"
+                "mainBranch": {
+                    "$ref": "#/definitions/response.PreviewLocationsResponse"
+                },
+                "memberUserIds": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "name": {
                     "type": "string",
@@ -3644,6 +4321,13 @@
                 },
                 "startTime": {
                     "type": "string"
+                },
+                "tripType": {
+                    "type": "string",
+                    "example": "bronze"
+                },
+                "visibility": {
+                    "type": "boolean"
                 }
             }
         },
@@ -3669,6 +4353,42 @@
                 },
                 "stayOverTime": {
                     "type": "integer"
+                }
+            }
+        },
+        "request.ForkTripRequest": {
+            "type": "object",
+            "required": [
+                "excludeUserIds"
+            ],
+            "properties": {
+                "endTime": {
+                    "type": "string"
+                },
+                "excludeUserIds": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
+                },
+                "note": {
+                    "type": "string",
+                    "maxLength": 4000
+                },
+                "startTime": {
+                    "type": "string"
+                },
+                "tripType": {
+                    "type": "string",
+                    "example": "bronze"
+                },
+                "visibility": {
+                    "type": "boolean"
                 }
             }
         },
@@ -3699,6 +4419,21 @@
             "properties": {
                 "refreshToken": {
                     "type": "string"
+                }
+            }
+        },
+        "request.PreviewLocationsRequest": {
+            "type": "object",
+            "required": [
+                "locationIds"
+            ],
+            "properties": {
+                "locationIds": {
+                    "type": "array",
+                    "minItems": 2,
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -3841,6 +4576,20 @@
                 }
             }
         },
+        "request.UpdateTripMemberRequest": {
+            "type": "object",
+            "properties": {
+                "nickname": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1
+                },
+                "role": {
+                    "type": "string",
+                    "example": "admin"
+                }
+            }
+        },
         "request.UpdateTripRequest": {
             "type": "object",
             "properties": {
@@ -3858,6 +4607,9 @@
                 },
                 "startTime": {
                     "type": "string"
+                },
+                "visibility": {
+                    "type": "boolean"
                 }
             }
         },
@@ -4427,6 +5179,41 @@
                 }
             }
         },
+        "response.PreviewLocation": {
+            "type": "object",
+            "properties": {
+                "lat": {
+                    "type": "number"
+                },
+                "lng": {
+                    "type": "number"
+                },
+                "locationId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.PreviewLocationsResponse": {
+            "type": "object",
+            "properties": {
+                "legs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.ComputeBranchLeg"
+                    }
+                },
+                "locations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.PreviewLocation"
+                    }
+                }
+            }
+        },
         "response.RefreshResponse": {
             "type": "object",
             "properties": {
@@ -4551,13 +5338,13 @@
                 "endTime": {
                     "type": "string"
                 },
-                "groupId": {
-                    "type": "string",
-                    "format": "uuid"
-                },
                 "id": {
                     "type": "string",
                     "format": "uuid"
+                },
+                "memberLimit": {
+                    "type": "integer",
+                    "example": 15
                 },
                 "myRole": {
                     "type": "string",
@@ -4583,8 +5370,26 @@
                 "totalDistance": {
                     "type": "number"
                 },
+                "tripType": {
+                    "type": "string",
+                    "example": "bronze"
+                },
                 "updatedTime": {
                     "type": "string"
+                },
+                "visibility": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "response.TripInvitationListResponse": {
+            "type": "object",
+            "properties": {
+                "invitations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.TripMemberResponse"
+                    }
                 }
             }
         },
@@ -4600,6 +5405,17 @@
                 }
             }
         },
+        "response.TripJoinRequestListResponse": {
+            "type": "object",
+            "properties": {
+                "joinRequests": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.TripMemberResponse"
+                    }
+                }
+            }
+        },
         "response.TripListResponse": {
             "type": "object",
             "properties": {
@@ -4608,6 +5424,53 @@
                     "items": {
                         "$ref": "#/definitions/Road-To-Destination-BE_module_trip_model_response.TripResponse"
                     }
+                }
+            }
+        },
+        "response.TripMemberListResponse": {
+            "type": "object",
+            "properties": {
+                "members": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.TripMemberResponse"
+                    }
+                }
+            }
+        },
+        "response.TripMemberResponse": {
+            "type": "object",
+            "properties": {
+                "invitorName": {
+                    "type": "string"
+                },
+                "joinedAt": {
+                    "type": "string"
+                },
+                "nickname": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string",
+                    "example": "member"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "active"
+                },
+                "tripId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "tripName": {
+                    "type": "string"
+                },
+                "userId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "username": {
+                    "type": "string"
                 }
             }
         },

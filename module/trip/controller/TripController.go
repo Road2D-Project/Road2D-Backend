@@ -23,16 +23,24 @@ var (
 	_ = model.TripMember{}
 	_ = request.CreateTripRequest{}
 	_ = request.UpdateTripRequest{}
+	_ = request.ForkTripRequest{}
+	_ = request.UpdateTripMemberRequest{}
 	_ = request.ComputeBranchRequest{}
+	_ = request.PreviewLocationsRequest{}
 	_ = request.ComputeTravelGraphRequest{}
 	_ = request.UpdateBranchStopRequest{}
 	_ = request.AddDraftDestinationRequest{}
 	_ = response.DraftDestinationsResponse{}
 	_ = response.TripResponse{}
 	_ = response.TripListResponse{}
+	_ = response.TripMemberResponse{}
+	_ = response.TripMemberListResponse{}
+	_ = response.TripInvitationListResponse{}
+	_ = response.TripJoinRequestListResponse{}
 	_ = response.TripInviteLinkResponse{}
 	_ = response.TripDetailResponse{}
 	_ = response.ComputeBranchResponse{}
+	_ = response.PreviewLocationsResponse{}
 	_ = response.ComputeTripResponse{}
 	_ = share.ErrorResponse{}
 )
@@ -74,34 +82,56 @@ func NewTripController(db *gorm.DB, redisClient *redis.Client, validator *valida
 }
 
 func (ctrl *TripController) RegisterRoutes(router *gin.RouterGroup) {
-	trips := router.Group("/trips", ctrl.auth.RequireAuth())
-	{
-		trips.POST("", ctrl.HandleCreateTrip())
-		trips.GET("", ctrl.HandleListTrips())
-		trips.POST("/join/:token", ctrl.HandleJoinTrip())
-		trips.GET("/:tripId", ctrl.HandleGetTrip())
-		trips.GET("/:tripId/graph", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph"), ctrl.cacheResponse.CacheAround(), ctrl.HandleGetTripGraph())
-		trips.GET("/:tripId/draft", ctrl.handleActiveTripRole(), ctrl.CachedKeys("draft"), ctrl.cacheResponse.CacheAround(), ctrl.HandleListDraftDestinations())
-		trips.POST("/:tripId/draft", ctrl.handleActiveTripRole(), ctrl.CachedKeys("draft"), ctrl.cacheResponse.MarkChanged(), ctrl.HandleAddDraftDestination())
-		trips.PUT("/:tripId/graph", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleSetTripGraph())
-		trips.POST("/:tripId/compute", ctrl.handleActiveTripRole(), ctrl.HandleComputeTrip())
-		trips.GET("/:tripId/travels", ctrl.handleActiveTripRole(), ctrl.CachedKeys("travels"), ctrl.cacheResponse.CacheAround(), ctrl.HandleGetStoredTravels())
-		trips.POST("/:tripId/travels", ctrl.handleActiveTripRole(), ctrl.CachedKeys("travels"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleComputeStoredTrip())
-		trips.POST("/:tripId/travels/graph", ctrl.handleActiveTripRole(), ctrl.CachedKeys("travels", "graph"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleComputeTravelGraph())
-		trips.PATCH("/:tripId/branches/:branchId/stops/:destinationId", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph", "travels"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleUpdateBranchStop())
-		trips.DELETE("/:tripId/branches/:branchId/stops/:destinationId", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph", "travels"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleDeleteBranchStop())
-		trips.PATCH("/:tripId", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleUpdateTrip())
-		trips.DELETE("/:tripId", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleDeleteTrip())
-		trips.POST("/:tripId/invite-link", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleCreateInviteLink())
-		trips.POST("/:tripId/leave", ctrl.handleActiveTripRole(), ctrl.HandleLeaveTrip())
-	}
-	// liên quan tới place{location,destination}
-	planing := router.Group("/planing", ctrl.auth.RequireAuth())
-	{
-		planing.POST("/fork/:locationId", ctrl.HandleForkLocation())
-		planing.GET("/location/:locationId", ctrl.HandleGetLocation())
-		planing.GET("/destination/:destinationId", ctrl.HandleGetDestination())
-		planing.PUT("/destination/:destinationId", ctrl.HandleUpdateDestination())
-		planing.DELETE("/destination/:destinationId", ctrl.cacheResponse.MarkChanged(), ctrl.HandleDeleteDestination())
-	}
+	authed := ctrl.auth.RequireAuth()
+	trips := router.Group("/trips", authed)
+	ctrl.registerTripRoutes(trips)
+	ctrl.registerMemberRoutes(trips)
+	ctrl.registerGraphRoutes(trips)
+	ctrl.registerPlanningRoutes(router.Group("/planning", authed))
+}
+
+func (ctrl *TripController) registerTripRoutes(trips *gin.RouterGroup) {
+	trips.POST("", ctrl.HandleCreateTrip())
+	trips.GET("", ctrl.HandleListTrips())
+	trips.GET("/public", ctrl.HandleListPublicTrips())
+	trips.GET("/:tripId", ctrl.HandleGetTrip())
+	trips.POST("/:tripId/fork", ctrl.handleActiveTripRole(), ctrl.HandleForkTrip())
+	trips.PATCH("/:tripId", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader, enum.TripRoleAdmin), ctrl.HandleUpdateTrip())
+	trips.DELETE("/:tripId", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleDeleteTrip())
+}
+
+func (ctrl *TripController) registerMemberRoutes(trips *gin.RouterGroup) {
+	trips.GET("/invitations", ctrl.HandleListTripInvitations())
+	trips.POST("/join/:token", ctrl.HandleJoinTrip())
+	trips.GET("/:tripId/members", ctrl.handleActiveTripRole(), ctrl.HandleListTripMembers())
+	trips.PATCH("/:tripId/members/:userId", ctrl.handleActiveTripRole(), ctrl.HandleUpdateTripMember())
+	trips.DELETE("/:tripId/members/:userId", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader, enum.TripRoleAdmin), ctrl.HandleKickTripMember())
+	trips.POST("/:tripId/invite/:userId", ctrl.handleActiveTripRole(), ctrl.HandleInviteTripMember())
+	trips.POST("/:tripId/invitations", ctrl.HandleRespondTripInvitation())
+	trips.GET("/:tripId/join-requests", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader, enum.TripRoleAdmin), ctrl.HandleListTripJoinRequests())
+	trips.POST("/:tripId/join-requests/:userId", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader, enum.TripRoleAdmin), ctrl.HandleTripJoinRequest())
+	trips.POST("/:tripId/invite-link", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader, enum.TripRoleAdmin), ctrl.HandleCreateInviteLink())
+	trips.POST("/:tripId/leave", ctrl.handleActiveTripRole(), ctrl.HandleLeaveTrip())
+}
+
+func (ctrl *TripController) registerGraphRoutes(trips *gin.RouterGroup) {
+	trips.GET("/:tripId/graph", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph"), ctrl.cacheResponse.CacheAround(), ctrl.HandleGetTripGraph())
+	trips.PUT("/:tripId/graph", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleSetTripGraph())
+	trips.GET("/:tripId/draft", ctrl.handleActiveTripRole(), ctrl.CachedKeys("draft"), ctrl.cacheResponse.CacheAround(), ctrl.HandleListDraftDestinations())
+	trips.POST("/:tripId/draft", ctrl.handleActiveTripRole(), ctrl.CachedKeys("draft"), ctrl.cacheResponse.MarkChanged(), ctrl.HandleAddDraftDestination())
+	trips.POST("/:tripId/compute", ctrl.handleActiveTripRole(), ctrl.HandleComputeTrip())
+	trips.GET("/:tripId/travels", ctrl.handleActiveTripRole(), ctrl.CachedKeys("travels"), ctrl.cacheResponse.CacheAround(), ctrl.HandleGetStoredTravels())
+	trips.POST("/:tripId/travels", ctrl.handleActiveTripRole(), ctrl.CachedKeys("travels"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleComputeStoredTrip())
+	trips.POST("/:tripId/travels/graph", ctrl.handleActiveTripRole(), ctrl.CachedKeys("travels", "graph"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleComputeTravelGraph())
+	trips.PATCH("/:tripId/branches/:branchId/stops/:destinationId", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph", "travels"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleUpdateBranchStop())
+	trips.DELETE("/:tripId/branches/:branchId/stops/:destinationId", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph", "travels"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleDeleteBranchStop())
+}
+
+func (ctrl *TripController) registerPlanningRoutes(planning *gin.RouterGroup) {
+	planning.POST("/preview", ctrl.HandlePreviewLocations())
+	planning.POST("/fork/:locationId", ctrl.HandleForkLocation())
+	planning.GET("/location/:locationId", ctrl.HandleGetLocation())
+	planning.GET("/destination/:destinationId", ctrl.HandleGetDestination())
+	planning.PUT("/destination/:destinationId", ctrl.HandleUpdateDestination())
+	planning.DELETE("/destination/:destinationId", ctrl.cacheResponse.MarkChanged(), ctrl.HandleDeleteDestination())
 }

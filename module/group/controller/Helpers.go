@@ -73,8 +73,7 @@ func mapGroupError(c *gin.Context, err error) {
 		errors.Is(err, repository.ErrInvitationNotFound),
 		errors.Is(err, repository.ErrJoinRequestNotFound):
 		jsonError(c, http.StatusNotFound, err.Error())
-	case errors.Is(err, repository.ErrGroupHasTrips),
-		errors.Is(err, repository.ErrAlreadyGroupMember),
+	case errors.Is(err, repository.ErrAlreadyGroupMember),
 		errors.Is(err, repository.ErrAlreadyInvited),
 		errors.Is(err, repository.ErrJoinRequestPending),
 		errors.Is(err, repository.ErrInvitationNotPending),

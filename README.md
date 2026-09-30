@@ -24,7 +24,7 @@ Travel (one trip's snapshot of a leg; frozen rows are history)
 
 - **authentication** — register, login, refresh, profile, forget / reset password
 - **maps** — Goong v2 playground: autocomplete, place detail, geocode, directions, trip TSP
-- **trip** — trip CRUD, membership, and invite links. Planning and routing: [docs/trip-route.md](docs/trip-route.md)
+- **trip** — trip CRUD, membership, and invite links. Membership: [docs/trip-members.md](docs/trip-members.md). Planning and routing: [docs/trip-route.md](docs/trip-route.md)
   - [How a ride is planned](docs/trip-route.md#how-a-ride-is-planned)
   - [Location and destination](docs/trip-route.md#location-and-destination)
   - [Leg and travel](docs/trip-route.md#leg-and-travel)
@@ -32,6 +32,7 @@ Travel (one trip's snapshot of a leg; frozen rows are history)
   - [Worker pool](docs/trip-route.md#worker-pool)
   - [Storage tiers](docs/trip-route.md#storage-tiers)
   - [Preview one branch](docs/trip-route.md#preview-one-branch)
+  - [Preview locations before a trip](docs/trip-route.md#preview-locations-before-a-trip) — `POST /planning/preview`
   - [Compute the saved graph](docs/trip-route.md#compute-the-saved-graph) — `POST /trips/:tripId/travels`
   - [Read the stored travels](docs/trip-route.md#read-the-stored-travels) — `GET /trips/:tripId/graph`, `GET /trips/:tripId/travels`
   - [Draft inbox](docs/trip-route.md#draft-inbox) — `GET` and `POST /trips/:tripId/draft`
@@ -81,7 +82,7 @@ cmd/
 │   └── seed/
 │       ├── command.go       # `seeder`: Postgres + Redis, then AutoMigrate
 │       ├── location.go      # `seeder location`: flags and the run report
-│       └── trip.go          # `seeder trip`: group, trip, and a 10-pin main branch
+│       └── trip.go          # `seeder trip`: members, trip, and a main branch from location ids
 └── migrate/
     ├── main.go              # standalone migrate
     └── run/run.go           # Postgres, then AutoMigrate
@@ -107,7 +108,7 @@ Pass pins as `--lat` and `--lng` together, as `--coords` (`lat,lng` pairs separa
 
 `seeder user --fake` registers every account in `internal/seed/user/users.json` (five sample riders; the file is a JSON array and is not capped). Usernames already in Postgres are skipped. `--file path.json` reads another array of `{username, email, password}` instead.
 
-`seeder trip` creates a group and a planning trip owned by `USER_NAME` (registered first when that username is missing). It forks the earliest 10 locations, names each pin `"{index}. {location name}"`, then writes those pins as the trip's main branch. The branch is assembled by looking the fork names up in that same index order, not by keeping the ids from the fork call. Run `seeder location` first so there are places to copy.
+`seeder trip` creates a planning trip owned by `USER_NAME` (registered first when that username is missing). It does not create a group. With no `--members`, every account in `internal/seed/user/users.json` except the leader is seated, and missing accounts are registered first. `--members` names a shorter list. The main branch is forked from `--location-ids` in that order; with no flag, the earliest 10 locations are used. The branch is the destination ids returned by those forks. The command prints the trip without secrets, plus the join token. Only `bronze` (15 seats) can be created until the other trip types have a member cap. Run `seeder location` first so there are places to copy.
 
 A new seed entity is a file under `cmd/cli/seed/`, registered from `NewSeederCommand`. Put the Goong and persistence work in `internal/seed/<entity>/`.
 

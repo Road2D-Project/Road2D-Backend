@@ -12,7 +12,7 @@ import (
 // Any active member may call it while the trip is planning. The route graph is unchanged.
 //
 // @Summary      Add a draft destination
-// @Description  Appends one destination to the trip's hidden draft branch. The pin must already exist, usually from POST /planing/fork/{locationId}. Only while the trip is planning. This does not change the route graph or the stored travels.
+// @Description  Appends one destination to the trip's hidden draft branch. The pin must already exist, usually from POST /planning/fork/{locationId}. Only while the trip is planning. This does not change the route graph or the stored travels.
 // @Tags         trips
 // @Accept       json
 // @Produce      json

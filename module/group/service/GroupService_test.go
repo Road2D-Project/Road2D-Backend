@@ -19,7 +19,6 @@ type stubGroupRecords struct {
 	members   []model.GroupMember
 	byID      map[uuid.UUID]*model.Group
 	listed    []repository.ActiveGroupByUser
-	tripCount int64
 	updateErr error
 	deleted   uuid.UUID
 }
@@ -74,10 +73,6 @@ func (s *stubGroupRecords) DeleteGroup(_ context.Context, id uuid.UUID) error {
 
 func (s *stubGroupRecords) ListActiveGroupByUser(context.Context, uuid.UUID) ([]repository.ActiveGroupByUser, error) {
 	return s.listed, nil
-}
-
-func (s *stubGroupRecords) CountGroupTrips(context.Context, uuid.UUID) (int64, error) {
-	return s.tripCount, nil
 }
 
 type stubUsersByName struct {
@@ -165,11 +160,15 @@ func TestCreateGroupUnknownAdminAborts(t *testing.T) {
 	}
 }
 
-func TestDeleteGroupBlockedWhenTripsExist(t *testing.T) {
-	svc := NewGroupService(&stubGroupRecords{tripCount: 1}, nil, nil, nil)
-	err := svc.DeleteGroup(context.Background(), uuid.New())
-	if !errors.Is(err, repository.ErrGroupHasTrips) {
-		t.Fatalf("got %v", err)
+func TestDeleteGroupRemovesTheRow(t *testing.T) {
+	id := uuid.New()
+	groups := &stubGroupRecords{}
+	svc := NewGroupService(groups, nil, nil, nil)
+	if err := svc.DeleteGroup(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	if groups.deleted != id {
+		t.Fatalf("deleted %s", groups.deleted)
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"Road-To-Destination-BE/module/group/model"
-	tripmodel "Road-To-Destination-BE/module/trip/model"
 	"Road-To-Destination-BE/utils/enum"
 
 	"github.com/google/uuid"
@@ -117,10 +116,4 @@ func (r *GroupRepository) ListActiveGroupByUser(ctx context.Context, userID uuid
 		out = append(out, ActiveGroupByUser{Group: g, Role: roleByGroup[g.ID]})
 	}
 	return out, nil
-}
-
-func (r *GroupRepository) CountGroupTrips(ctx context.Context, groupID uuid.UUID) (int64, error) {
-	var n int64
-	err := r.db.WithContext(ctx).Model(&tripmodel.Trip{}).Where("group_id = ?", groupID).Count(&n).Error
-	return n, err
 }

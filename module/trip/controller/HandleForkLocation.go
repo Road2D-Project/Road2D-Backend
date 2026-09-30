@@ -15,7 +15,7 @@ var _ = response.CreateDestinationResponse{}
 //
 // @Summary      Fork location
 // @Description  Creates an editing destination from a verified location. lat/lng and the location link are copied from the location. Optional name overrides the location name.
-// @Tags         planing
+// @Tags         planning
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
@@ -25,7 +25,7 @@ var _ = response.CreateDestinationResponse{}
 // @Failure      400         {object}  share.ErrorResponse
 // @Failure      401         {object}  share.ErrorResponse
 // @Failure      404         {object}  share.ErrorResponse
-// @Router       /planing/fork/{locationId} [post]
+// @Router       /planning/fork/{locationId} [post]
 func (ctrl *TripController) HandleForkLocation() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if currentUserOrAbort(c) == nil {

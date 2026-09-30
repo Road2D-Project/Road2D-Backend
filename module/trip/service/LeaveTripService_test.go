@@ -117,6 +117,25 @@ func TestLeaveLeaderTransfersToEarliestMember(t *testing.T) {
 	}
 }
 
+func TestLeaveLeaderPrefersEarliestAdmin(t *testing.T) {
+	leaderID, adminID, earlyMemberID := uuid.New(), uuid.New(), uuid.New()
+	tripID := uuid.New()
+	members := &stubLeaveTripMembers{
+		member: &model.TripMember{UserID: leaderID, TripID: tripID, Role: enum.TripRoleLeader, Status: enum.MembershipActive},
+		roster: []model.TripMember{
+			{UserID: earlyMemberID, Role: enum.TripRoleMember, Status: enum.MembershipActive, JoinedAt: atHour(2)},
+			{UserID: adminID, Role: enum.TripRoleAdmin, Status: enum.MembershipActive, JoinedAt: atHour(8)},
+		},
+	}
+	svc := NewLeaveTripService(members, nil)
+	if err := svc.Leave(context.Background(), leaderID, tripID); err != nil {
+		t.Fatal(err)
+	}
+	if members.successor == nil || members.successor.UserID != adminID {
+		t.Fatalf("successor = %+v", members.successor)
+	}
+}
+
 func TestLeaveLeaderAloneHasNoSuccessor(t *testing.T) {
 	leaderID, tripID := uuid.New(), uuid.New()
 	svc := NewLeaveTripService(&stubLeaveTripMembers{

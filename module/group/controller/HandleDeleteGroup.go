@@ -8,7 +8,7 @@ import (
 
 // HandleDeleteGroup godoc
 // @Summary      Delete group
-// @Description  Owner only. Fails with 409 if the group still has trips (trips.group_id). Members cascade-delete with the group.
+// @Description  Owner only. Members cascade-delete with the group. Trips are not tied to a group.
 // @Tags         groups
 // @Produce      json
 // @Security     BearerAuth
@@ -18,7 +18,6 @@ import (
 // @Failure      401      {object}  share.ErrorResponse
 // @Failure      403      {object}  share.ErrorResponse
 // @Failure      404      {object}  share.ErrorResponse
-// @Failure      409      {object}  share.ErrorResponse
 // @Router       /groups/{groupId} [delete]
 func (ctrl *GroupController) HandleDeleteGroup() gin.HandlerFunc {
 	return func(c *gin.Context) {

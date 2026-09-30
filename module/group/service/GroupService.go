@@ -23,7 +23,6 @@ type GroupRecordRepository interface {
 	UpdateGroupInfo(ctx context.Context, id uuid.UUID, name, description, policy *string) error
 	DeleteGroup(ctx context.Context, id uuid.UUID) error
 	ListActiveGroupByUser(ctx context.Context, userID uuid.UUID) ([]repository.ActiveGroupByUser, error)
-	CountGroupTrips(ctx context.Context, groupID uuid.UUID) (int64, error)
 }
 
 // UserByUsernameFinder loads an account by login name when adding admins.
@@ -182,13 +181,6 @@ func (s *GroupService) UpdateGroup(ctx context.Context, groupID uuid.UUID, req r
 }
 
 func (s *GroupService) DeleteGroup(ctx context.Context, groupID uuid.UUID) error {
-	n, err := s.groupRecords.CountGroupTrips(ctx, groupID)
-	if err != nil {
-		return err
-	}
-	if n > 0 {
-		return repository.ErrGroupHasTrips
-	}
 	return s.groupRecords.DeleteGroup(ctx, groupID)
 }
 
