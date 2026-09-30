@@ -52,6 +52,7 @@ func NewSeederCommand() *cobra.Command {
 	// Wire new seeder entity here
 	cmd.AddCommand(newLocationCommand())
 	cmd.AddCommand(newUserCommand())
+	cmd.AddCommand(newTripCommand())
 	return cmd
 }
 

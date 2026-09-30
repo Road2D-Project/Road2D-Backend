@@ -80,7 +80,8 @@ cmd/
 │   ├── main.go              # standalone seeder; args start at the entity
 │   └── seed/
 │       ├── command.go       # `seeder`: Postgres + Redis, then AutoMigrate
-│       └── location.go      # `seeder location`: flags and the run report
+│       ├── location.go      # `seeder location`: flags and the run report
+│       └── trip.go          # `seeder trip`: group, trip, and a 10-pin main branch
 └── migrate/
     ├── main.go              # standalone migrate
     └── run/run.go           # Postgres, then AutoMigrate
@@ -96,7 +97,7 @@ internal/
 
 **migrate** connects to Postgres and runs `AutoMigrate`. It does not start HTTP or call Goong.
 
-**seeder** is the parent for reference data. It requires Postgres, migrates, opens Redis as the place cache, then runs one entity. Entities today are **location** and **user**.
+**seeder** is the parent for reference data. It requires Postgres, migrates, opens Redis as the place cache, then runs one entity. Entities today are **location**, **user**, and **trip**.
 
 `seeder location` reverse-geocodes pins with Goong (`GOONG_MAP_CALC_API_KEY`) and inserts verified locations that are not already in Postgres. A place found only in Redis is written to Postgres. Each pin requests up to `--limit` results (default 10). With no pins, it uses `10.7725,106.6980` and `10.8721512,106.803008`.
 
@@ -105,6 +106,8 @@ Pass pins as `--lat` and `--lng` together, as `--coords` (`lat,lng` pairs separa
 `seeder user --default` registers `USER_NAME` when that username is missing, then logs in with `USER_PASSWORD` and prints the access and refresh tokens. Set `USER_NAME`, `USER_EMAIL`, and `USER_PASSWORD` in `.env`.
 
 `seeder user --fake` registers every account in `internal/seed/user/users.json` (five sample riders; the file is a JSON array and is not capped). Usernames already in Postgres are skipped. `--file path.json` reads another array of `{username, email, password}` instead.
+
+`seeder trip` creates a group and a planning trip owned by `USER_NAME` (registered first when that username is missing). It forks the earliest 10 locations, names each pin `"{index}. {location name}"`, then writes those pins as the trip's main branch. The branch is assembled by looking the fork names up in that same index order, not by keeping the ids from the fork call. Run `seeder location` first so there are places to copy.
 
 A new seed entity is a file under `cmd/cli/seed/`, registered from `NewSeederCommand`. Put the Goong and persistence work in `internal/seed/<entity>/`.
 
@@ -129,6 +132,7 @@ go run . seeder location --lat 10.7486 --lng 106.6601
 go run . seeder location --coords "10.7486,106.6601;10.7725,106.6980"
 go run . seeder user --default
 go run . seeder user --fake
+go run . seeder trip
 ```
 
 Standalone mains. The CLI entry starts at the entity, so it does not take the word `seeder`:
