@@ -24,18 +24,17 @@ import (
 // Define controller
 func Run() error {
 	dbConfig := configuration.DatabaseConfig{}
+	var redisConfig configuration.RedisConfiguration
+	redisConfig.Connect()
 	if err := dbConfig.ConnectDatabase(); err != nil {
 		if errors.Is(err, configuration.ErrDatabaseNotConfigured) {
 			log.Print("postgres skipped: set DB_HOST, DB_USER, DB_NAME, DB_PORT to enable")
 		} else {
 			return err
 		}
-	} else if err := configuration.AutoMigrate(dbConfig.GetDatabase()); err != nil {
+	} /*else if err := configuration.AutoMigrate(dbConfig.GetDatabase()); err != nil {
 		return err
-	}
-
-	var redisConfig configuration.RedisConfiguration
-	redisConfig.Connect()
+	}*/
 	defer redisConfig.Disconnect()
 
 	mainValidator := validator.New()

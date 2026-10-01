@@ -34,9 +34,9 @@ func NewSeederCommand() *cobra.Command {
 			if err := dbConfig.ConnectDatabase(); err != nil {
 				return err
 			}
-			if err := configuration.AutoMigrate(dbConfig.GetDatabase()); err != nil {
-				return err
-			}
+			//if err := configuration.AutoMigrate(dbConfig.GetDatabase()); err != nil {
+			//	return err
+			//}
 			var redisConfig configuration.RedisConfiguration
 			redisConfig.Connect()
 			runtime.db = dbConfig.GetDatabase()

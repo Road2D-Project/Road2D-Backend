@@ -1,10 +1,10 @@
 package configuration
 
 import (
+	"Road-To-Destination-BE/module/share"
+	"context"
 	"errors"
 	"fmt"
-
-	"Road-To-Destination-BE/module/share"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -19,6 +19,42 @@ type DatabaseConfig struct {
 }
 
 func (config *DatabaseConfig) ConnectDatabase() error {
+	url := share.GetEnvStringDefault("DB_URL", "")
+	if url == "" {
+		return config.connectByVar()
+	}
+	return config.connectByURL(url)
+}
+
+func (config *DatabaseConfig) Migrate(models ...interface{}) error {
+	if config.db == nil {
+		return ErrDatabaseNotConfigured
+	}
+	return config.db.AutoMigrate(models...)
+}
+
+func (config *DatabaseConfig) GetDatabase() *gorm.DB {
+	return config.db
+}
+func (config *DatabaseConfig) connectByURL(url string) error {
+	db, err := gorm.Open(postgres.Open(url), &gorm.Config{})
+	if err != nil {
+		fmt.Println("postgres:", err)
+	} else {
+		sqlDB, err := db.DB()
+		if err != nil {
+			fmt.Println("postgres:", err)
+			return err
+		} else if err := sqlDB.PingContext(context.Background()); err != nil {
+			fmt.Println("postgres:", err)
+			return err
+		}
+	}
+	config.db = db
+	fmt.Println("Database connection established successfully")
+	return nil
+}
+func (config *DatabaseConfig) connectByVar() error {
 	host := share.GetEnvStringDefault("DB_HOST", "")
 	user := share.GetEnvStringDefault("DB_USER", "")
 	password := share.GetEnvStringDefault("DB_PASSWORD", "")
@@ -40,16 +76,5 @@ func (config *DatabaseConfig) ConnectDatabase() error {
 		return fmt.Errorf("connect postgres: %w", err)
 	}
 	config.db = database
-	return nil
-}
-
-func (config *DatabaseConfig) Migrate(models ...interface{}) error {
-	if config.db == nil {
-		return ErrDatabaseNotConfigured
-	}
-	return config.db.AutoMigrate(models...)
-}
-
-func (config *DatabaseConfig) GetDatabase() *gorm.DB {
-	return config.db
+	return err
 }

@@ -1,11 +1,10 @@
 package main
 
 import (
-	"log"
-	"os"
-
 	"Road-To-Destination-BE/cmd/server/run"
 	"Road-To-Destination-BE/module/share"
+	"log"
+	"os"
 )
 
 // @title           Road2D
