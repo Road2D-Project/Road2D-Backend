@@ -1,0 +1,12 @@
+.cursor
+docs/.obsidian
+docs/prompt
+docs/research
+docs/review
+docs/*.md
+persistence
+.git
+*.exe
+.env
+.env.example
+module/maps/test

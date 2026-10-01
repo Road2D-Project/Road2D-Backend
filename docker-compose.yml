@@ -1,0 +1,94 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: r2d_db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${DB_USER:?set DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:?set DB_NAME}
+    volumes:
+      # Postgres 18 keeps the data directory under /var/lib/postgresql.
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: r2d_redis
+    ports:
+      - "6379:6379"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    command:
+      - sh
+      - -c
+      - |
+        if [ -n "$$REDIS_PASSWORD" ]; then
+          exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+        fi
+        exec redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping; else redis-cli ping; fi"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  app:
+    build: .
+    container_name: r2d-backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      GOONG_MAP_CALC_API_KEY: ${GOONG_MAP_CALC_API_KEY:-}
+      GOONG_MAP_RENDER_API_KEY: ${GOONG_MAP_RENDER_API_KEY:-}
+      GOONG_DOMAIN: ${GOONG_DOMAIN:-https://rsapi.goong.io}
+      GOONG_PLAYGROUND_KEY: ${GOONG_PLAYGROUND_KEY:-}
+      SERP_MAP_API: ${SERP_MAP_API:-}
+      HTTP_ADDR: ${HTTP_ADDR:-:8080}
+      # ghi đề để map đúng vào trong container
+      DB_HOST: postgres
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:?set DB_NAME}
+      DB_USER: ${DB_USER:?set DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
+      DB_TIMEZONE: ${DB_TIMEZONE:-Asia/Singapore}
+
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+      LEG_CACHE_TTL_SECONDS: ${LEG_CACHE_TTL_SECONDS:-86400}
+      PLACE_CACHE_TTL_SECONDS: ${PLACE_CACHE_TTL_SECONDS:-86400}
+      TRAVEL_TTL_SECONDS: ${TRAVEL_TTL_SECONDS:-86400}
+
+      USER_NAME: ${USER_NAME:-}
+      USER_EMAIL: ${USER_EMAIL:-}
+      USER_PASSWORD: ${USER_PASSWORD:-}
+
+      SECRET_JWT: ${SECRET_JWT:?set SECRET_JWT}
+      SECRET_REFRESH_JWT: ${SECRET_REFRESH_JWT:?set SECRET_REFRESH_JWT}
+      SECRET_MAIL_JWT: ${SECRET_MAIL_JWT:?set SECRET_MAIL_JWT}
+
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:8080}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Road2D}
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
