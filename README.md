@@ -94,7 +94,7 @@ internal/
     └── args.go              # stitch decimals PowerShell splits apart
 ```
 
-**server** listens on `HTTP_ADDR` (default `:8080`). It migrates when Postgres is configured. Without `DB_HOST`, `DB_USER`, `DB_NAME`, and `DB_PORT` the process still serves, and auth has no database. Redis is the cache and password-reset store. OpenAPI UI is `/docs/public`. Swagger comments are on `cmd/server/main.go` (`go generate` in the root `main.go`).
+**server** listens on `HTTP_ADDR` (default `:8080`). `PORT` is accepted the same way when `HTTP_ADDR` is empty. Without `DB_HOST`, `DB_USER`, `DB_NAME`, and `DB_PORT` the process still serves, and auth has no database. Redis is the cache and password-reset store. `GET /health` pings Postgres and Redis and returns 200 only when both answer. OpenAPI UI is `/docs/public`. Swagger comments are on `cmd/server/main.go` (`go generate` in the root `main.go`).
 
 **migrate** connects to Postgres and runs `AutoMigrate`. It does not start HTTP or call Goong.
 
@@ -143,6 +143,33 @@ go run ./cmd/server
 go run ./cmd/migrate
 go run ./cmd/cli location --lat 10.7486 --lng 106.6601
 ```
+
+## Run with Docker
+
+Copy `.env.example` to `.env` and set `DB_USER`, `DB_PASSWORD`, `DB_NAME`, and the three JWT secrets. Compose reads that file. The app container overrides `DB_HOST` to `postgres` and `REDIS_ADDR` to `redis:6379`.
+
+```bash
+docker compose up --build
+```
+
+The API is [http://localhost:8080](http://localhost:8080). `GET /health` is the process check; Compose marks `r2d-backend` healthy only when that body has `"status":"ok"`. Docs stay at [http://localhost:8080/docs/public](http://localhost:8080/docs/public).
+
+The app image is Alpine, so the shell is `sh`. `seeder` is a subcommand of the same binary that runs the server:
+
+```bash
+docker exec -it r2d-backend sh
+./Road-To-Destination-BE seeder user --default
+./Road-To-Destination-BE seeder location --lat 10.7725 --lng 106.6980
+./Road-To-Destination-BE seeder trip
+```
+
+From the host, without opening a shell:
+
+```bash
+docker exec -it r2d-backend ./Road-To-Destination-BE seeder user --fake
+```
+
+The Compose project name defaults to the directory (`road-to-destination-be`). Set `name:` at the top of `docker-compose.yml`, or `COMPOSE_PROJECT_NAME` in `.env`, or run `docker compose -p r2d up`. Container names are already `r2d-backend`, `r2d_db`, and `r2d_redis`.
 
 ## API
 

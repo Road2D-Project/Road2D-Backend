@@ -3,6 +3,7 @@ package run
 import (
 	"errors"
 	"log"
+	"strings"
 
 	"Road-To-Destination-BE/middleware"
 	authenController "Road-To-Destination-BE/module/authentication/controller"
@@ -41,6 +42,7 @@ func Run() error {
 	customValidator.ValidatorRegistrar(mainValidator)
 
 	router := gin.Default()
+	registerHealth(router, dbConfig.GetDatabase(), redisConfig.Client())
 	router.GET("/docs/public/*any", openapiui.WrapHandler(openapiui.Config{
 		SpecURL:      "/docs/public/openapi.json",
 		SpecFilePath: "./docs/swagger.json",
@@ -71,7 +73,22 @@ func Run() error {
 	for _, r := range routerRegistrars {
 		r.RegisterRoutes(v1)
 	}
-
-	addr := share.GetEnvStringDefault("HTTP_ADDR", ":8080")
+	addr := httpAddr()
 	return router.Run(addr)
+}
+func httpAddr() string {
+	if addr := share.GetEnvStringDefault("HTTP_ADDR", ""); addr != "" {
+		return listenAddr(addr)
+	}
+	if port := share.GetEnvStringDefault("PORT", ""); port != "" {
+		return listenAddr(port)
+	}
+	return ":8080"
+}
+
+func listenAddr(addr string) string {
+	if strings.HasPrefix(addr, ":") {
+		return addr
+	}
+	return ":" + addr
 }
