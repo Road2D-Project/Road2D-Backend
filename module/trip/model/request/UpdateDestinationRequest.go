@@ -9,7 +9,7 @@ type UpdateDestinationRequest struct {
 	Lng          float64                `json:"lng"`
 	Lat          float64                `json:"lat" `
 	Name         string                 `json:"name"`
-	ArriveTime   *time.Time             `json:"arriveTime,omitempty"`
-	StayOverTime int                    `json:"stayOverTime"`
+	ArriveTime   *time.Time             `json:"arriveTime,omitempty" binding:"omitempty,arriveTime"`
+	StayOverTime int                    `json:"stayOverTime" binding:"stayMinutes"`
 	Status       enum.DestinationStatus `json:"status"`
 }

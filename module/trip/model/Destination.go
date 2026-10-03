@@ -10,7 +10,7 @@ import (
 
 // Destination is a trip pin. lat/lng always belong to this row.
 // locationId is set only after verify or fork-from-Location; then lat/lng copy Location.
-// TODO: thêm các trường validate cho ArriveTimme và StayOverTime
+// Arrive time and stay minutes are checked on the update and fork requests.
 type Destination struct {
 	utils.Base
 	LocationID *uuid.UUID `json:"locationId,omitempty" gorm:"type:uuid;index"`

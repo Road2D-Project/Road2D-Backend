@@ -39,6 +39,10 @@ func msgForTag(fe validator.FieldError) string {
 		return fmt.Sprintf("%s must match %s", field, fe.Param())
 	case "strongPassword":
 		return fmt.Sprintf("%s must be at least 8 characters and include uppercase, lowercase, a number, and a special character (!@#$%%^&*)", field)
+	case "stayMinutes":
+		return fmt.Sprintf("%s must be zero or more minutes", field)
+	case "arriveTime":
+		return fmt.Sprintf("%s must be a real timestamp", field)
 	default:
 		return fmt.Sprintf("%s failed validation on rule %s", field, fe.Tag())
 	}

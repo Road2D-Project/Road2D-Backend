@@ -7,11 +7,15 @@ import (
 
 func ValidatorRegistrar(validate *validator.Validate) {
 	registerTagNames(validate)
-	if err := validate.RegisterValidation("strongPassword", validatePasswordStrength); err != nil {
-		return
-	}
+	registerRules(validate)
 	if engine, ok := binding.Validator.Engine().(*validator.Validate); ok {
 		registerTagNames(engine)
-		_ = engine.RegisterValidation("strongPassword", validatePasswordStrength)
+		registerRules(engine)
 	}
+}
+
+func registerRules(validate *validator.Validate) {
+	_ = validate.RegisterValidation("strongPassword", validatePasswordStrength)
+	_ = validate.RegisterValidation("stayMinutes", validateStayMinutes)
+	_ = validate.RegisterValidation("arriveTime", validateArriveTime)
 }
