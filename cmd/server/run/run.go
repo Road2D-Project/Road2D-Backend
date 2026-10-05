@@ -11,6 +11,8 @@ import (
 	groupController "Road-To-Destination-BE/module/group/controller"
 	mapsClient "Road-To-Destination-BE/module/maps/client"
 	mapsController "Road-To-Destination-BE/module/maps/controller"
+	"Road-To-Destination-BE/module/realtime"
+	realtimeController "Road-To-Destination-BE/module/realtime/controller"
 	"Road-To-Destination-BE/module/share"
 	"Road-To-Destination-BE/module/share/configuration"
 	tripController "Road-To-Destination-BE/module/trip/controller"
@@ -65,10 +67,14 @@ func Run() error {
 		authenRepo.NewCacheUserRepository(dbConfig.GetDatabase(), redisConfig.Client()),
 	)
 	responseCacheMw := middleware.NewResponseCache(redisConfig.Client())
+	// Mount domain modules on this hub before the listener accepts sockets.
+	// No module is mounted yet, so a joined room only carries system presence.
+	hub := realtime.NewHub()
 	routerRegistrars := []share.RouterRegistrar{
 		authenController.NewAuthenticationController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator),
 		groupController.NewGroupController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw),
 		tripController.NewTripController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw, responseCacheMw),
+		realtimeController.NewLobbyController(authMw, hub, activeTripMemberAuthorizer{db: dbConfig.GetDatabase()}),
 	}
 	for _, r := range routerRegistrars {
 		r.RegisterRoutes(v1)

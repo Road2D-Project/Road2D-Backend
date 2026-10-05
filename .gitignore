@@ -11,3 +11,4 @@ persistence/
 .cursor/
 *.exe
 module/maps/test
+module/realtime/test
