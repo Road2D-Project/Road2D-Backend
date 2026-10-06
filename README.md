@@ -96,7 +96,7 @@ internal/
 
 **server** listens on `HTTP_ADDR` (default `:8080`). `PORT` is accepted the same way when `HTTP_ADDR` is empty. Without `DB_HOST`, `DB_USER`, `DB_NAME`, and `DB_PORT` the process still serves, and auth has no database. Redis is the cache and password-reset store. `GET /health` pings Postgres and Redis and returns 200 only when both answer. OpenAPI UI is `/docs/public`. Swagger comments are on `cmd/server/main.go` (`go generate` in the root `main.go`).
 
-**migrate** connects to Postgres and runs `AutoMigrate`. It does not start HTTP or call Goong.
+**migrate** connects to Postgres and runs `AutoMigrate`. It does not start HTTP or call Goong. Schema rules are in [Migrations](#migrations).
 
 **seeder** is the parent for reference data. It requires Postgres, migrates, opens Redis as the place cache, then runs one entity. Entities today are **location**, **user**, and **trip**.
 
@@ -111,6 +111,25 @@ Pass pins as `--lat` and `--lng` together, as `--coords` (`lat,lng` pairs separa
 `seeder trip` creates a planning trip owned by `USER_NAME` (registered first when that username is missing). It does not create a group. With no `--members`, every account in `internal/seed/user/users.json` except the leader is seated, and missing accounts are registered first. `--members` names a shorter list. The main branch is forked from `--location-ids` in that order; with no flag, the earliest 10 locations are used. The branch is the destination ids returned by those forks. The command prints the trip without secrets, plus the join token. Only `bronze` (15 seats) can be created until the other trip types have a member cap. Run `seeder location` first so there are places to copy.
 
 A new seed entity is a file under `cmd/cli/seed/`, registered from `NewSeederCommand`. Put the Goong and persistence work in `internal/seed/<entity>/`.
+
+## Migrations
+
+`go run . migrate` calls `configuration.AutoMigrate`. That function does two things, in order:
+
+1. `version.Apply` runs every step in [module/share/configuration/version](module/share/configuration/version/Steps.go), oldest first.
+2. GORM `AutoMigrate` creates missing tables and adds missing columns and indexes from the model structs.
+
+There is no `schema_migrations` table. Each step runs on every migrate, including a database that is already current. A fresh database usually has no table yet, so the step returns immediately and `AutoMigrate` builds the column from the model.
+
+GORM will not drop a column, change a column type, narrow a unique index, or clear `NOT NULL`. Those edits are a version step, and the step runs before `AutoMigrate`. When a new column must be `NOT NULL`, backfill existing rows in that step first (`V4_AddTripPolicyColumns` does this).
+
+Rules for a new step:
+
+- Add the next number. The shipped steps are `V1` through `V5`. Do not edit a step that has already run on a shared database; add `V6_...` instead.
+- Name the file and the function the same: `V<n>_<WhatItDoes>.go` and `func V<n>_<WhatItDoes>(db *gorm.DB) error`.
+- Register it at the end of `Steps` in `Steps.go`. Order is the number, not the file list on disk.
+- Make the SQL safe to run twice. Missing table, missing column, or the new shape already present means return nil.
+- Put the desired end state on the GORM model as well. The version step only repairs databases that already exist. `AutoMigrate` creates that shape on a new database.
 
 ## Run locally
 
