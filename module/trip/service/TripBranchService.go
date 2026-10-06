@@ -109,12 +109,12 @@ func validateGraphShape(req request.SetTripGraphRequest) error {
 
 // resolveGraph turns destination ids into the branch rows ComputeTrip and
 // BuildTripBranches walk. A missing id is an unknown pin, not an empty stop.
-func resolveGraph(branches [][]uuid.UUID, destinations []model.Destination) (model.GraphBranch, error) {
+func resolveGraph(branches [][]uuid.UUID, destinations []model.Destination) (model.BranchGraph, error) {
 	byID := make(map[uuid.UUID]model.Destination, len(destinations))
 	for _, d := range destinations {
 		byID[d.ID] = d
 	}
-	graph := make(model.GraphBranch, len(branches))
+	graph := make(model.BranchGraph, len(branches))
 	for i, branch := range branches {
 		resolved := make([]model.Destination, len(branch))
 		for j, id := range branch {

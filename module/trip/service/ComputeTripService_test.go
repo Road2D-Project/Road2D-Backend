@@ -106,7 +106,7 @@ func TestComputeTripDedupesSharedCoordinates(t *testing.T) {
 	travels := &stubTravelStore{}
 	svc := NewComputeTripService(router, travels, nil, nil, nil)
 
-	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{a1, b1}, {a2, b2}})
+	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.BranchGraph{{a1, b1}, {a2, b2}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestComputeTripOrdersLegsOnOneBranch(t *testing.T) {
 	}}
 	svc := NewComputeTripService(router, &stubTravelStore{}, nil, nil, nil)
 
-	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{a, b, c}})
+	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.BranchGraph{{a, b, c}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestComputeTripReturnsRouteError(t *testing.T) {
 	travels := &stubTravelStore{}
 	svc := NewComputeTripService(router, travels, nil, nil, nil)
 
-	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{a, b}})
+	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.BranchGraph{{a, b}})
 	if !errors.Is(err, routeErr) {
 		t.Fatalf("err = %v, want %v", err, routeErr)
 	}
@@ -216,7 +216,7 @@ func TestComputeTripShortBranchSkipsRoute(t *testing.T) {
 	router := &stubLegRouter{}
 	svc := NewComputeTripService(router, &stubTravelStore{}, nil, nil, nil)
 
-	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{stop("a", 1, 1)}})
+	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.BranchGraph{{stop("a", 1, 1)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +260,7 @@ func TestComputeTripReusesFreshTravel(t *testing.T) {
 	router := &stubLegRouter{leg: &model.Leg{Vehicle: enum.BIKE, Polyline: "fresh-poly"}}
 	svc := NewComputeTripService(router, travels, nil, nil, nil)
 
-	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{a, b}})
+	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.BranchGraph{{a, b}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -290,7 +290,7 @@ func TestComputeTripRecomputesExpiredTravel(t *testing.T) {
 	router := &stubLegRouter{leg: &model.Leg{Vehicle: enum.BIKE, Polyline: "fresh-poly", DistanceM: 42}}
 	svc := NewComputeTripService(router, travels, nil, nil, nil)
 
-	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{a, b}})
+	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.BranchGraph{{a, b}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +320,7 @@ func TestComputeTripKeepsFrozenTravel(t *testing.T) {
 	router := &stubLegRouter{leg: &model.Leg{Vehicle: enum.BIKE, Polyline: "fresh-poly"}}
 	svc := NewComputeTripService(router, travels, nil, nil, nil)
 
-	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{a, b}})
+	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.BranchGraph{{a, b}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -345,7 +345,7 @@ func TestComputeTripWritesSharedPairOnce(t *testing.T) {
 	svc := NewComputeTripService(router, travels, nil, nil, nil)
 
 	// Both branches walk the same pins a→b, so one row may reach the conflict key.
-	_, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{a, b}, {a, b, c}})
+	_, err := svc.ComputeTrip(context.Background(), uuid.New(), model.BranchGraph{{a, b}, {a, b, c}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +370,7 @@ func TestComputeTripReturnsUpsertError(t *testing.T) {
 	router := &stubLegRouter{leg: &model.Leg{Vehicle: enum.BIKE}}
 	svc := NewComputeTripService(router, travels, nil, nil, nil)
 
-	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{a, b}})
+	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.BranchGraph{{a, b}})
 	if !errors.Is(err, upsertErr) {
 		t.Fatalf("err = %v, want %v", err, upsertErr)
 	}
@@ -386,7 +386,7 @@ func TestComputeTripReturnsLoadError(t *testing.T) {
 	router := &stubLegRouter{}
 	svc := NewComputeTripService(router, &stubTravelStore{findErr: findErr}, nil, nil, nil)
 
-	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.GraphBranch{{a, b}})
+	got, err := svc.ComputeTrip(context.Background(), uuid.New(), model.BranchGraph{{a, b}})
 	if !errors.Is(err, findErr) {
 		t.Fatalf("err = %v, want %v", err, findErr)
 	}

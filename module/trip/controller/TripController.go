@@ -112,6 +112,7 @@ func (ctrl *TripController) registerMemberRoutes(trips *gin.RouterGroup) {
 	trips.POST("/:tripId/join-requests/:userId", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader, enum.TripRoleAdmin), ctrl.HandleTripJoinRequest())
 	trips.POST("/:tripId/invite-link", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader, enum.TripRoleAdmin), ctrl.HandleCreateInviteLink())
 	trips.POST("/:tripId/leave", ctrl.handleActiveTripRole(), ctrl.HandleLeaveTrip())
+	trips.PUT("/:tripId/assign", ctrl.handleActiveTripRole(), ctrl.HandleAssignBranch())
 }
 
 func (ctrl *TripController) registerGraphRoutes(trips *gin.RouterGroup) {

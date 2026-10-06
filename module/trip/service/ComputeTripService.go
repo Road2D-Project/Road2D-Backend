@@ -155,7 +155,7 @@ func fillStoredTravels(result model.TravelGraph, jobs []routeJob, stored map[str
 	}
 }
 
-func (s *ComputeTripService) ComputeTrip(ctx context.Context, tripID uuid.UUID, graph model.GraphBranch) (*model.TravelGraph, error) {
+func (s *ComputeTripService) ComputeTrip(ctx context.Context, tripID uuid.UUID, graph model.BranchGraph) (*model.TravelGraph, error) {
 	result, jobs := flattenRouteJobs(graph)
 	if len(jobs) == 0 {
 		return &result, nil
@@ -180,7 +180,7 @@ func (s *ComputeTripService) ComputeTrip(ctx context.Context, tripID uuid.UUID, 
 // flattenRouteJobs pairs consecutive stops and collapses the same bike coordinates
 // into one job. A branch shorter than two stops keeps an empty row so indexes stay aligned.
 // Can be use to history version control of graph
-func flattenRouteJobs(graph model.GraphBranch) (model.TravelGraph, []routeJob) {
+func flattenRouteJobs(graph model.BranchGraph) (model.TravelGraph, []routeJob) {
 	result := make(model.TravelGraph, len(graph))
 	var jobs []routeJob
 	indexByKey := make(map[string]int)

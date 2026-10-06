@@ -10,15 +10,16 @@ import (
 )
 
 type TripMemberResponse struct {
-	TripID      uuid.UUID             `json:"tripId" swaggertype:"string" format:"uuid"`
-	TripName    string                `json:"tripName,omitempty"`
-	UserID      uuid.UUID             `json:"userId" swaggertype:"string" format:"uuid"`
-	Username    string                `json:"username,omitempty"`
-	Nickname    string                `json:"nickname"`
-	Role        enum.TripRole         `json:"role" swaggertype:"string" example:"member"`
-	Status      enum.MembershipStatus `json:"status" swaggertype:"string" example:"active"`
-	InvitorName string                `json:"invitorName,omitempty"`
-	JoinedAt    *time.Time            `json:"joinedAt,omitempty"`
+	TripID           uuid.UUID             `json:"tripId" swaggertype:"string" format:"uuid"`
+	TripName         string                `json:"tripName,omitempty"`
+	UserID           uuid.UUID             `json:"userId" swaggertype:"string" format:"uuid"`
+	Username         string                `json:"username,omitempty"`
+	AssignedBranchId uuid.UUID             `json:"assignedBranchId,omitempty"`
+	Nickname         string                `json:"nickname"`
+	Role             enum.TripRole         `json:"role" swaggertype:"string" example:"member"`
+	Status           enum.MembershipStatus `json:"status" swaggertype:"string" example:"active"`
+	InvitorName      string                `json:"invitorName,omitempty"`
+	JoinedAt         *time.Time            `json:"joinedAt,omitempty"`
 }
 
 type TripMemberListResponse struct {
@@ -44,6 +45,9 @@ func FromTripMember(member *model.TripMember) TripMemberResponse {
 		Role:     member.Role,
 		Status:   member.Status,
 		JoinedAt: member.JoinedAt,
+	}
+	if member.AssignedBranchID != nil {
+		out.AssignedBranchId = *member.AssignedBranchID
 	}
 	if member.Trip != nil {
 		out.TripName = member.Trip.Name

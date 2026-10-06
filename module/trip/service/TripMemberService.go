@@ -18,12 +18,12 @@ type TripMemberRecords interface {
 	ListActiveMembers(ctx context.Context, tripId uuid.UUID) ([]model.TripMember, error)
 	FindMemberById(ctx context.Context, userId uuid.UUID, tripId uuid.UUID) (*model.TripMember, error)
 	UpdateMember(ctx context.Context, member *model.TripMember) error
+	AssignBranch(ctx context.Context, member *model.TripMember, branchId uuid.UUID) error
 }
 
 type TripMemberRoleWriter interface {
 	SetCachedTripMemberRole(ctx context.Context, tripId uuid.UUID, userId uuid.UUID, role enum.TripRole) error
 }
-
 type TripMemberService struct {
 	members   TripMemberRecords
 	roleCache TripMemberRoleWriter
@@ -90,7 +90,18 @@ func (s *TripMemberService) Update(ctx context.Context, actorID, targetID, tripI
 	out := response.FromTripMember(member)
 	return &out, nil
 }
+func (s *TripMemberService) AssignBranch(ctx context.Context, tripID uuid.UUID, userID uuid.UUID, branchId uuid.UUID) error {
+	user, err := s.members.FindMemberById(ctx, userID, tripID)
+	if err != nil {
+		return err
+	}
+	err = s.members.AssignBranch(ctx, user, branchId)
+	if err != nil {
+		return err
+	}
+	return nil
 
+}
 func tripRosterRank(role enum.TripRole) int {
 	switch {
 	case role.IsLeader():

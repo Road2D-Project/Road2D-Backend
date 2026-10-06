@@ -17,6 +17,40 @@ type TripMemberRepository struct {
 	db *gorm.DB
 }
 
+func (r *TripMemberRepository) AssignBranch(ctx context.Context, member *model.TripMember, branchID uuid.UUID) error {
+	if r == nil || r.db == nil {
+		return ErrInternalServerError
+	}
+	if member == nil || member.ID == uuid.Nil {
+		return ErrUserNotTripMember
+	}
+	var branch model.TripBranch
+	err := r.db.WithContext(ctx).
+		Where("id = ? AND trip_id = ?", branchID, member.TripID).
+		First(&branch).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return ErrBranchNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if !branch.OnRoute() {
+		return ErrDraftBranchExcluded
+	}
+	result := r.db.WithContext(ctx).Model(&model.TripMember{}).
+		Where("id = ?", member.ID).
+		Update("assigned_branch_id", branch.ID)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrUserNotTripMember
+	}
+	member.AssignedBranchID = &branch.ID
+	member.AssignedBranch = &branch
+	return nil
+}
+
 func NewTripMemberRepository(db *gorm.DB) *TripMemberRepository {
 	return &TripMemberRepository{db: db}
 }

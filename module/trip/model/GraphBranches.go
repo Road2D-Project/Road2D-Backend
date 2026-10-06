@@ -8,18 +8,18 @@ import (
 	"github.com/google/uuid"
 )
 
-// GraphBranch is the resolved route graph: each inner slice is one branch in
+// BranchGraph is the resolved route graph: each inner slice is one branch in
 // travel order. Index 0 is the main branch.
-type GraphBranch [][]Destination
+type BranchGraph [][]Destination
 
 // GraphFromTrip rebuilds that graph from branches already stored on the trip.
 // Stops must already be ordered by OrderInBranch. A stop with no destination
 // cannot be routed.
-func GraphFromTrip(trip *Trip) (GraphBranch, error) {
+func GraphFromTrip(trip *Trip) (BranchGraph, error) {
 	if trip == nil {
 		return nil, ErrNilTrip
 	}
-	graph := make(GraphBranch, 0, len(trip.Branches))
+	graph := make(BranchGraph, 0, len(trip.Branches))
 	for i := range trip.Branches {
 		// The draft inbox is storage, not a ride. Routing it would turn loose pins into hops.
 		if !trip.Branches[i].OnRoute() {
@@ -57,7 +57,7 @@ func ErrDuplicateDestinationInBranch(desName string, branchName string) error {
 // openTail[i] marks sub branch i as ending without rejoining the graph, so its
 // last stop is not required to be a shared merge point. openTail[0] is always
 // false because the main branch has no merge.
-func BuildTripBranches(trip *Trip, graphBranches GraphBranch, openTail []bool) ([]TripBranch, error) {
+func BuildTripBranches(trip *Trip, graphBranches BranchGraph, openTail []bool) ([]TripBranch, error) {
 	if trip == nil {
 		return nil, ErrNilTrip
 	}

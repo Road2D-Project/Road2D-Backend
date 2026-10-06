@@ -242,8 +242,8 @@ func routeBranches(branches []model.TripBranch) []model.TripBranch {
 	return route
 }
 
-func graphFromOrdered(branches []model.TripBranch) (model.GraphBranch, []bool, error) {
-	graph := make(model.GraphBranch, len(branches))
+func graphFromOrdered(branches []model.TripBranch) (model.BranchGraph, []bool, error) {
+	graph := make(model.BranchGraph, len(branches))
 	openTail := make([]bool, len(branches))
 	for i := range branches {
 		stops := branches[i].Stops

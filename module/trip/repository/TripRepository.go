@@ -56,7 +56,7 @@ func insertInitialMainBranch(tx *gorm.DB, trip *model.Trip, main *model.InitialM
 	if err := tx.Omit("Location").Create(&main.Destinations).Error; err != nil {
 		return err
 	}
-	built, err := model.BuildTripBranches(trip, model.GraphBranch{main.Destinations}, []bool{false})
+	built, err := model.BuildTripBranches(trip, model.BranchGraph{main.Destinations}, []bool{false})
 	if err != nil {
 		return err
 	}

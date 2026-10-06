@@ -22,7 +22,11 @@ type TripMember struct {
 	Status      enum.MembershipStatus `json:"status" gorm:"column:status;type:varchar(16);not null;index" swaggertype:"string" example:"active"`
 	Nickname    string                `json:"nickname" gorm:"column:nickname;type:varchar(64);not null"`
 	InvitorName *string               `json:"invitorName,omitempty" gorm:"column:invitor_name;type:varchar(64)"`
-	JoinedAt    *time.Time            `json:"joinedAt,omitempty" gorm:"column:joined_at"`
+	// AssignedBranchID is optional. Members are inserted before a route branch
+	// exists, and replacing the graph deletes those branches.
+	AssignedBranchID *uuid.UUID  `json:"assignedBranchId,omitempty" gorm:"type:uuid;index" swaggertype:"string" format:"uuid"`
+	AssignedBranch   *TripBranch `json:"-" gorm:"foreignKey:AssignedBranchID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" swaggerignore:"true"`
+	JoinedAt         *time.Time  `json:"joinedAt,omitempty" gorm:"column:joined_at"`
 }
 
 func (TripMember) TableName() string {

@@ -23,6 +23,10 @@ type stubMembership struct {
 	findErr error
 }
 
+func (s *stubMembership) AssignBranch(context.Context, *model.TripMember, uuid.UUID) error {
+	return nil
+}
+
 func (s *stubMembership) FindTripByID(context.Context, uuid.UUID) (*model.Trip, error) {
 	if s.trip == nil {
 		return nil, repository.ErrTripNotFound

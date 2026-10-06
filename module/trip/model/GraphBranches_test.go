@@ -25,7 +25,7 @@ func closedTail(n int) []bool {
 
 func TestBuildTripBranchesMainHasNoSplitOrMerge(t *testing.T) {
 	d := destinations(6)
-	graph := GraphBranch{{d[0], d[1], d[2], d[4], d[5]}}
+	graph := BranchGraph{{d[0], d[1], d[2], d[4], d[5]}}
 
 	got, err := BuildTripBranches(&Trip{}, graph, closedTail(len(graph)))
 	if err != nil {
@@ -47,7 +47,7 @@ func TestBuildTripBranchesMainHasNoSplitOrMerge(t *testing.T) {
 
 func TestBuildTripBranchesSubSplitsAndMerges(t *testing.T) {
 	d := destinations(10)
-	graph := GraphBranch{
+	graph := BranchGraph{
 		{d[0], d[1], d[2], d[4], d[5], d[9]},
 		{d[1], d[3], d[9]},
 		{d[0], d[4], d[6], d[7], d[8], d[9]},
@@ -74,7 +74,7 @@ func TestBuildTripBranchesSubSplitsAndMerges(t *testing.T) {
 
 func TestBuildTripBranchesOpenTailSkipsMerge(t *testing.T) {
 	d := destinations(4)
-	graph := GraphBranch{
+	graph := BranchGraph{
 		{d[0], d[1], d[2]},
 		{d[1], d[3]},
 	}
@@ -96,7 +96,7 @@ func TestBuildTripBranchesOpenTailSkipsMerge(t *testing.T) {
 
 func TestBuildTripBranchesRejectsUnsharedEndpoint(t *testing.T) {
 	d := destinations(3)
-	graph := GraphBranch{
+	graph := BranchGraph{
 		{d[0], d[1]},
 		{d[1], d[2]},
 	}
@@ -109,7 +109,7 @@ func TestBuildTripBranchesRejectsUnsharedEndpoint(t *testing.T) {
 
 func TestBuildTripBranchesRejectsDuplicateInBranch(t *testing.T) {
 	d := destinations(3)
-	graph := GraphBranch{{d[0], d[1], d[0]}}
+	graph := BranchGraph{{d[0], d[1], d[0]}}
 
 	_, err := BuildTripBranches(&Trip{}, graph, closedTail(len(graph)))
 	if err == nil {
@@ -147,7 +147,7 @@ func TestGraphFromTripRejectsMissingDestination(t *testing.T) {
 }
 
 func TestBuildTripBranchesRejectsNilTripAndEmptyGraph(t *testing.T) {
-	if _, err := BuildTripBranches(nil, GraphBranch{{}}, closedTail(1)); !errors.Is(err, ErrNilTrip) {
+	if _, err := BuildTripBranches(nil, BranchGraph{{}}, closedTail(1)); !errors.Is(err, ErrNilTrip) {
 		t.Fatalf("nil trip: got %v", err)
 	}
 	if _, err := BuildTripBranches(&Trip{}, nil, nil); !errors.Is(err, ErrEmptyGraphBranch) {
