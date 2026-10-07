@@ -17,8 +17,13 @@ func (configuration *RedisConfiguration) Connect() *redis.Client {
 	url := share.GetEnvStringDefault("REDIS_URL", "")
 	if url == "" {
 		configuration.connectByVar()
+	} else if configuration.connectByUrl(url) == nil {
+		configuration.client = nil
 	}
-	configuration.connectByUrl(url)
+	if configuration.client == nil {
+		fmt.Println("Redis ping failed: client is nil")
+		return nil
+	}
 	err := configuration.client.Ping(context.Background()).Err()
 	if err != nil {
 		fmt.Println("Redis ping failed:", err)

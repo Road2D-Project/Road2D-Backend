@@ -1,6 +1,7 @@
 package run
 
 import (
+	"Road-To-Destination-BE/module/tracking"
 	"errors"
 	"log"
 	"strings"
@@ -70,6 +71,10 @@ func Run() error {
 	// Mount domain modules on this hub before the listener accepts sockets.
 	// No module is mounted yet, so a joined room only carries system presence.
 	hub := realtime.NewHub()
+	err := hub.Mount("tracking", tracking.NewTrackingModule(dbConfig.GetDatabase()))
+	if err != nil {
+		log.Fatal(err)
+	}
 	routerRegistrars := []share.RouterRegistrar{
 		authenController.NewAuthenticationController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator),
 		groupController.NewGroupController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw),

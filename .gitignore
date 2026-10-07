@@ -12,3 +12,5 @@ persistence/
 *.exe
 module/maps/test
 module/realtime/test
+module/tracking/test
+tmp_*/

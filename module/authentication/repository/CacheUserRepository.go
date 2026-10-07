@@ -4,7 +4,6 @@ import (
 	"Road-To-Destination-BE/module/authentication/model"
 	"context"
 	"encoding/json"
-	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -68,27 +67,46 @@ func NewCacheUserRepository(db *gorm.DB, client *redis.Client) *CacheUserReposit
 }
 
 func (cache *CacheUserRepository) FindUserByUsername(ctx context.Context, username string) (*model.User, error) {
-	bytes, err := cache.client.Get(ctx, username).Bytes()
-	if errors.Is(err, redis.Nil) {
-		var user model.User
-		if err := cache.db.WithContext(ctx).Where("username = ?", username).First(&user).Error; err != nil {
-			return nil, err
+	if cache.client != nil {
+		if user, ok := cache.freshCachedUser(ctx, username); ok {
+			return user, nil
 		}
-		payload, err := json.Marshal(cachedUserFromModel(&user))
-		if err != nil {
-			return nil, err
-		}
-		if err := cache.client.Set(ctx, username, payload, 0).Err(); err != nil {
-			return nil, err
-		}
+	}
+	var user model.User
+	if err := cache.db.WithContext(ctx).Where("username = ?", username).First(&user).Error; err != nil {
+		return nil, err
+	}
+	if cache.client == nil {
 		return &user, nil
 	}
+	payload, err := json.Marshal(cachedUserFromModel(&user))
 	if err != nil {
 		return nil, err
 	}
-	var record cachedUser
-	if err := json.Unmarshal(bytes, &record); err != nil {
+	if err := cache.client.Set(ctx, username, payload, 0).Err(); err != nil {
 		return nil, err
 	}
-	return record.toModel(), nil
+	return &user, nil
+}
+
+// freshCachedUser accepts the Redis row only when its id is still the users row.
+// Recreating an account keeps the username and replaces the id. The old cache
+// would then list trips for a person who no longer holds those seats.
+func (cache *CacheUserRepository) freshCachedUser(ctx context.Context, username string) (*model.User, bool) {
+	bytes, err := cache.client.Get(ctx, username).Bytes()
+	if err != nil {
+		return nil, false
+	}
+	var record cachedUser
+	if json.Unmarshal(bytes, &record) != nil || record.ID == uuid.Nil {
+		_ = cache.client.Del(ctx, username).Err()
+		return nil, false
+	}
+	var current model.User
+	err = cache.db.WithContext(ctx).Select("id").Where("username = ?", username).Take(&current).Error
+	if err != nil || current.ID != record.ID {
+		_ = cache.client.Del(ctx, username).Err()
+		return nil, false
+	}
+	return record.toModel(), true
 }
