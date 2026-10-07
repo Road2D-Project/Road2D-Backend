@@ -125,7 +125,7 @@ GORM will not drop a column, change a column type, narrow a unique index, or cle
 
 Rules for a new step:
 
-- Add the next number. The shipped steps are `V1` through `V5`. Do not edit a step that has already run on a shared database; add `V6_...` instead.
+- Add the next number. The shipped steps are `V1` through `V6`. Do not edit a step that has already run on a shared database; add `V7_...` instead.
 - Name the file and the function the same: `V<n>_<WhatItDoes>.go` and `func V<n>_<WhatItDoes>(db *gorm.DB) error`.
 - Register it at the end of `Steps` in `Steps.go`. Order is the number, not the file list on disk.
 - Make the SQL safe to run twice. Missing table, missing column, or the new shape already present means return nil.

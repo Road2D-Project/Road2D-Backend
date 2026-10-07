@@ -12,6 +12,8 @@ type User struct {
 	Username string `json:"username" gorm:"column:username;type:varchar(255);unique;not null"`
 	Email    string `json:"email" gorm:"column:email;type:varchar(255);unique;not null" validate:"email"`
 	Password string `json:"-" gorm:"column:password;type:varchar(255);not null" swaggerignore:"true" validate:"strongPassword"`
+	// TODO: custom validator
+	NumberPhone string `json:"numberPhone" gorm:"column:number_phone;type:varchar(255);not null" validate:"numeric"`
 }
 
 var (
