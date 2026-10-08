@@ -50,7 +50,10 @@ func (h *Hub) Join(roomID string, userID uuid.UUID, conn *websocket.Conn) error 
 	}
 	// Two attempts: the room can go idle between lookup and join.
 	for attempt := 0; attempt < 2; attempt++ {
-		room := h.getOrCreate(roomID)
+		room, err := h.getOrCreate(roomID)
+		if err != nil {
+			return err
+		}
 		client := newClient(room, conn, userID)
 		if room.join(client) {
 			go client.writePump()
@@ -61,11 +64,11 @@ func (h *Hub) Join(roomID string, userID uuid.UUID, conn *websocket.Conn) error 
 	return ErrRoomClosed
 }
 
-func (h *Hub) getOrCreate(roomID string) *Room {
+func (h *Hub) getOrCreate(roomID string) (*Room, error) {
 	h.mu.Lock()
 	if room, ok := h.rooms[roomID]; ok {
 		h.mu.Unlock()
-		return room
+		return room, nil
 	}
 	factories := make(map[string]ModuleFactory, len(h.factories))
 	for namespace, factory := range h.factories {
@@ -76,21 +79,32 @@ func (h *Hub) getOrCreate(roomID string) *Room {
 	// Factories run outside the lock so a slow constructor cannot stall every room.
 	modules := make(map[string]Module, len(factories))
 	for namespace, factory := range factories {
-		modules[namespace] = factory(roomID)
+		module := factory(roomID)
+		if module == nil {
+			// A peer may have created the room while this factory failed.
+			h.mu.Lock()
+			room, ok := h.rooms[roomID]
+			h.mu.Unlock()
+			if ok {
+				return room, nil
+			}
+			return nil, fmt.Errorf("%w: %s", ErrModuleUnavailable, namespace)
+		}
+		modules[namespace] = module
 	}
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if room, ok := h.rooms[roomID]; ok {
 		// Another join created the room first. Drop the unused modules.
-		return room
+		return room, nil
 	}
 
 	var room *Room
 	room = NewRoom(roomID, modules, func() { h.remove(roomID, room) })
 	h.rooms[roomID] = room
 	go room.Run()
-	return room
+	return room, nil
 }
 
 // remove deletes the room only when it is still the same pointer.

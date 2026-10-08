@@ -4,12 +4,14 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"time"
 
 	"Road-To-Destination-BE/middleware"
 	"Road-To-Destination-BE/module/realtime"
 	"Road-To-Destination-BE/module/share"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 )
 
 func (ctrl *LobbyController) HandleJoinRoom() gin.HandlerFunc {
@@ -36,14 +38,33 @@ func (ctrl *LobbyController) HandleJoinRoom() gin.HandlerFunc {
 
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
+			// The handshake failed before a socket existed. The upgrader already
+			// wrote the HTTP error, so there is no body left to send.
 			log.Printf("realtime: upgrade room %s: %v", roomID, err)
 			return
 		}
 		if err := ctrl.hub.Join(roomID, user.ID, conn); err != nil {
-			conn.Close()
 			log.Printf("realtime: join room %s: %v", roomID, err)
+			closeUpgraded(conn, err)
 		}
 	}
+}
+
+// closeUpgraded tells the client why the socket is closing. HTTP status is no
+// longer available once Upgrade has succeeded.
+func closeUpgraded(conn *websocket.Conn, err error) {
+	code := websocket.CloseInternalServerErr
+	reason := "room unavailable"
+	if errors.Is(err, realtime.ErrRoomClosed) {
+		code = websocket.CloseTryAgainLater
+		reason = "room closed"
+	}
+	_ = conn.WriteControl(
+		websocket.CloseMessage,
+		websocket.FormatCloseMessage(code, reason),
+		time.Now().Add(time.Second),
+	)
+	conn.Close()
 }
 
 func mapLobbyError(c *gin.Context, err error) {

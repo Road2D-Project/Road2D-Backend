@@ -15,4 +15,8 @@ var (
 
 	// ErrInvalidRoom means the room id is empty or longer than the hub accepts.
 	ErrInvalidRoom = errors.New("invalid room id")
+
+	// ErrModuleUnavailable means a mounted module failed to build, so the room
+	// was not created. The socket is already upgraded; the lobby closes it.
+	ErrModuleUnavailable = errors.New("realtime module unavailable")
 )

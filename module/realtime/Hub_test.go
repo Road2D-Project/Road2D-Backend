@@ -52,6 +52,22 @@ func TestJoinRejectsBadIdentity(t *testing.T) {
 	}
 }
 
+func TestJoinFailsWhenModuleFactoryReturnsNil(t *testing.T) {
+	hub := NewHub()
+	if err := hub.Mount("tracking", func(string) Module { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	err := hub.Join("room", uuid.New(), &websocket.Conn{})
+	if !errors.Is(err, ErrModuleUnavailable) {
+		t.Fatalf("got %v", err)
+	}
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
+	if _, ok := hub.rooms["room"]; ok {
+		t.Fatal("room was created without its module")
+	}
+}
+
 func TestRoomRoutesMessageAndBatchesLatest(t *testing.T) {
 	mod := newScriptModule()
 	hub := NewHub()
