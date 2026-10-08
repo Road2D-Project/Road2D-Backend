@@ -42,6 +42,7 @@ func assembleHops(branch *TravelBranch, travels map[travelKey]travelRow) {
 		return
 	}
 	branch.Hops = make([]Hop, len(branch.Stops)-1)
+	branch.TotalDistanceM = 0
 	for i := 0; i < len(branch.Stops)-1; i++ {
 		from := branch.Stops[i].DestinationID
 		to := branch.Stops[i+1].DestinationID
@@ -57,5 +58,6 @@ func assembleHops(branch *TravelBranch, travels map[travelKey]travelRow) {
 			}
 		}
 		branch.Hops[i] = hop
+		branch.TotalDistanceM += hop.DistanceM
 	}
 }
