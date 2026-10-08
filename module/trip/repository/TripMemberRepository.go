@@ -163,6 +163,8 @@ func (r *TripMemberRepository) AddMember(ctx context.Context, userId uuid.UUID, 
 		now := time.Now().UTC()
 		member.JoinedAt = &now
 	}
+	member.AssignedBranch = nil
+	member.AssignedBranchID = nil
 	if err := ctxDb.Create(&member).Error; err != nil {
 		return nil, err
 	}
