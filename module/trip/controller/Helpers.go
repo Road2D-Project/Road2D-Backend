@@ -175,6 +175,7 @@ func mapTripError(c *gin.Context, err error) {
 		errors.Is(err, repository.ErrCannotKickSelf),
 		errors.Is(err, repository.ErrInsufficientKickRole),
 		errors.Is(err, repository.ErrCannotUpdateOtherNickname),
+		errors.Is(err, NoPermissionAssignBranch),
 		errors.Is(err, repository.ErrCannotChangeLeaderRole):
 		jsonError(c, http.StatusForbidden, err.Error())
 	case errors.Is(err, repository.ErrNoTripUpdate),

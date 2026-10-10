@@ -2,6 +2,7 @@ package tracking
 
 import (
 	"Road-To-Destination-BE/module/realtime"
+	"Road-To-Destination-BE/module/tracking/engine"
 	"Road-To-Destination-BE/module/tracking/model"
 	"log"
 	"time"
@@ -15,7 +16,7 @@ import (
 type TrackingCoordinator struct {
 	db              *gorm.DB
 	tripInformation *model.TripInformation
-	progresses      map[uuid.UUID]*model.TravelProgress
+	progresses      map[uuid.UUID]*engine.TravelProgress
 }
 
 func NewTrackingModule(db *gorm.DB) realtime.ModuleFactory {
@@ -31,7 +32,7 @@ func NewTrackingModule(db *gorm.DB) realtime.ModuleFactory {
 		return &TrackingCoordinator{
 			db:              db,
 			tripInformation: information,
-			progresses:      make(map[uuid.UUID]*model.TravelProgress),
+			progresses:      make(map[uuid.UUID]*engine.TravelProgress),
 		}
 	}
 }

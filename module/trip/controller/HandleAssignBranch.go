@@ -1,11 +1,16 @@
 package controller
 
 import (
+	"Road-To-Destination-BE/middleware"
 	"Road-To-Destination-BE/module/trip/model/request"
+	"Road-To-Destination-BE/utils/enum"
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
+
+var NoPermissionAssignBranch = errors.New("Only admin or leader can asssign another user with branch")
 
 func (ctrl *TripController) HandleAssignBranch() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -22,11 +27,19 @@ func (ctrl *TripController) HandleAssignBranch() gin.HandlerFunc {
 			jsonError(c, http.StatusBadRequest, "userId and branchId are required")
 			return
 		}
-		err := ctrl.tripMemberService().AssignBranch(c.Request.Context(), tripID, *assignRequest.UserID, *assignRequest.BranchID)
-		if err != nil {
-			mapTripError(c, err)
-			return
+		role, _ := c.Get(tripRoleContextKey)
+		requestingUserID := middleware.GetCurrentUser(c).ID
+		// chỉ có chính họ và admin mới có thể phân công
+		if role.(enum.TripRole) == enum.TripRoleLeader || role.(enum.TripRole) == enum.TripRoleAdmin || requestingUserID == *assignRequest.UserID {
+			err := ctrl.tripMemberService().AssignBranch(c.Request.Context(), tripID, *assignRequest.UserID, *assignRequest.BranchID)
+			if err != nil {
+				mapTripError(c, err)
+				return
+			}
+			c.Status(http.StatusNoContent)
+
 		}
-		c.Status(http.StatusNoContent)
+		mapTripError(c, NoPermissionAssignBranch)
+
 	}
 }

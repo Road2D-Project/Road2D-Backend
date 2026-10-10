@@ -5,6 +5,7 @@ import (
 	"Road-To-Destination-BE/module/tracking/model/message"
 	"encoding/json"
 	"log"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -17,10 +18,15 @@ func (t *TrackingCoordinator) OnMessage(s realtime.Session, userID uuid.UUID, ms
 		if err != nil {
 			return
 		}
-		t.progresses[userID].Lat = positionMsg.Lat
-		t.progresses[userID].Lng = positionMsg.Lng
+		progress := t.progresses[userID]
+		if progress == nil {
+			return
+		}
+		progress.Lat = positionMsg.Lat
+		progress.Lng = positionMsg.Lng
+		progress.ObservedAt = time.Now()
 	default:
-		log.Print("Unknown message type: ", msgType)
+		log.Printf("Unknown message type %s by user %s ", msgType, userID)
 		return
 	}
 }
