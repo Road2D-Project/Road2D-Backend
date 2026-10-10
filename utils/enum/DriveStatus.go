@@ -5,8 +5,8 @@ package enum
 type DriveStatus int
 
 const (
-	OFFLINE DriveStatus = iota
-	OnROUTE             // đồng nghĩa với đang online và tiếp tục chạy
+	OnROUTE DriveStatus = iota // đồng nghĩa với đang online và tiếp tục chạy
 	DEVIATED
+	STOP // velocity = 0
 	EMERGENCY
 )

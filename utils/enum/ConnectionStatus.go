@@ -8,4 +8,5 @@ const (
 	CONNECTING ConnectionStatus = iota
 	UNSTABLE
 	DISCONNECTED
+	RECONNECTING
 )

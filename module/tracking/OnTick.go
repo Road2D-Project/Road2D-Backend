@@ -26,10 +26,9 @@ func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.
 	msg := make([]position, n)
 	return func() {
 		for userId, progress := range t.progresses {
-			// A nil or full channel must not block Room.Run. That goroutine is
-			// the only reader of register, so a blocked send leaves the next
-			// websocket upgrade hanging with no pumps and no Gin log line.
-			if progress.PendingPoint != nil && !progress.ObservedAt.IsZero() {
+			// A stopped rider stays in the broadcast so the room can see STOP.
+			// Their position is not changing, so it is not pushed into snap.
+			if progress.DriveStatus != enum.STOP && progress.PendingPoint != nil && !progress.ObservedAt.IsZero() {
 				select {
 				case progress.PendingPoint <- model.Point{Lat: progress.Lat, Lng: progress.Lng}:
 				default:

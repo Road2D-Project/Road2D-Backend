@@ -4,31 +4,41 @@ import (
 	"Road-To-Destination-BE/module/tracking/geo"
 	"Road-To-Destination-BE/module/tracking/model"
 	"Road-To-Destination-BE/utils/enum"
+	"fmt"
 	"log"
 )
 
 func PendingPosition(prg *TravelProgress, tripInfor *model.TripInformation) {
+	points := prg.PendingPoint
+	if points == nil {
+		return
+	}
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println("Pending Position Error:", err)
+		}
+		if prg.ConnectionStatus == enum.DISCONNECTED {
+			fmt.Println("Pending Position Disconnected")
+		}
+	}()
 	branch, ok := tripInfor.Branches[prg.BranchID]
 	if !ok {
 		log.Printf("branch %s not found", prg.BranchID)
 		return
 	}
-	if !loadHop(prg, branch, prg.HopIndex, 0) {
-		return
+	if prg.Route == nil || len(prg.Route.Points) < 2 {
+		if !loadHop(prg, branch, prg.HopIndex, 0) {
+			return
+		}
 	}
 
-	for p := range prg.PendingPoint {
-		if prg.ConnectionStatus == enum.DISCONNECTED || prg.Route == nil {
+	for p := range points {
+		if prg.ConnectionStatus == enum.DISCONNECTED || prg.Route == nil || prg.DriveStatus == enum.STOP {
 			continue
 		}
 		snap := prg.Route.Snap(p, prg.LastSegIndex)
 		prg.LastSegIndex = snap.Seg
 		prg.Progress = snap.Progress
-		/*
-			- Have Finished the route yet?
-			- Have any hop in route to go?
-		*/
-
 		if !prg.Route.AtEnd(snap.Seg, snap.Progress, snap.Dist) {
 			continue
 		}

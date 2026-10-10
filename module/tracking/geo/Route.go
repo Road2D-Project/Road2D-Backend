@@ -2,6 +2,7 @@ package geo
 
 import (
 	"Road-To-Destination-BE/module/tracking/model"
+	"fmt"
 	"math"
 )
 
@@ -20,6 +21,10 @@ type Route struct {
 type SnapResult struct {
 	Seg            int
 	Progress, Dist float64
+}
+
+func (s *SnapResult) String() string {
+	return fmt.Sprintf("seg: %d, progress: %f, dist: %f", s.Seg, s.Progress, s.Dist)
 }
 
 func NewRoute(points []model.Point) *Route {

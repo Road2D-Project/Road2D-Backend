@@ -9,11 +9,11 @@ import (
 	"strings"
 )
 
-const _ConnectionStatusName = "CONNECTINGUNSTABLEDISCONNECTED"
+const _ConnectionStatusName = "CONNECTINGUNSTABLEDISCONNECTEDRECONNECTING"
 
-var _ConnectionStatusIndex = [...]uint8{0, 10, 18, 30}
+var _ConnectionStatusIndex = [...]uint8{0, 10, 18, 30, 42}
 
-const _ConnectionStatusLowerName = "connectingunstabledisconnected"
+const _ConnectionStatusLowerName = "connectingunstabledisconnectedreconnecting"
 
 func (i ConnectionStatus) String() string {
 	if i < 0 || i >= ConnectionStatus(len(_ConnectionStatusIndex)-1) {
@@ -29,9 +29,10 @@ func _ConnectionStatusNoOp() {
 	_ = x[CONNECTING-(0)]
 	_ = x[UNSTABLE-(1)]
 	_ = x[DISCONNECTED-(2)]
+	_ = x[RECONNECTING-(3)]
 }
 
-var _ConnectionStatusValues = []ConnectionStatus{CONNECTING, UNSTABLE, DISCONNECTED}
+var _ConnectionStatusValues = []ConnectionStatus{CONNECTING, UNSTABLE, DISCONNECTED, RECONNECTING}
 
 var _ConnectionStatusNameToValueMap = map[string]ConnectionStatus{
 	_ConnectionStatusName[0:10]:       CONNECTING,
@@ -40,12 +41,15 @@ var _ConnectionStatusNameToValueMap = map[string]ConnectionStatus{
 	_ConnectionStatusLowerName[10:18]: UNSTABLE,
 	_ConnectionStatusName[18:30]:      DISCONNECTED,
 	_ConnectionStatusLowerName[18:30]: DISCONNECTED,
+	_ConnectionStatusName[30:42]:      RECONNECTING,
+	_ConnectionStatusLowerName[30:42]: RECONNECTING,
 }
 
 var _ConnectionStatusNames = []string{
 	_ConnectionStatusName[0:10],
 	_ConnectionStatusName[10:18],
 	_ConnectionStatusName[18:30],
+	_ConnectionStatusName[30:42],
 }
 
 // ConnectionStatusString retrieves an enum value from the enum constants string name.

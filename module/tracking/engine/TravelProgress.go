@@ -49,6 +49,6 @@ func NewTravelProgress(riderID uuid.UUID, branch uuid.UUID) *TravelProgress {
 		PendingPoint:     make(chan model.Point, 1),
 		LastSegIndex:     0,
 		Progress:         0,
-		Route:            &geo.Route{},
+		Route:            nil,
 	}
 }

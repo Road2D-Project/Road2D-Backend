@@ -9,11 +9,11 @@ import (
 	"strings"
 )
 
-const _DriveStatusName = "OFFLINEOnROUTEDEVIATEDEMERGENCY"
+const _DriveStatusName = "OnROUTEDEVIATEDSTOPEMERGENCY"
 
-var _DriveStatusIndex = [...]uint8{0, 7, 14, 22, 31}
+var _DriveStatusIndex = [...]uint8{0, 7, 15, 19, 28}
 
-const _DriveStatusLowerName = "offlineonroutedeviatedemergency"
+const _DriveStatusLowerName = "onroutedeviatedstopemergency"
 
 func (i DriveStatus) String() string {
 	if i < 0 || i >= DriveStatus(len(_DriveStatusIndex)-1) {
@@ -26,30 +26,30 @@ func (i DriveStatus) String() string {
 // Re-run the stringer command to generate them again.
 func _DriveStatusNoOp() {
 	var x [1]struct{}
-	_ = x[OFFLINE-(0)]
-	_ = x[OnROUTE-(1)]
-	_ = x[DEVIATED-(2)]
+	_ = x[OnROUTE-(0)]
+	_ = x[DEVIATED-(1)]
+	_ = x[STOP-(2)]
 	_ = x[EMERGENCY-(3)]
 }
 
-var _DriveStatusValues = []DriveStatus{OFFLINE, OnROUTE, DEVIATED, EMERGENCY}
+var _DriveStatusValues = []DriveStatus{OnROUTE, DEVIATED, STOP, EMERGENCY}
 
 var _DriveStatusNameToValueMap = map[string]DriveStatus{
-	_DriveStatusName[0:7]:        OFFLINE,
-	_DriveStatusLowerName[0:7]:   OFFLINE,
-	_DriveStatusName[7:14]:       OnROUTE,
-	_DriveStatusLowerName[7:14]:  OnROUTE,
-	_DriveStatusName[14:22]:      DEVIATED,
-	_DriveStatusLowerName[14:22]: DEVIATED,
-	_DriveStatusName[22:31]:      EMERGENCY,
-	_DriveStatusLowerName[22:31]: EMERGENCY,
+	_DriveStatusName[0:7]:        OnROUTE,
+	_DriveStatusLowerName[0:7]:   OnROUTE,
+	_DriveStatusName[7:15]:       DEVIATED,
+	_DriveStatusLowerName[7:15]:  DEVIATED,
+	_DriveStatusName[15:19]:      STOP,
+	_DriveStatusLowerName[15:19]: STOP,
+	_DriveStatusName[19:28]:      EMERGENCY,
+	_DriveStatusLowerName[19:28]: EMERGENCY,
 }
 
 var _DriveStatusNames = []string{
 	_DriveStatusName[0:7],
-	_DriveStatusName[7:14],
-	_DriveStatusName[14:22],
-	_DriveStatusName[22:31],
+	_DriveStatusName[7:15],
+	_DriveStatusName[15:19],
+	_DriveStatusName[19:28],
 }
 
 // DriveStatusString retrieves an enum value from the enum constants string name.

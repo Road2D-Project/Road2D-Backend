@@ -3,6 +3,7 @@ package tracking
 import (
 	"Road-To-Destination-BE/module/realtime"
 	"Road-To-Destination-BE/module/tracking/engine"
+	"Road-To-Destination-BE/module/tracking/model"
 	"Road-To-Destination-BE/utils/enum"
 	"log"
 
@@ -16,7 +17,14 @@ func (t *TrackingCoordinator) OnJoin(s realtime.Session, userID uuid.UUID) {
 		return
 	}
 	if prg, hasProgress := t.progresses[userID]; hasProgress {
+		prg.ConnectionStatus = enum.RECONNECTING
+		s.Broadcast("tracking.connection", map[string]any{
+			"userId":           userID,
+			"connectionStatus": prg.ConnectionStatus,
+		})
+		prg.PendingPoint = make(chan model.Point, 1)
 		prg.ConnectionStatus = enum.CONNECTING
+		go engine.PendingPosition(prg, t.tripInformation)
 		s.Send(userID, "tracking.success", "Welcome back")
 		return
 	}

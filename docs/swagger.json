@@ -4195,6 +4195,10 @@
                     "type": "string",
                     "format": "uuid"
                 },
+                "numberPhone": {
+                    "description": "TODO: custom validator",
+                    "type": "string"
+                },
                 "updatedTime": {
                     "type": "string"
                 },
@@ -5441,6 +5445,9 @@
         "response.TripMemberResponse": {
             "type": "object",
             "properties": {
+                "assignedBranchId": {
+                    "type": "string"
+                },
                 "invitorName": {
                     "type": "string"
                 },
