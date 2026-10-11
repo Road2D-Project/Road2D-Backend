@@ -22,6 +22,7 @@ type previewStop struct {
 	name          string
 	lat           float64
 	lng           float64
+	stayOverTime  int
 	destinationID *uuid.UUID
 	locationID    *uuid.UUID
 }
@@ -118,6 +119,7 @@ func (s *ComputeTripService) resolvePreviewStop(ctx context.Context, point tripr
 			name:          destination.Name,
 			lat:           destination.Lat,
 			lng:           destination.Lng,
+			stayOverTime:  destination.StayOverTime,
 			destinationID: &id,
 		}, nil
 	}
@@ -229,5 +231,6 @@ func previewStopResponse(stop previewStop) response.ComputeBranchStop {
 		Name:          stop.name,
 		DestinationID: stop.destinationID,
 		LocationID:    stop.locationID,
+		StayOverTime:  stop.stayOverTime,
 	}
 }

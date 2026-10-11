@@ -1782,6 +1782,75 @@
                         }
                     }
                 }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates any of name, arrive time, stay minutes, and status while the destination is editing. lat/lng are applied only when locationId is empty. Omitted fields stay as they are.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "planning"
+                ],
+                "summary": "Patch destination",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Destination UUID",
+                        "name": "destinationId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to update",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.PatchDestinationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.Destination"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
             }
         },
         "/planning/fork/{locationId}": {
@@ -4512,6 +4581,32 @@
                 }
             }
         },
+        "request.PatchDestinationRequest": {
+            "type": "object",
+            "properties": {
+                "arriveTime": {
+                    "type": "string"
+                },
+                "lat": {
+                    "type": "number"
+                },
+                "lng": {
+                    "type": "number"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
+                },
+                "status": {
+                    "type": "string",
+                    "example": "editing"
+                },
+                "stayOverTime": {
+                    "type": "integer"
+                }
+            }
+        },
         "request.PreviewLocationsRequest": {
             "type": "object",
             "required": [
@@ -4839,6 +4934,9 @@
                 },
                 "name": {
                     "type": "string"
+                },
+                "stayOverTime": {
+                    "type": "integer"
                 }
             }
         },
@@ -5367,6 +5465,9 @@
                     "type": "string"
                 },
                 "orderInBranch": {
+                    "type": "integer"
+                },
+                "stayOverTime": {
                     "type": "integer"
                 }
             }

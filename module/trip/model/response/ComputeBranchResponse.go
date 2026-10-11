@@ -7,10 +7,13 @@ import (
 )
 
 // ComputeBranchStop is one end of a preview leg. Only one id is set.
+// StayOverTime is minutes at that pin. A catalog location has no stay, so it is 0.
+// Ride time stays on the leg as durationS.
 type ComputeBranchStop struct {
 	Name          string     `json:"name"`
 	DestinationID *uuid.UUID `json:"destinationId,omitempty" swaggertype:"string" format:"uuid"`
 	LocationID    *uuid.UUID `json:"locationId,omitempty" swaggertype:"string" format:"uuid"`
+	StayOverTime  int        `json:"stayOverTime"`
 }
 
 // ComputeBranchLeg is one computed hop. It is not a stored Travel.

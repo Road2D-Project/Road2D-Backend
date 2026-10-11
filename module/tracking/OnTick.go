@@ -26,9 +26,11 @@ func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.
 	msg := make([]position, n)
 	return func() {
 		for userId, progress := range t.progresses {
-			// A stopped rider stays in the broadcast so the room can see STOP.
-			// Their position is not changing, so it is not pushed into snap.
-			if progress.DriveStatus != enum.STOP && progress.PendingPoint != nil && !progress.ObservedAt.IsZero() {
+			// A stopped rider is omitted. The client keeps the last pin it saw.
+			if progress.DriveStatus == enum.STOP {
+				continue
+			}
+			if progress.PendingPoint != nil && !progress.ObservedAt.IsZero() {
 				select {
 				case progress.PendingPoint <- model.Point{Lat: progress.Lat, Lng: progress.Lng}:
 				default:
@@ -43,7 +45,10 @@ func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.
 			}
 			i++
 		}
-		s.Broadcast("tracking.positions", msg)
+		if i == 0 {
+			return
+		}
+		s.Broadcast("tracking.positions", msg[:i])
 		i = 0
 	}
 

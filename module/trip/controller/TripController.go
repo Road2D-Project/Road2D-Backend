@@ -137,5 +137,6 @@ func (ctrl *TripController) registerPlanningRoutes(planning *gin.RouterGroup) {
 	planning.GET("/location/:locationId", ctrl.HandleGetLocation())
 	planning.GET("/destination/:destinationId", ctrl.HandleGetDestination())
 	planning.PUT("/destination/:destinationId", ctrl.HandleUpdateDestination())
+	planning.PATCH("/destination/:destinationId", ctrl.HandlePatchDestination())
 	planning.DELETE("/destination/:destinationId", ctrl.cacheResponse.MarkChanged(), ctrl.HandleDeleteDestination())
 }

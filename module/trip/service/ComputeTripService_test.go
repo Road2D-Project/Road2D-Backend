@@ -433,6 +433,8 @@ func locationPoint(id uuid.UUID) triprequest.ComputeBranchPoint {
 func TestPreviewBranchRoutesOnePair(t *testing.T) {
 	from := stop("cafe", 10.5, 20.25)
 	to := stop("park", 11, 21)
+	from.StayOverTime = 30
+	to.StayOverTime = 45
 	router := &stubLegRouter{leg: &model.Leg{
 		Vehicle:   enum.BIKE,
 		Polyline:  "preview-poly",
@@ -474,10 +476,14 @@ func TestPreviewBranchRoutesOnePair(t *testing.T) {
 	if leg.To.DestinationID == nil || *leg.To.DestinationID != to.ID {
 		t.Fatalf("to stop = %+v", leg.To)
 	}
+	if leg.DurationS != 200 || leg.From.StayOverTime != 30 || leg.To.StayOverTime != 45 {
+		t.Fatalf("time = duration %v stay %d -> %d", leg.DurationS, leg.From.StayOverTime, leg.To.StayOverTime)
+	}
 }
 
 func TestPreviewBranchMixesDestinationAndLocation(t *testing.T) {
 	pin := stop("pin", 1.5, 2.5)
+	pin.StayOverTime = 15
 	place := &model.Location{Base: utils.Base{ID: uuid.New()}, Name: "place", Lat: 3.5, Lng: 4.5}
 	end := stop("end", 5, 6)
 	router := &stubLegRouter{leg: &model.Leg{Vehicle: enum.BIKE, Polyline: "mixed"}}
@@ -510,6 +516,9 @@ func TestPreviewBranchMixesDestinationAndLocation(t *testing.T) {
 	}
 	if got.Legs[1].From.Name != "place" || got.Legs[1].To.Name != "end" {
 		t.Fatalf("second leg ends = %+v -> %+v", got.Legs[1].From, got.Legs[1].To)
+	}
+	if got.Legs[0].To.StayOverTime != 0 || got.Legs[0].From.StayOverTime != 15 {
+		t.Fatalf("stay = %d -> %d", got.Legs[0].From.StayOverTime, got.Legs[0].To.StayOverTime)
 	}
 }
 
@@ -546,6 +555,9 @@ func TestPreviewLocationsRoutesOrderedPlaces(t *testing.T) {
 	}
 	if leg.To.LocationID == nil || *leg.To.LocationID != to.ID {
 		t.Fatalf("to = %+v", leg.To)
+	}
+	if leg.From.StayOverTime != 0 || leg.To.StayOverTime != 0 || leg.DurationS != 200 {
+		t.Fatalf("time = duration %v stay %d -> %d", leg.DurationS, leg.From.StayOverTime, leg.To.StayOverTime)
 	}
 }
 

@@ -173,7 +173,7 @@ JWT, and an active member. The trip does not have to be `planning`. `tripId` is 
 
 Each point carries exactly one id. Neither id, or both, is 400 (`ErrInvalidComputePoint`). Fewer than two points is not a hop. An unknown id is 404.
 
-`PreviewBranch` loads each point, builds consecutive pairs, and runs the pool. The response `legs` carry the name and id of each end, `vehicle`, `polyline`, `distanceM`, and `durationS`. There is no `tripId` and no `isFrozen`.
+`PreviewBranch` loads each point, builds consecutive pairs, and runs the pool. The response `legs` carry the name and id of each end, `stayOverTime` in minutes, `vehicle`, `polyline`, `distanceM`, and `durationS`. `durationS` is the ride only. A location end has `stayOverTime` 0 because the catalog has no stay. There is no `tripId` and no `isFrozen`.
 
 Goong errors: missing API key is 500, rate limit is 429, an empty route or a non-OK status is 502.
 

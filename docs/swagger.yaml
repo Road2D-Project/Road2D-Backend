@@ -466,6 +466,24 @@ definitions:
     required:
     - refreshToken
     type: object
+  request.PatchDestinationRequest:
+    properties:
+      arriveTime:
+        type: string
+      lat:
+        type: number
+      lng:
+        type: number
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      status:
+        example: editing
+        type: string
+      stayOverTime:
+        type: integer
+    type: object
   request.PreviewLocationsRequest:
     properties:
       locationIds:
@@ -689,6 +707,8 @@ definitions:
         type: string
       name:
         type: string
+      stayOverTime:
+        type: integer
     type: object
   response.ComputeTripResponse:
     properties:
@@ -1035,6 +1055,8 @@ definitions:
       name:
         type: string
       orderInBranch:
+        type: integer
+      stayOverTime:
         type: integer
     type: object
   response.StructuredFormatting:
@@ -2354,6 +2376,53 @@ paths:
       security:
       - BearerAuth: []
       summary: Get destination
+      tags:
+      - planning
+    patch:
+      consumes:
+      - application/json
+      description: Updates any of name, arrive time, stay minutes, and status while
+        the destination is editing. lat/lng are applied only when locationId is empty.
+        Omitted fields stay as they are.
+      parameters:
+      - description: Destination UUID
+        format: uuid
+        in: path
+        name: destinationId
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.PatchDestinationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Destination'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Patch destination
       tags:
       - planning
     put:

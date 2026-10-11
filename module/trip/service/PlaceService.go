@@ -138,6 +138,56 @@ func (s *PlaceService) UpdateDestination(ctx context.Context, destinationId uuid
 	return targetDes, nil
 }
 
+// PatchDestination writes only the fields present on the request.
+// A linked pin keeps its coordinates. An editing pin is the only one that can change.
+func (s *PlaceService) PatchDestination(ctx context.Context, destinationId uuid.UUID, patch request.PatchDestinationRequest) (*model.Destination, error) {
+	targetDes, err := s.destinations.FindDestinationById(ctx, destinationId)
+	if err != nil {
+		return nil, err
+	}
+	if targetDes.Status != enum.Editing {
+		return nil, repository.ErrDestinationNotEditing
+	}
+	changed := false
+	if patch.Name != nil {
+		name := utils.Santize(*patch.Name)
+		if name == "" {
+			return nil, errors.New("name is required")
+		}
+		targetDes.Name = name
+		changed = true
+	}
+	if patch.ArriveTime != nil {
+		targetDes.ArriveTime = patch.ArriveTime
+		changed = true
+	}
+	if patch.StayOverTime != nil {
+		targetDes.StayOverTime = *patch.StayOverTime
+		changed = true
+	}
+	if patch.Status != nil {
+		targetDes.Status = *patch.Status
+		changed = true
+	}
+	if targetDes.CoordinatesEditable() {
+		if patch.Lat != nil {
+			targetDes.Lat = *patch.Lat
+			changed = true
+		}
+		if patch.Lng != nil {
+			targetDes.Lng = *patch.Lng
+			changed = true
+		}
+	}
+	if !changed {
+		return nil, repository.ErrNoDestinationUpdate
+	}
+	if err := s.destinations.UpdateDestination(ctx, targetDes); err != nil {
+		return nil, err
+	}
+	return targetDes, nil
+}
+
 func (s *PlaceService) ForkLocation(ctx context.Context, locationId uuid.UUID, forkRequest request.ForkLocationRequest) (*response.CreateDestinationResponse, error) {
 	targetLocation, err := s.locations.FindLocationById(ctx, locationId)
 	if err != nil {

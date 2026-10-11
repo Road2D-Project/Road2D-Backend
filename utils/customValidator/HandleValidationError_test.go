@@ -77,3 +77,21 @@ func TestScheduleTagsAcceptZeroStayAndOmittedArrive(t *testing.T) {
 		t.Fatalf("valid schedule: %v", err)
 	}
 }
+
+func TestStayMinutesAcceptsAPointer(t *testing.T) {
+	type patch struct {
+		StayOverTime *int `json:"stayOverTime" binding:"omitempty,stayMinutes"`
+	}
+	validate := newScheduleValidator()
+	zero := 0
+	if err := validate.Struct(patch{StayOverTime: &zero}); err != nil {
+		t.Fatalf("zero stay: %v", err)
+	}
+	negative := -1
+	if err := validate.Struct(patch{StayOverTime: &negative}); err == nil {
+		t.Fatal("negative stay was accepted")
+	}
+	if err := validate.Struct(patch{}); err != nil {
+		t.Fatalf("omitted stay: %v", err)
+	}
+}

@@ -32,6 +32,7 @@ type StopResponse struct {
 	Name          string    `json:"name"`
 	Lat           float64   `json:"lat"`
 	Lng           float64   `json:"lng"`
+	StayOverTime  int       `json:"stayOverTime"`
 	OrderInBranch int       `json:"orderInBranch"`
 }
 
@@ -74,6 +75,7 @@ func stopResponse(stop *model.BranchDestination) StopResponse {
 		out.Name = stop.Destination.Name
 		out.Lat = stop.Destination.Lat
 		out.Lng = stop.Destination.Lng
+		out.StayOverTime = stop.Destination.StayOverTime
 	}
 	return out
 }

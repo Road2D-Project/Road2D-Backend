@@ -236,6 +236,87 @@ func TestForkLocationCopiesCoordinatesAndLink(t *testing.T) {
 	}
 }
 
+func TestPatchDestinationKeepsUnsentFields(t *testing.T) {
+	id := uuid.New()
+	locationID := uuid.New()
+	stay := 40
+	destinations := &stubDestinations{byID: map[uuid.UUID]*model.Destination{
+		id: {
+			Base:         utils.Base{ID: id},
+			LocationID:   &locationID,
+			Lat:          10,
+			Lng:          20,
+			Name:         "forked",
+			StayOverTime: 5,
+			Status:       enum.Editing,
+		},
+	}}
+	svc := NewLocationService(destinations, &stubLocations{}, nil)
+	lat := 99.0
+
+	updated, err := svc.PatchDestination(context.Background(), id, request.PatchDestinationRequest{
+		StayOverTime: &stay,
+		Lat:          &lat,
+	})
+	if err != nil {
+		t.Fatalf("patch: %v", err)
+	}
+	if updated.StayOverTime != 40 || updated.Name != "forked" || updated.Lat != 10 || updated.Lng != 20 {
+		t.Fatalf("got %+v", updated)
+	}
+}
+
+func TestPatchDestinationMovesUnlinkedPin(t *testing.T) {
+	id := uuid.New()
+	destinations := &stubDestinations{byID: map[uuid.UUID]*model.Destination{
+		id: {Base: utils.Base{ID: id}, Lat: 10, Lng: 20, Name: "draft", Status: enum.Editing},
+	}}
+	svc := NewLocationService(destinations, &stubLocations{}, nil)
+	lat := 11.0
+	name := "moved"
+
+	updated, err := svc.PatchDestination(context.Background(), id, request.PatchDestinationRequest{
+		Name: &name,
+		Lat:  &lat,
+	})
+	if err != nil {
+		t.Fatalf("patch: %v", err)
+	}
+	if updated.Name != "moved" || updated.Lat != 11 || updated.Lng != 20 || updated.StayOverTime != 0 {
+		t.Fatalf("got %+v", updated)
+	}
+}
+
+func TestPatchDestinationRejectsEmptyBody(t *testing.T) {
+	id := uuid.New()
+	destinations := &stubDestinations{byID: map[uuid.UUID]*model.Destination{
+		id: {Base: utils.Base{ID: id}, Status: enum.Editing},
+	}}
+	svc := NewLocationService(destinations, &stubLocations{}, nil)
+
+	_, err := svc.PatchDestination(context.Background(), id, request.PatchDestinationRequest{})
+	if !errors.Is(err, repository.ErrNoDestinationUpdate) {
+		t.Fatalf("got %v", err)
+	}
+	if destinations.updated != nil {
+		t.Fatal("empty patch was written")
+	}
+}
+
+func TestPatchDestinationRejectsConfirmedPin(t *testing.T) {
+	id := uuid.New()
+	stay := 10
+	destinations := &stubDestinations{byID: map[uuid.UUID]*model.Destination{
+		id: {Base: utils.Base{ID: id}, Status: enum.Confirm},
+	}}
+	svc := NewLocationService(destinations, &stubLocations{}, nil)
+
+	_, err := svc.PatchDestination(context.Background(), id, request.PatchDestinationRequest{StayOverTime: &stay})
+	if !errors.Is(err, repository.ErrDestinationNotEditing) {
+		t.Fatalf("got %v", err)
+	}
+}
+
 func TestForkLocationMissingPlace(t *testing.T) {
 	svc := NewLocationService(&stubDestinations{}, &stubLocations{byID: map[uuid.UUID]*model.Location{}}, nil)
 	_, err := svc.ForkLocation(context.Background(), uuid.New(), request.ForkLocationRequest{})

@@ -185,6 +185,7 @@ func mapTripError(c *gin.Context, err error) {
 		errors.Is(err, repository.ErrTripMembersRequired),
 		errors.Is(err, repository.ErrTripTypePolicyUnset),
 		errors.Is(err, repository.ErrCannotInviteSelf),
+		errors.Is(err, repository.ErrNoDestinationUpdate),
 		errors.Is(err, service.ErrPlaceIDRequired):
 		jsonError(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, repository.ErrInternalServerError),
