@@ -32,6 +32,7 @@ Travel (one trip's snapshot of a leg; frozen rows are history)
   - [Worker pool](docs/trip-route.md#worker-pool)
   - [Storage tiers](docs/trip-route.md#storage-tiers)
   - [Preview one branch](docs/trip-route.md#preview-one-branch)
+  - [Resolve a Goong place](docs/trip-route.md#resolve-a-goong-place) — `POST /planning/location`
   - [Preview locations before a trip](docs/trip-route.md#preview-locations-before-a-trip) — `POST /planning/preview`
   - [Compute the saved graph](docs/trip-route.md#compute-the-saved-graph) — `POST /trips/:tripId/travels`
   - [Read the stored travels](docs/trip-route.md#read-the-stored-travels) — `GET /trips/:tripId/graph`, `GET /trips/:tripId/travels`

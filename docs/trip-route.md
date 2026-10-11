@@ -13,6 +13,7 @@ Covered work starts at `88a3f9c`.
 - [Worker pool](#worker-pool)
 - [Storage tiers](#storage-tiers)
 - [Preview one branch](#preview-one-branch)
+- [Resolve a Goong place](#resolve-a-goong-place)
 - [Preview locations before a trip](#preview-locations-before-a-trip)
 - [Compute the saved graph](#compute-the-saved-graph)
 - [Read the stored travels](#read-the-stored-travels)
@@ -42,7 +43,7 @@ Goong Trip is not used. That API is a single-vehicle TSP: it needs at least 10 p
 
 ## Location and destination
 
-A `Location` is a verified place in the shared catalog (`place_id`, address, lat/lng). Seeding and place detail write it. Planning never updates it.
+A `Location` is a verified place in the shared catalog (`place_id`, address, lat/lng). `POST /planning/location` stores one from a Goong `place_id`, and the location seeder writes the same kind of row. Planning does not update a location after that.
 
 A `Destination` is a pin. `PlaceService.ForkLocation` copies the location's name and coordinates onto a new pin, sets `LocationID`, and leaves the pin in `editing`. After the link is set, the pin's coordinates are a copy and are no longer editable. A destination has no `TripID` and no `GroupID`. The shared catalog is still `Location`. Membership in a trip is the branch that holds the pin.
 
@@ -77,7 +78,7 @@ Handlers construct a service per request. The interfaces below are declared in t
 | Service | File | Does |
 | --- | --- | --- |
 | `TripBranchService` | `module/trip/service/TripBranchService.go` | Resolves destination ids, checks branch rules, replaces route branches, and lists or appends the draft inbox |
-| `PlaceService` | `module/trip/service/PlaceService.go` | Reads a location or destination, forks a location into a pin |
+| `PlaceService` | `module/trip/service/PlaceService.go` | Resolves a Goong place into a location, reads a location or destination, forks a location into a pin |
 | `ComputeTripService` | `module/trip/service/ComputeTripService.go` | `PreviewBranch` for one ad-hoc branch, `ComputeTrip` for a saved graph |
 | `DirectionService` | `module/maps/service/DirectionService.go` | One A→B route: cache, then Goong, then cache again |
 
@@ -175,6 +176,20 @@ Each point carries exactly one id. Neither id, or both, is 400 (`ErrInvalidCompu
 `PreviewBranch` loads each point, builds consecutive pairs, and runs the pool. The response `legs` carry the name and id of each end, `vehicle`, `polyline`, `distanceM`, and `durationS`. There is no `tripId` and no `isFrozen`.
 
 Goong errors: missing API key is 500, rate limit is 429, an empty route or a non-OK status is 502.
+
+## Resolve a Goong place
+
+`POST /v1/planning/location`
+
+JWT. Autocomplete returns a Goong `place_id`. Preview and create trip take a catalog `locationId`. This call is the step between them.
+
+```json
+{ "placeId": "…" }
+```
+
+A `place_id` already in the catalog returns 200 and does not call Goong. A miss loads Place Detail, stores the location, and returns 201. The same `place_id` again returns that row. The response is `locationId`, `placeId`, `name`, `lat`, `lng`.
+
+Those `locationId` values are the body of `POST /planning/preview`. This call does not create a destination. Create trip forks the reviewed locations itself. `POST /planning/fork/{locationId}` stays the path that copies a catalog place onto a pin after the trip exists.
 
 ## Preview locations before a trip
 

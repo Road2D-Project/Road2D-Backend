@@ -1,23 +1,37 @@
 package service
 
 import (
+	"context"
+	"errors"
+	"strings"
+
+	mapsclient "Road-To-Destination-BE/module/maps/client"
+	mapRequest "Road-To-Destination-BE/module/maps/model/request"
+	mapResponse "Road-To-Destination-BE/module/maps/model/response"
 	"Road-To-Destination-BE/module/trip/model"
 	"Road-To-Destination-BE/module/trip/model/request"
 	"Road-To-Destination-BE/module/trip/model/response"
 	"Road-To-Destination-BE/module/trip/repository"
 	"Road-To-Destination-BE/utils"
 	"Road-To-Destination-BE/utils/enum"
-	"context"
 
 	"github.com/google/uuid"
 )
 
+var (
+	// ErrPlaceIDRequired means the caller did not send a Goong place id.
+	ErrPlaceIDRequired = errors.New("placeId is required")
+	// ErrUnusablePlaceDetail means Goong returned a place that has no name or coordinates.
+	ErrUnusablePlaceDetail = errors.New("place detail is missing name or coordinates")
+)
+
 // PlaceService các thao tác:
 // + model.Destination: địa điểm trong đang được lên plan
-// + model.Location: các địa điểm đã được xác thực (get / fork)
+// + model.Location: các địa điểm đã được xác thực (get / fork / ensure from place id)
 type PlaceService struct {
 	destinations DestinationRowRepository
 	locations    LocationRowRepository
+	places       PlaceDetailClient
 }
 
 type DestinationRowRepository interface {
@@ -28,14 +42,74 @@ type DestinationRowRepository interface {
 
 type LocationRowRepository interface {
 	FindLocationById(ctx context.Context, locationId uuid.UUID) (*model.Location, error)
+	FindLocationByPlaceID(ctx context.Context, placeID string) (*model.Location, error)
+	CreateLocation(ctx context.Context, location *model.Location) error
 }
 
-func NewLocationService(destinations DestinationRowRepository, locations LocationRowRepository) *PlaceService {
-	return &PlaceService{destinations: destinations, locations: locations}
+// PlaceDetailClient loads one Goong place. Planning stores that row; it does not edit it later.
+type PlaceDetailClient interface {
+	DetailPlace(ctx context.Context, req mapRequest.DetailPlaceRequest) (*mapResponse.PlaceDetailResponse, error)
+}
+
+func NewLocationService(destinations DestinationRowRepository, locations LocationRowRepository, places PlaceDetailClient) *PlaceService {
+	return &PlaceService{destinations: destinations, locations: locations, places: places}
 }
 
 func (s *PlaceService) GetLocation(ctx context.Context, locationId uuid.UUID) (*model.Location, error) {
 	return s.locations.FindLocationById(ctx, locationId)
+}
+
+// EnsureLocation returns the catalog row for a Goong place id.
+// A place already stored is returned as-is. A miss is loaded from Goong and inserted.
+// created is true only when this call inserted the row.
+func (s *PlaceService) EnsureLocation(ctx context.Context, placeID string) (*response.EnsureLocationResponse, bool, error) {
+	placeID = strings.TrimSpace(placeID)
+	if placeID == "" {
+		return nil, false, ErrPlaceIDRequired
+	}
+	existing, err := s.locations.FindLocationByPlaceID(ctx, placeID)
+	if err == nil && existing != nil {
+		return ensureLocationResponse(existing), false, nil
+	}
+	if err != nil && !errors.Is(err, repository.ErrLocationNotFound) {
+		return nil, false, err
+	}
+	if s.places == nil {
+		return nil, false, mapsclient.ErrMissingAPIKey
+	}
+	detail, err := s.places.DetailPlace(ctx, mapRequest.DetailPlaceRequest{PlaceId: placeID})
+	if err != nil {
+		return nil, false, err
+	}
+	if detail == nil {
+		return nil, false, ErrUnusablePlaceDetail
+	}
+	row := LocationFromPlaceDetail(*detail)
+	if row == nil {
+		return nil, false, ErrUnusablePlaceDetail
+	}
+	if err := s.locations.CreateLocation(ctx, row); err != nil {
+		existing, findErr := s.locations.FindLocationByPlaceID(ctx, placeID)
+		if findErr == nil && existing != nil {
+			return ensureLocationResponse(existing), false, nil
+		}
+		return nil, false, err
+	}
+	return ensureLocationResponse(row), true, nil
+}
+
+func ensureLocationResponse(location *model.Location) *response.EnsureLocationResponse {
+	placeID := ""
+	if location.PlaceID != nil {
+		placeID = *location.PlaceID
+	}
+	return &response.EnsureLocationResponse{
+		LocationID: location.ID,
+		PlaceID:    placeID,
+		Name:       location.Name,
+		Lat:        location.Lat,
+		Lng:        location.Lng,
+	}
 }
 
 func (s *PlaceService) GetDestination(ctx context.Context, destinationId uuid.UUID) (*model.Destination, error) {

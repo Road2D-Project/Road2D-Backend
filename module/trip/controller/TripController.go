@@ -27,6 +27,7 @@ var (
 	_ = request.UpdateTripMemberRequest{}
 	_ = request.ComputeBranchRequest{}
 	_ = request.PreviewLocationsRequest{}
+	_ = request.EnsureLocationRequest{}
 	_ = request.ComputeTravelGraphRequest{}
 	_ = request.UpdateBranchStopRequest{}
 	_ = request.AddDraftDestinationRequest{}
@@ -41,6 +42,7 @@ var (
 	_ = response.TripDetailResponse{}
 	_ = response.ComputeBranchResponse{}
 	_ = response.PreviewLocationsResponse{}
+	_ = response.EnsureLocationResponse{}
 	_ = response.ComputeTripResponse{}
 	_ = share.ErrorResponse{}
 )
@@ -130,6 +132,7 @@ func (ctrl *TripController) registerGraphRoutes(trips *gin.RouterGroup) {
 
 func (ctrl *TripController) registerPlanningRoutes(planning *gin.RouterGroup) {
 	planning.POST("/preview", ctrl.HandlePreviewLocations())
+	planning.POST("/location", ctrl.HandleEnsureLocation())
 	planning.POST("/fork/:locationId", ctrl.HandleForkLocation())
 	planning.GET("/location/:locationId", ctrl.HandleGetLocation())
 	planning.GET("/destination/:destinationId", ctrl.HandleGetDestination())

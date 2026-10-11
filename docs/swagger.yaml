@@ -397,6 +397,13 @@ definitions:
     - name
     - tripType
     type: object
+  request.EnsureLocationRequest:
+    properties:
+      placeId:
+        type: string
+    required:
+    - placeId
+    type: object
   request.ForgetPasswordRequest:
     properties:
       mail:
@@ -707,6 +714,20 @@ definitions:
         items:
           $ref: '#/definitions/response.StopResponse'
         type: array
+    type: object
+  response.EnsureLocationResponse:
+    properties:
+      lat:
+        type: number
+      lng:
+        type: number
+      locationId:
+        format: uuid
+        type: string
+      name:
+        type: string
+      placeId:
+        type: string
     type: object
   response.ForgetPasswordResponse:
     properties:
@@ -2424,6 +2445,56 @@ paths:
       security:
       - BearerAuth: []
       summary: Fork location
+      tags:
+      - planning
+  /planning/location:
+    post:
+      consumes:
+      - application/json
+      description: Resolve a Goong place_id into a catalog location. An existing place_id
+        is returned as-is. A new one is loaded from Goong Place Detail and stored.
+        Pass locationId to POST /planning/preview. This does not create a destination.
+      parameters:
+      - description: Goong place id from autocomplete
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.EnsureLocationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Place was already in the catalog
+          schema:
+            $ref: '#/definitions/response.EnsureLocationResponse'
+        "201":
+          description: Place was stored
+          schema:
+            $ref: '#/definitions/response.EnsureLocationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ensure location
       tags:
       - planning
   /planning/location/{locationId}:

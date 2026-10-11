@@ -145,6 +145,7 @@ func (ctrl *TripController) placeService() *service.PlaceService {
 	return service.NewLocationService(
 		repository.NewDestinationRepository(ctrl.db),
 		repository.NewLocationRepository(ctrl.db),
+		ctrl.goong,
 	)
 }
 
@@ -183,7 +184,8 @@ func mapTripError(c *gin.Context, err error) {
 		errors.Is(err, repository.ErrNoBranchStopUpdate),
 		errors.Is(err, repository.ErrTripMembersRequired),
 		errors.Is(err, repository.ErrTripTypePolicyUnset),
-		errors.Is(err, repository.ErrCannotInviteSelf):
+		errors.Is(err, repository.ErrCannotInviteSelf),
+		errors.Is(err, service.ErrPlaceIDRequired):
 		jsonError(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, repository.ErrInternalServerError),
 		errors.Is(err, mapsclient.ErrMissingAPIKey):
@@ -192,7 +194,8 @@ func mapTripError(c *gin.Context, err error) {
 		jsonError(c, http.StatusTooManyRequests, err.Error())
 	case errors.Is(err, mapsclient.ErrEmptyRoute),
 		errors.Is(err, mapsclient.ErrEmptyTrip),
-		errors.Is(err, mapsclient.ErrGoongStatus):
+		errors.Is(err, mapsclient.ErrGoongStatus),
+		errors.Is(err, service.ErrUnusablePlaceDetail):
 		jsonError(c, http.StatusBadGateway, err.Error())
 	default:
 		jsonError(c, http.StatusBadRequest, err.Error())

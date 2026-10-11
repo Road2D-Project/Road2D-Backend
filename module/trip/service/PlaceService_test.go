@@ -6,6 +6,9 @@ import (
 	"testing"
 	"time"
 
+	mapsclient "Road-To-Destination-BE/module/maps/client"
+	mapRequest "Road-To-Destination-BE/module/maps/model/request"
+	mapResponse "Road-To-Destination-BE/module/maps/model/response"
 	"Road-To-Destination-BE/module/trip/model"
 	"Road-To-Destination-BE/module/trip/model/request"
 	"Road-To-Destination-BE/module/trip/repository"
@@ -47,7 +50,12 @@ func (s *stubDestinations) CreateDestination(_ context.Context, destination *mod
 }
 
 type stubLocations struct {
-	byID map[uuid.UUID]*model.Location
+	byID      map[uuid.UUID]*model.Location
+	byPlace   map[string]*model.Location
+	created   *model.Location
+	createErr error
+	findErr   error
+	finds     int
 }
 
 func (s *stubLocations) FindLocationById(_ context.Context, locationId uuid.UUID) (*model.Location, error) {
@@ -57,6 +65,51 @@ func (s *stubLocations) FindLocationById(_ context.Context, locationId uuid.UUID
 	}
 	copied := *location
 	return &copied, nil
+}
+
+func (s *stubLocations) FindLocationByPlaceID(_ context.Context, placeID string) (*model.Location, error) {
+	s.finds++
+	if s.findErr != nil && s.finds == 1 {
+		return nil, s.findErr
+	}
+	location, ok := s.byPlace[placeID]
+	if !ok {
+		return nil, repository.ErrLocationNotFound
+	}
+	copied := *location
+	return &copied, nil
+}
+
+func (s *stubLocations) CreateLocation(_ context.Context, location *model.Location) error {
+	if s.createErr != nil {
+		return s.createErr
+	}
+	if location.ID == uuid.Nil {
+		location.ID = uuid.New()
+	}
+	copied := *location
+	s.created = &copied
+	if s.byPlace == nil {
+		s.byPlace = map[string]*model.Location{}
+	}
+	if location.PlaceID != nil {
+		s.byPlace[*location.PlaceID] = &copied
+	}
+	return nil
+}
+
+type stubPlaceDetails struct {
+	detail *mapResponse.PlaceDetailResponse
+	err    error
+	calls  int
+}
+
+func (s *stubPlaceDetails) DetailPlace(context.Context, mapRequest.DetailPlaceRequest) (*mapResponse.PlaceDetailResponse, error) {
+	s.calls++
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.detail, nil
 }
 
 func TestUpdateDestinationMovesUnlinkedPin(t *testing.T) {
@@ -70,7 +123,7 @@ func TestUpdateDestinationMovesUnlinkedPin(t *testing.T) {
 			Status: enum.Editing,
 		},
 	}}
-	svc := NewLocationService(destinations, &stubLocations{})
+	svc := NewLocationService(destinations, &stubLocations{}, nil)
 
 	updated, err := svc.UpdateDestination(context.Background(), id, request.UpdateDestinationRequest{
 		Lat:          11,
@@ -100,7 +153,7 @@ func TestUpdateDestinationKeepsCoordinatesWhenLinked(t *testing.T) {
 			Status:     enum.Editing,
 		},
 	}}
-	svc := NewLocationService(destinations, &stubLocations{})
+	svc := NewLocationService(destinations, &stubLocations{}, nil)
 
 	updated, err := svc.UpdateDestination(context.Background(), id, request.UpdateDestinationRequest{
 		Lat:    99,
@@ -124,7 +177,7 @@ func TestUpdateDestinationRejectsConfirmedPin(t *testing.T) {
 	destinations := &stubDestinations{byID: map[uuid.UUID]*model.Destination{
 		id: {Base: utils.Base{ID: id}, Status: enum.Confirm},
 	}}
-	svc := NewLocationService(destinations, &stubLocations{})
+	svc := NewLocationService(destinations, &stubLocations{}, nil)
 
 	_, err := svc.UpdateDestination(context.Background(), id, request.UpdateDestinationRequest{Name: "nope"})
 	if !errors.Is(err, repository.ErrDestinationNotEditing) {
@@ -149,7 +202,7 @@ func TestForkLocationCopiesCoordinatesAndLink(t *testing.T) {
 		},
 	}}
 	destinations := &stubDestinations{}
-	svc := NewLocationService(destinations, locations)
+	svc := NewLocationService(destinations, locations, nil)
 
 	created, err := svc.ForkLocation(context.Background(), locationID, request.ForkLocationRequest{
 		Name:         "Morning stop",
@@ -184,9 +237,133 @@ func TestForkLocationCopiesCoordinatesAndLink(t *testing.T) {
 }
 
 func TestForkLocationMissingPlace(t *testing.T) {
-	svc := NewLocationService(&stubDestinations{}, &stubLocations{byID: map[uuid.UUID]*model.Location{}})
+	svc := NewLocationService(&stubDestinations{}, &stubLocations{byID: map[uuid.UUID]*model.Location{}}, nil)
 	_, err := svc.ForkLocation(context.Background(), uuid.New(), request.ForkLocationRequest{})
 	if !errors.Is(err, repository.ErrLocationNotFound) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestEnsureLocationReturnsStoredPlace(t *testing.T) {
+	locationID := uuid.New()
+	placeID := "goong-1"
+	locations := &stubLocations{byPlace: map[string]*model.Location{
+		placeID: {
+			Base:    utils.Base{ID: locationID},
+			Name:    "Ben Thanh",
+			Lat:     10.77,
+			Lng:     106.7,
+			PlaceID: &placeID,
+		},
+	}}
+	details := &stubPlaceDetails{}
+	svc := NewLocationService(&stubDestinations{}, locations, details)
+
+	got, created, err := svc.EnsureLocation(context.Background(), "  goong-1  ")
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if created {
+		t.Fatal("stored place was inserted again")
+	}
+	if details.calls != 0 {
+		t.Fatalf("detail calls: %d", details.calls)
+	}
+	if got.LocationID != locationID || got.PlaceID != placeID || got.Name != "Ben Thanh" || got.Lat != 10.77 || got.Lng != 106.7 {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestEnsureLocationStoresPlaceDetail(t *testing.T) {
+	placeID := "goong-2"
+	details := &stubPlaceDetails{detail: &mapResponse.PlaceDetailResponse{
+		Result: mapResponse.PlaceDetail{
+			PlaceID:          placeID,
+			Name:             "Cafe",
+			FormattedAddress: "1 Le Loi",
+			Geometry:         &mapResponse.PlaceGeometry{Location: mapResponse.LatLng{Lat: 10.5, Lng: 106.6}},
+			Compound:         &mapResponse.AdministrativeCompound{Commune: "Ben Thanh", District: "1", Province: "Ho Chi Minh"},
+		},
+	}}
+	locations := &stubLocations{}
+	svc := NewLocationService(&stubDestinations{}, locations, details)
+
+	got, created, err := svc.EnsureLocation(context.Background(), placeID)
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if !created || details.calls != 1 || locations.created == nil {
+		t.Fatalf("created=%v calls=%d row=%+v", created, details.calls, locations.created)
+	}
+	if got.LocationID == uuid.Nil || got.PlaceID != placeID || got.Name != "Cafe" || got.Lat != 10.5 || got.Lng != 106.6 {
+		t.Fatalf("got %+v", got)
+	}
+	if !locations.created.IsVerified || locations.created.PlaceID == nil || *locations.created.PlaceID != placeID {
+		t.Fatalf("stored row: %+v", locations.created)
+	}
+}
+
+func TestEnsureLocationRejectsEmptyDetail(t *testing.T) {
+	locations := &stubLocations{}
+	details := &stubPlaceDetails{detail: &mapResponse.PlaceDetailResponse{
+		Result: mapResponse.PlaceDetail{PlaceID: "goong-3"},
+	}}
+	svc := NewLocationService(&stubDestinations{}, locations, details)
+
+	_, _, err := svc.EnsureLocation(context.Background(), "goong-3")
+	if !errors.Is(err, ErrUnusablePlaceDetail) {
+		t.Fatalf("got %v", err)
+	}
+	if locations.created != nil {
+		t.Fatal("unusable detail was stored")
+	}
+}
+
+func TestEnsureLocationRequiresPlaceID(t *testing.T) {
+	svc := NewLocationService(&stubDestinations{}, &stubLocations{}, &stubPlaceDetails{})
+	_, _, err := svc.EnsureLocation(context.Background(), "  ")
+	if !errors.Is(err, ErrPlaceIDRequired) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestEnsureLocationReturnsWinnerAfterInsertRace(t *testing.T) {
+	placeID := "goong-4"
+	winnerID := uuid.New()
+	locations := &stubLocations{
+		findErr:   repository.ErrLocationNotFound,
+		createErr: errors.New("duplicate place_id"),
+		byPlace: map[string]*model.Location{
+			placeID: {
+				Base:    utils.Base{ID: winnerID},
+				Name:    "Winner",
+				Lat:     1,
+				Lng:     2,
+				PlaceID: &placeID,
+			},
+		},
+	}
+	svc := NewLocationService(&stubDestinations{}, locations, &stubPlaceDetails{detail: &mapResponse.PlaceDetailResponse{
+		Result: mapResponse.PlaceDetail{
+			PlaceID:  placeID,
+			Name:     "Loser",
+			Geometry: &mapResponse.PlaceGeometry{Location: mapResponse.LatLng{Lat: 9, Lng: 9}},
+		},
+	}})
+
+	got, created, err := svc.EnsureLocation(context.Background(), placeID)
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if created || got.LocationID != winnerID || got.Name != "Winner" {
+		t.Fatalf("created=%v got %+v", created, got)
+	}
+}
+
+func TestEnsureLocationNeedsADetailClient(t *testing.T) {
+	svc := NewLocationService(&stubDestinations{}, &stubLocations{}, nil)
+	_, _, err := svc.EnsureLocation(context.Background(), "goong-5")
+	if !errors.Is(err, mapsclient.ErrMissingAPIKey) {
 		t.Fatalf("got %v", err)
 	}
 }

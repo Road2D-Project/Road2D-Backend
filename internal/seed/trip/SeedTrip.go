@@ -92,6 +92,7 @@ func Seed(ctx context.Context, db *gorm.DB, redisClient *redis.Client, opts Opti
 	places := tripService.NewLocationService(
 		tripRepo.NewDestinationRepository(db),
 		tripRepo.NewLocationRepository(db),
+		nil,
 	)
 	pins, err := ForkLocations(ctx, places, db, opts.LocationIDs)
 	if err != nil {

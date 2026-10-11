@@ -10,8 +10,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// LocationRepository reads verified places. A location is never updated here:
-// planning copies one by forking it into a destination.
+// LocationRepository reads and inserts verified places. A stored location is not
+// updated here: planning copies one by forking it into a destination.
 type LocationRepository struct {
 	db *gorm.DB
 }

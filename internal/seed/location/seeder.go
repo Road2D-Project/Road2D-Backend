@@ -9,6 +9,7 @@ import (
 	mapResponse "Road-To-Destination-BE/module/maps/model/response"
 	"Road-To-Destination-BE/module/trip/model"
 	"Road-To-Destination-BE/module/trip/repository"
+	tripService "Road-To-Destination-BE/module/trip/service"
 )
 
 const defaultGeocodeLimit = 10
@@ -172,7 +173,7 @@ func (s *Seeder) seedPlaceID(ctx context.Context, placeID, name string, seen map
 		report.add(placeID, name, StatusEmptyDetail)
 		return nil
 	}
-	row := detailToLocation(*detail)
+	row := tripService.LocationFromPlaceDetail(*detail)
 	if row == nil {
 		seen[placeID] = struct{}{}
 		report.add(placeID, name, StatusUnmappedDetail)

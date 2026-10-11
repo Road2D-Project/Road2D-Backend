@@ -1,4 +1,4 @@
-package location
+package service
 
 import (
 	mapResponse "Road-To-Destination-BE/module/maps/model/response"
@@ -6,7 +6,9 @@ import (
 	"Road-To-Destination-BE/utils"
 )
 
-func detailToLocation(detailResponse mapResponse.PlaceDetailResponse) *model.Location {
+// LocationFromPlaceDetail copies a Goong place detail into a verified catalog row.
+// A detail missing place id, name, or coordinates cannot be stored.
+func LocationFromPlaceDetail(detailResponse mapResponse.PlaceDetailResponse) *model.Location {
 	detail := detailResponse.Result
 	if detail.PlaceID == "" || detail.Name == "" || detail.Geometry == nil {
 		return nil
