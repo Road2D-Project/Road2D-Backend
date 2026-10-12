@@ -9,6 +9,7 @@ import (
 	"Road-To-Destination-BE/middleware"
 	authenController "Road-To-Destination-BE/module/authentication/controller"
 	authenRepo "Road-To-Destination-BE/module/authentication/repository"
+	friendController "Road-To-Destination-BE/module/friend/controller"
 	groupController "Road-To-Destination-BE/module/group/controller"
 	mapsClient "Road-To-Destination-BE/module/maps/client"
 	mapsController "Road-To-Destination-BE/module/maps/controller"
@@ -77,6 +78,7 @@ func Run() error {
 	}
 	routerRegistrars := []share.RouterRegistrar{
 		authenController.NewAuthenticationController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator),
+		friendController.NewFriendController(dbConfig.GetDatabase(), authMw),
 		groupController.NewGroupController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw),
 		tripController.NewTripController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw, responseCacheMw),
 		realtimeController.NewLobbyController(authMw, hub, activeTripMemberAuthorizer{db: dbConfig.GetDatabase()}),

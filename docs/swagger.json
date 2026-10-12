@@ -340,6 +340,373 @@
                 }
             }
         },
+        "/friends": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Accepted friends of the caller, with count. Optional q keeps usernames that contain the query (exact, then prefix, then substring).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "friends"
+                ],
+                "summary": "List friends",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Username filter",
+                        "name": "q",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.FriendListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/friends/requests": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Pending requests. box=in (default) is waiting on the caller. box=out is requests the caller sent.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "friends"
+                ],
+                "summary": "List friend requests",
+                "parameters": [
+                    {
+                        "enum": [
+                            "in",
+                            "out"
+                        ],
+                        "type": "string",
+                        "description": "in or out",
+                        "name": "box",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.FriendRequestListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/friends/requests/{userId}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a pending request. If the other user already sent one, this accepts it. A rejected row is reopened as pending.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "friends"
+                ],
+                "summary": "Send friend request",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Other user UUID",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/response.FriendRequestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Deletes a pending request sent by the caller.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "friends"
+                ],
+                "summary": "Cancel friend request",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Addressee UUID",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/friends/requests/{userId}/respond": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The addressee accepts or rejects. action is accept or reject.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "friends"
+                ],
+                "summary": "Answer a friend request",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Requester UUID",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "accept",
+                            "reject"
+                        ],
+                        "type": "string",
+                        "description": "accept or reject",
+                        "name": "action",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.FriendRequestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/friends/search": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Ranked username substring search, at most 20 rows. A full phone number matches number_phone exactly and is not included in the response. Each row has relation none, outgoing, incoming, or friends.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "friends"
+                ],
+                "summary": "Search users",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Username fragment, or a full phone number",
+                        "name": "q",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.FriendSearchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/friends/{userId}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Deletes an accepted friendship. The friend count is the number of remaining accepted rows.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "friends"
+                ],
+                "summary": "Unfriend",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Friend UUID",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/goong/directions": {
             "get": {
                 "security": [
@@ -2157,7 +2524,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Create a planning trip. The caller becomes leader and must name at least one other user, seated as a member. Bronze caps the trip at 15 seats. Trip type and member limit cannot be changed later. Optional mainBranch is the response of POST /planning/preview and becomes the trip's initial main branch. A group chat is not created yet.",
+                "description": "Create a planning trip. The caller becomes leader and must name at least one other accepted friend, seated as a member. Bronze caps the trip at 15 seats. Trip type and member limit cannot be changed later. Optional mainBranch is the response of POST /planning/preview and becomes the trip's initial main branch. A group chat is not created yet.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3232,7 +3599,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Any active member may invite by user id. Leader or admin invites are status invited (the invitee accepts). Member invites are status pending until a leader or admin approves. There is no friend check yet.",
+                "description": "Any active member may invite by user id. Leader or admin invites are status invited (the invitee accepts). Member invites are status pending until a leader or admin approves. Accepted-friend checks apply on trip create only, not on this invite.",
                 "produces": [
                     "application/json"
                 ],
@@ -5005,6 +5372,105 @@
             "properties": {
                 "message": {
                     "type": "string"
+                }
+            }
+        },
+        "response.FriendListResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "friends": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.FriendResponse"
+                    }
+                }
+            }
+        },
+        "response.FriendRelation": {
+            "type": "string",
+            "enum": [
+                "none",
+                "outgoing",
+                "incoming",
+                "friends"
+            ],
+            "x-enum-varnames": [
+                "RelationNone",
+                "RelationOutgoing",
+                "RelationIncoming",
+                "RelationFriends"
+            ]
+        },
+        "response.FriendRequestListResponse": {
+            "type": "object",
+            "properties": {
+                "requests": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.FriendRequestResponse"
+                    }
+                }
+            }
+        },
+        "response.FriendRequestResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "pending"
+                },
+                "userId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.FriendResponse": {
+            "type": "object",
+            "properties": {
+                "userId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.FriendSearchHit": {
+            "type": "object",
+            "properties": {
+                "relation": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/response.FriendRelation"
+                        }
+                    ],
+                    "example": "none"
+                },
+                "userId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.FriendSearchResponse": {
+            "type": "object",
+            "properties": {
+                "users": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.FriendSearchHit"
+                    }
                 }
             }
         },

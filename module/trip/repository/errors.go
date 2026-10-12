@@ -10,6 +10,7 @@ var (
 	ErrNoTripUpdate              = errors.New("no fields to update")
 	ErrNoTripMemberUpdate        = errors.New("no fields to update on the member")
 	ErrTripMembersRequired       = errors.New("at least one member besides the leader is required")
+	ErrMemberNotFriend           = errors.New("every member besides the leader must be an accepted friend")
 	ErrTripMemberLimit           = errors.New("trip member limit reached")
 	ErrTripTypePolicyUnset       = errors.New("member limit policy is not set for this trip type")
 	ErrAlreadyTripMember         = errors.New("user is already a trip member")

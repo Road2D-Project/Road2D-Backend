@@ -2,6 +2,7 @@ package configuration
 
 import (
 	authModel "Road-To-Destination-BE/module/authentication/model"
+	friendModel "Road-To-Destination-BE/module/friend/model"
 	groupModel "Road-To-Destination-BE/module/group/model"
 	"Road-To-Destination-BE/module/share/configuration/version"
 	"Road-To-Destination-BE/module/trip/model"
@@ -18,6 +19,7 @@ func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&authModel.User{},
 		&authModel.RevokedRefreshToken{},
+		&friendModel.Friendship{},
 		&groupModel.Group{},
 		&groupModel.GroupMember{},
 		&model.PlaceType{},

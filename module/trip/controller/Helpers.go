@@ -4,6 +4,7 @@ import (
 	"Road-To-Destination-BE/middleware"
 	authModel "Road-To-Destination-BE/module/authentication/model"
 	authRepo "Road-To-Destination-BE/module/authentication/repository"
+	friendRepo "Road-To-Destination-BE/module/friend/repository"
 	mapsclient "Road-To-Destination-BE/module/maps/client"
 	mapsrepo "Road-To-Destination-BE/module/maps/repository"
 	mapsservice "Road-To-Destination-BE/module/maps/service"
@@ -32,6 +33,7 @@ func (ctrl *TripController) tripService() *service.TripService {
 		repository.NewTripMemberRepository(ctrl.db),
 		repository.NewTripMemberStore(ctrl.redisClient),
 		repository.NewLocationRepository(ctrl.db),
+		friendRepo.NewFriendshipRepository(ctrl.db),
 	)
 }
 
@@ -171,7 +173,8 @@ func mapTripError(c *gin.Context, err error) {
 		errors.Is(err, repository.ErrDestinationNotEditing),
 		errors.Is(err, repository.ErrDestinationInUse):
 		jsonError(c, http.StatusConflict, err.Error())
-	case errors.Is(err, repository.ErrUserNotTripMember),
+	case errors.Is(err, repository.ErrMemberNotFriend),
+		errors.Is(err, repository.ErrUserNotTripMember),
 		errors.Is(err, repository.ErrCannotKickLeader),
 		errors.Is(err, repository.ErrCannotKickSelf),
 		errors.Is(err, repository.ErrInsufficientKickRole),

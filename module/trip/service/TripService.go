@@ -57,6 +57,11 @@ type LocationByIDFinder interface {
 	FindLocationById(ctx context.Context, locationId uuid.UUID) (*model.Location, error)
 }
 
+// AcceptedFriendChecker reports roster ids that are not accepted friends of userID.
+type AcceptedFriendChecker interface {
+	MissingFriends(ctx context.Context, userID uuid.UUID, otherIDs []uuid.UUID) ([]uuid.UUID, error)
+}
+
 type TripService struct {
 	trips       TripRecordRepository
 	users       UserByIDFinder
@@ -64,6 +69,7 @@ type TripService struct {
 	activeRoles ActiveTripMemberRoleReader
 	roleCache   TripMemberRoleCache
 	locations   LocationByIDFinder
+	friends     AcceptedFriendChecker
 }
 
 func NewTripService(
@@ -73,6 +79,7 @@ func NewTripService(
 	activeRoles ActiveTripMemberRoleReader,
 	roleCache TripMemberRoleCache,
 	locations LocationByIDFinder,
+	friends AcceptedFriendChecker,
 ) *TripService {
 	return &TripService{
 		trips:       trips,
@@ -81,12 +88,14 @@ func NewTripService(
 		activeRoles: activeRoles,
 		roleCache:   roleCache,
 		locations:   locations,
+		friends:     friends,
 	}
 }
 
 // CreateTrip inserts a planning trip. The caller is leader. memberUserIds are
-// seated immediately as members. A matching group chat is not created yet;
-// that roster must stay aligned with these members once chat exists.
+// seated immediately, and each of them must already be an accepted friend.
+// A matching group chat is not created yet; that roster must stay aligned
+// with these members once chat exists.
 func (s *TripService) CreateTrip(ctx context.Context, owner *authModel.User, req request.CreateTripRequest) (*response.TripResponse, error) {
 	if owner == nil {
 		return nil, errors.New("missing current user")
@@ -127,6 +136,9 @@ func (s *TripService) CreateTrip(ctx context.Context, owner *authModel.User, req
 			Nickname: user.Username,
 			JoinedAt: &joined,
 		})
+	}
+	if err := s.requireFriends(ctx, owner.ID, memberIDs); err != nil {
+		return nil, err
 	}
 	if err := seatsFit(len(members), limit); err != nil {
 		return nil, err
@@ -390,6 +402,20 @@ func (s *TripService) lookupUser(ctx context.Context, id uuid.UUID) (*authModel.
 		return nil, repository.ErrUserNotFound
 	}
 	return user, nil
+}
+
+func (s *TripService) requireFriends(ctx context.Context, ownerID uuid.UUID, memberIDs []uuid.UUID) error {
+	if s.friends == nil {
+		return repository.ErrMemberNotFriend
+	}
+	missing, err := s.friends.MissingFriends(ctx, ownerID, memberIDs)
+	if err != nil {
+		return err
+	}
+	if len(missing) > 0 {
+		return repository.ErrMemberNotFriend
+	}
+	return nil
 }
 
 func otherMemberIDs(ownerID uuid.UUID, ids []uuid.UUID) ([]uuid.UUID, error) {

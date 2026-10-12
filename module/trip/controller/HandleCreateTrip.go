@@ -11,11 +11,11 @@ import (
 var _ = response.TripResponse{}
 
 // HandleCreateTrip binds the body, then creates a planning trip. The caller is
-// the leader. memberUserIds are seated immediately as members. Trip type freezes
-// the member cap. The invite token is not in this response.
+// the leader. memberUserIds are seated immediately and must be accepted friends.
+// Trip type freezes the member cap. The invite token is not in this response.
 //
 // @Summary      Create trip
-// @Description  Create a planning trip. The caller becomes leader and must name at least one other user, seated as a member. Bronze caps the trip at 15 seats. Trip type and member limit cannot be changed later. Optional mainBranch is the response of POST /planning/preview and becomes the trip's initial main branch. A group chat is not created yet.
+// @Description  Create a planning trip. The caller becomes leader and must name at least one other accepted friend, seated as a member. Bronze caps the trip at 15 seats. Trip type and member limit cannot be changed later. Optional mainBranch is the response of POST /planning/preview and becomes the trip's initial main branch. A group chat is not created yet.
 // @Tags         trips
 // @Accept       json
 // @Produce      json

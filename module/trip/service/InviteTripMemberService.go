@@ -33,7 +33,8 @@ func NewInviteTripMemberService(trips InviteTripFinder, members InviteTripStore)
 
 // Invite lets any active member name a user id. A leader or admin invite waits
 // for the invitee to accept. A member invite stays pending until a leader or
-// admin approves it. Friend checks are not applied yet.
+// admin approves it. Friend checks apply only when a trip is created; this
+// later invite still does not require an accepted friendship.
 func (s *InviteTripMemberService) Invite(ctx context.Context, invitedUserID, tripID, invitorID uuid.UUID, invitorName string, invitorRole enum.TripRole) (*response.TripMemberResponse, error) {
 	if invitedUserID == invitorID {
 		return nil, repository.ErrCannotInviteSelf

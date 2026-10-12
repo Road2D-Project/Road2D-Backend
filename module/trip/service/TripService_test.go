@@ -174,7 +174,7 @@ func TestCreateTripCallerBecomesLeaderAndSeatsMembers(t *testing.T) {
 	member := &authModel.User{Username: "scout"}
 	member.ID = uuid.New()
 	trips := &stubTripRecords{}
-	svc := NewTripService(trips, stubUsersByID{byID: map[uuid.UUID]*authModel.User{member.ID: member}}, nil, nil, nil, nil)
+	svc := NewTripService(trips, stubUsersByID{byID: map[uuid.UUID]*authModel.User{member.ID: member}}, nil, nil, nil, nil, stubAcceptedFriends{})
 
 	got, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
 		Name:          " Ha Giang ",
@@ -205,7 +205,7 @@ func TestCreateTripCallerBecomesLeaderAndSeatsMembers(t *testing.T) {
 func TestCreateTripRequiresAnotherMember(t *testing.T) {
 	owner := &authModel.User{Username: "leader"}
 	owner.ID = uuid.New()
-	svc := NewTripService(&stubTripRecords{}, stubUsersByID{}, nil, nil, nil, nil)
+	svc := NewTripService(&stubTripRecords{}, stubUsersByID{}, nil, nil, nil, nil, stubAcceptedFriends{})
 	_, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
 		Name:          "Loop",
 		TripType:      bronzeType(),
@@ -219,7 +219,7 @@ func TestCreateTripRequiresAnotherMember(t *testing.T) {
 func TestCreateTripUnknownMemberAborts(t *testing.T) {
 	owner := &authModel.User{Username: "leader"}
 	owner.ID = uuid.New()
-	svc := NewTripService(&stubTripRecords{}, stubUsersByID{}, nil, nil, nil, nil)
+	svc := NewTripService(&stubTripRecords{}, stubUsersByID{}, nil, nil, nil, nil, stubAcceptedFriends{})
 	_, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
 		Name:          "Loop",
 		TripType:      bronzeType(),
@@ -237,7 +237,7 @@ func TestCreateTripRejectsTierWithoutPolicy(t *testing.T) {
 	silver := enum.TripTypeSilver
 	svc := NewTripService(&stubTripRecords{}, stubUsersByID{byID: map[uuid.UUID]*authModel.User{
 		memberID: {Username: "scout"},
-	}}, nil, nil, nil, nil)
+	}}, nil, nil, nil, nil, stubAcceptedFriends{})
 	_, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
 		Name:          "Loop",
 		TripType:      &silver,
@@ -260,7 +260,7 @@ func TestCreateTripRejectsRosterPastBronzeLimit(t *testing.T) {
 		account.ID = id
 		users.byID[id] = account
 	}
-	svc := NewTripService(&stubTripRecords{}, users, nil, nil, nil, nil)
+	svc := NewTripService(&stubTripRecords{}, users, nil, nil, nil, nil, stubAcceptedFriends{})
 	_, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
 		Name:          "Loop",
 		TripType:      bronzeType(),
@@ -273,7 +273,7 @@ func TestCreateTripRejectsRosterPastBronzeLimit(t *testing.T) {
 
 func TestUpdateTripRequiresAField(t *testing.T) {
 	id := uuid.New()
-	svc := NewTripService(&stubTripRecords{byID: map[uuid.UUID]*model.Trip{id: {Name: "a"}}}, nil, nil, nil, nil, nil)
+	svc := NewTripService(&stubTripRecords{byID: map[uuid.UUID]*model.Trip{id: {Name: "a"}}}, nil, nil, nil, nil, nil, stubAcceptedFriends{})
 	_, err := svc.UpdateTrip(context.Background(), id, request.UpdateTripRequest{}, enum.TripRoleLeader)
 	if !errors.Is(err, repository.ErrNoTripUpdate) {
 		t.Fatalf("got %v", err)
@@ -288,7 +288,7 @@ func TestCreateInviteLinkRotatesToken(t *testing.T) {
 		byToken: map[string]*model.Trip{old: {InviteToken: old}},
 	}
 	trips.byID[id].ID = id
-	svc := NewTripService(trips, nil, nil, nil, nil, nil)
+	svc := NewTripService(trips, nil, nil, nil, nil, nil, stubAcceptedFriends{})
 	got, err := svc.CreateInviteLink(context.Background(), id, true)
 	if err != nil {
 		t.Fatal(err)
@@ -305,7 +305,7 @@ func TestUpdateTripChangesVisibilityOnly(t *testing.T) {
 	id := uuid.New()
 	trips := &stubTripRecords{byID: map[uuid.UUID]*model.Trip{id: {Name: "a"}}}
 	trips.byID[id].ID = id
-	svc := NewTripService(trips, nil, nil, nil, nil, nil)
+	svc := NewTripService(trips, nil, nil, nil, nil, nil, stubAcceptedFriends{})
 	public := true
 	got, err := svc.UpdateTrip(context.Background(), id, request.UpdateTripRequest{Visibility: &public}, enum.TripRoleAdmin)
 	if err != nil {
@@ -320,7 +320,7 @@ func TestGetTripHidesPrivateFromOutsiders(t *testing.T) {
 	id := uuid.New()
 	trips := &stubTripRecords{byID: map[uuid.UUID]*model.Trip{id: {Name: "closed", Visibility: false}}}
 	trips.byID[id].ID = id
-	svc := NewTripService(trips, nil, nil, stubActiveTripRole{err: repository.ErrUserNotTripMember}, nil, nil)
+	svc := NewTripService(trips, nil, nil, stubActiveTripRole{err: repository.ErrUserNotTripMember}, nil, nil, stubAcceptedFriends{})
 	_, err := svc.GetTrip(context.Background(), id, uuid.New())
 	if !errors.Is(err, repository.ErrTripNotFound) {
 		t.Fatalf("got %v", err)
@@ -331,7 +331,7 @@ func TestGetTripShowsPublicTripToOutsiders(t *testing.T) {
 	id := uuid.New()
 	trips := &stubTripRecords{byID: map[uuid.UUID]*model.Trip{id: {Name: "open", Visibility: true}}}
 	trips.byID[id].ID = id
-	svc := NewTripService(trips, nil, nil, stubActiveTripRole{err: repository.ErrUserNotTripMember}, nil, nil)
+	svc := NewTripService(trips, nil, nil, stubActiveTripRole{err: repository.ErrUserNotTripMember}, nil, nil, stubAcceptedFriends{})
 	got, err := svc.GetTrip(context.Background(), id, uuid.New())
 	if err != nil {
 		t.Fatal(err)
@@ -344,7 +344,7 @@ func TestGetTripShowsPublicTripToOutsiders(t *testing.T) {
 func TestListPublicTripsOmitsPrivate(t *testing.T) {
 	public := model.Trip{Name: "open", Visibility: true}
 	trips := &stubTripRecords{publicTrips: []model.Trip{public}}
-	svc := NewTripService(trips, nil, nil, nil, nil, nil)
+	svc := NewTripService(trips, nil, nil, nil, nil, nil, stubAcceptedFriends{})
 	got, err := svc.ListPublicTrips(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -370,7 +370,7 @@ func TestForkTripDropsExcludedMembersAndMakesCallerLeader(t *testing.T) {
 		{UserID: keep, Role: enum.TripRoleAdmin, Status: enum.MembershipActive, Nickname: "keep"},
 		{UserID: drop, Role: enum.TripRoleMember, Status: enum.MembershipActive, Nickname: "drop"},
 	}}
-	svc := NewTripService(trips, nil, roster, stubActiveTripRole{}, nil, nil)
+	svc := NewTripService(trips, nil, roster, stubActiveTripRole{}, nil, nil, stubAcceptedFriends{})
 	got, err := svc.ForkTrip(context.Background(), caller, sourceID, request.ForkTripRequest{
 		ExcludeUserIDs: []uuid.UUID{drop, caller.ID},
 	})
@@ -417,7 +417,7 @@ func TestCreateTripStoresReviewedMainBranch(t *testing.T) {
 	trips := &stubTripRecords{}
 	svc := NewTripService(trips, stubUsersByID{byID: map[uuid.UUID]*authModel.User{member.ID: member}}, nil, nil, nil, &stubLocations{
 		byID: map[uuid.UUID]*model.Location{from.ID: &from, to.ID: &to},
-	})
+	}, stubAcceptedFriends{})
 
 	_, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
 		Name:          "Ha Giang",
@@ -453,7 +453,7 @@ func TestCreateTripRejectsMisalignedMainBranch(t *testing.T) {
 	branch.Legs[0].To.LocationID = &other
 	svc := NewTripService(&stubTripRecords{}, stubUsersByID{byID: map[uuid.UUID]*authModel.User{member.ID: member}}, nil, nil, nil, &stubLocations{
 		byID: map[uuid.UUID]*model.Location{from.ID: &from, to.ID: &to},
-	})
+	}, stubAcceptedFriends{})
 	_, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
 		Name:          "Loop",
 		TripType:      bronzeType(),
@@ -465,10 +465,36 @@ func TestCreateTripRejectsMisalignedMainBranch(t *testing.T) {
 	}
 }
 
+func TestCreateTripRejectsMemberWhoIsNotAFriend(t *testing.T) {
+	owner := &authModel.User{Username: "leader"}
+	owner.ID = uuid.New()
+	member := &authModel.User{Username: "scout"}
+	member.ID = uuid.New()
+	svc := NewTripService(&stubTripRecords{}, stubUsersByID{byID: map[uuid.UUID]*authModel.User{member.ID: member}}, nil, nil, nil, nil, stubAcceptedFriends{
+		missing: []uuid.UUID{member.ID},
+	})
+	_, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
+		Name:          "Loop",
+		TripType:      bronzeType(),
+		MemberUserIDs: []uuid.UUID{member.ID},
+	})
+	if !errors.Is(err, repository.ErrMemberNotFriend) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+type stubAcceptedFriends struct {
+	missing []uuid.UUID
+}
+
+func (s stubAcceptedFriends) MissingFriends(context.Context, uuid.UUID, []uuid.UUID) ([]uuid.UUID, error) {
+	return s.missing, nil
+}
+
 func TestForkTripRequiresSourceMembership(t *testing.T) {
 	caller := &authModel.User{Username: "forker"}
 	caller.ID = uuid.New()
-	svc := NewTripService(&stubTripRecords{}, nil, stubRoster{}, stubActiveTripRole{err: repository.ErrUserNotTripMember}, nil, nil)
+	svc := NewTripService(&stubTripRecords{}, nil, stubRoster{}, stubActiveTripRole{err: repository.ErrUserNotTripMember}, nil, nil, stubAcceptedFriends{})
 	_, err := svc.ForkTrip(context.Background(), caller, uuid.New(), request.ForkTripRequest{})
 	if !errors.Is(err, repository.ErrUserNotTripMember) {
 		t.Fatalf("got %v", err)

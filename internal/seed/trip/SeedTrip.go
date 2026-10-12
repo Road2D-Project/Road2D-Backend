@@ -10,6 +10,8 @@ import (
 	authRequest "Road-To-Destination-BE/module/authentication/model/request"
 	authRepo "Road-To-Destination-BE/module/authentication/repository"
 	authService "Road-To-Destination-BE/module/authentication/service"
+	friendModel "Road-To-Destination-BE/module/friend/model"
+	friendRepo "Road-To-Destination-BE/module/friend/repository"
 	tripRequest "Road-To-Destination-BE/module/trip/model/request"
 	tripModel "Road-To-Destination-BE/module/trip/model/response"
 	tripRepo "Road-To-Destination-BE/module/trip/repository"
@@ -58,6 +60,9 @@ func Seed(ctx context.Context, db *gorm.DB, redisClient *redis.Client, opts Opti
 	if err != nil {
 		return nil, err
 	}
+	if err := ensureAcceptedFriends(ctx, db, owner.ID, memberIDs); err != nil {
+		return nil, err
+	}
 	tripType := opts.TripType
 	trips := tripService.NewTripService(
 		tripRepo.NewTripRepository(db),
@@ -66,6 +71,7 @@ func Seed(ctx context.Context, db *gorm.DB, redisClient *redis.Client, opts Opti
 		tripRepo.NewTripMemberRepository(db),
 		tripRepo.NewTripMemberStore(redisClient),
 		tripRepo.NewLocationRepository(db),
+		friendRepo.NewFriendshipRepository(db),
 	)
 	createdTrip, err := trips.CreateTrip(ctx, owner, tripRequest.CreateTripRequest{
 		Name:          opts.Name,
@@ -120,6 +126,38 @@ func Seed(ctx context.Context, db *gorm.DB, redisClient *redis.Client, opts Opti
 		Members:     roster.Members,
 		Pins:        pins,
 	}, nil
+}
+
+func ensureAcceptedFriends(ctx context.Context, db *gorm.DB, ownerID uuid.UUID, memberIDs []uuid.UUID) error {
+	repo := friendRepo.NewFriendshipRepository(db)
+	for _, id := range memberIDs {
+		row, err := repo.FindPair(ctx, ownerID, id)
+		if err != nil {
+			return err
+		}
+		if row != nil && row.Status.IsAccepted() {
+			continue
+		}
+		if row == nil {
+			low, high := friendModel.OrderedPair(ownerID, id)
+			err = repo.Insert(ctx, &friendModel.Friendship{
+				UserLowID:   low,
+				UserHighID:  high,
+				RequesterID: ownerID,
+				Status:      enum.FriendStatusAccepted,
+			})
+			if err != nil {
+				return err
+			}
+			continue
+		}
+		row.Status = enum.FriendStatusAccepted
+		row.RequesterID = ownerID
+		if err := repo.Save(ctx, row); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func defaultOwner(ctx context.Context, db *gorm.DB) (*authModel.User, error) {

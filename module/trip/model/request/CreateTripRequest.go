@@ -10,8 +10,8 @@ import (
 )
 
 // CreateTripRequest opens a planning trip. The caller becomes leader.
-// MemberUserIDs are seated immediately as members; there is no friend graph
-// yet, so any account id is accepted. TripType freezes MemberLimit.
+// MemberUserIDs are seated immediately as members. Each id besides the caller
+// must already be an accepted friend. TripType freezes MemberLimit.
 // Visibility true publishes the trip for discovery.
 // MainBranch, when set, is the response of POST /planning/preview. That
 // reviewed route becomes the trip's initial main branch.

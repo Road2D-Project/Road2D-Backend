@@ -13,4 +13,6 @@ persistence/
 module/maps/test
 module/realtime/test
 module/tracking/test
+internal/test-realtime/
+internal/seed/friend/
 tmp_*/

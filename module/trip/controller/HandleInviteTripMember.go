@@ -9,12 +9,12 @@ import (
 
 var _ = response.TripMemberResponse{}
 
-// HandleInviteTripMember names a user to add. Any account id is accepted until
-// a friend graph exists. A leader or admin invite waits for the invitee. A
-// member invite waits for a leader or admin to approve it.
+// HandleInviteTripMember names a user to add. Friend checks apply when the
+// trip is created, not on this later invite. A leader or admin invite waits
+// for the invitee. A member invite waits for a leader or admin to approve it.
 //
 // @Summary      Invite a user to a trip
-// @Description  Any active member may invite by user id. Leader or admin invites are status invited (the invitee accepts). Member invites are status pending until a leader or admin approves. There is no friend check yet.
+// @Description  Any active member may invite by user id. Leader or admin invites are status invited (the invitee accepts). Member invites are status pending until a leader or admin approves. Accepted-friend checks apply on trip create only, not on this invite.
 // @Tags         trips
 // @Produce      json
 // @Security     BearerAuth
