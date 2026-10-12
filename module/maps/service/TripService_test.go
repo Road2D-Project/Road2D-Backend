@@ -8,6 +8,7 @@ import (
 
 	"Road-To-Destination-BE/module/maps/model/request"
 	"Road-To-Destination-BE/module/maps/model/response"
+	"Road-To-Destination-BE/utils/polyline"
 )
 
 type stubTripClient struct {
@@ -190,5 +191,32 @@ func TestTripServiceMapsOSRMManeuver(t *testing.T) {
 	step := out.Trips[0].Legs[0].Steps[0]
 	if step.Maneuver != "left" || step.Instruction != "Trần Cung" {
 		t.Fatalf("step=%+v", step)
+	}
+}
+
+func TestTripServiceStoresJoinedStepPolyline(t *testing.T) {
+	points := []polyline.Point{
+		{Lat: 21.039316, Lng: 105.839922},
+		{Lat: 21.036000, Lng: 105.810000},
+		{Lat: 21.033061, Lng: 105.791325},
+	}
+	raw := sampleGoongTrip()
+	raw.Trips[0].Legs[0].Steps = []response.TripStep{
+		{Geometry: polyline.Encode(points[:2])},
+		{Geometry: polyline.Encode(points[1:])},
+	}
+	store := testLegStore(t)
+	if _, err := NewTripService(&stubTripClient{out: raw}, store).Optimize(context.Background(), sampleTripRequest()); err != nil {
+		t.Fatal(err)
+	}
+	cached, err := store.Find(context.Background(), 21.039316, 105.839922, 21.033061, 105.791325, enum.CAR)
+	if err != nil || cached == nil {
+		t.Fatalf("stored leg err=%v", err)
+	}
+	if cached.Polyline != polyline.Encode(points) {
+		t.Fatalf("polyline %q", cached.Polyline)
+	}
+	if len(cached.Steps) != 2 {
+		t.Fatalf("steps should stay on the leg, got %d", len(cached.Steps))
 	}
 }

@@ -90,6 +90,7 @@ func (srv *TripService) cacheTripLegs(ctx context.Context, out *model.Trip) erro
 			Vehicle:        out.Vehicle,
 			DistanceM:      routeLegs[i].Distance,
 			DurationS:      routeLegs[i].Duration,
+			Polyline:       polylineFromSteps(steps, ""),
 			Steps:          steps,
 			Source:         enum.LegSourceTrip,
 			LastComputedAt: out.ComputedAt,

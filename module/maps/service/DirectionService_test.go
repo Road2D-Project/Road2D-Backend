@@ -10,6 +10,7 @@ import (
 	"Road-To-Destination-BE/module/maps/model/response"
 	"Road-To-Destination-BE/module/maps/repository"
 	"Road-To-Destination-BE/utils/enum"
+	"Road-To-Destination-BE/utils/polyline"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
@@ -232,5 +233,42 @@ func TestDirectionServiceConcatenatesStepsAcrossLegs(t *testing.T) {
 	}
 	if leg.Steps[1].Instruction != "Bạn đã đến điểm đích" {
 		t.Fatalf("unexpected last step: %+v", leg.Steps[1])
+	}
+}
+
+func TestDirectionServiceStoresJoinedStepPolyline(t *testing.T) {
+	points := []polyline.Point{
+		{Lat: 10.7769, Lng: 106.7009},
+		{Lat: 10.7800, Lng: 106.7050},
+		{Lat: 10.7900, Lng: 106.7100},
+	}
+	stub := &stubDirectionClient{
+		out: &response.DirectionResponse{
+			Routes: []response.Route{{
+				Legs: []response.Leg{{
+					Distance: response.TextValue{Value: 10},
+					Duration: response.TextValue{Value: 2},
+					Steps: []response.Step{
+						{Polyline: response.OverviewPolyline{Points: polyline.Encode(points[:2])}},
+						{Polyline: response.OverviewPolyline{Points: polyline.Encode(points[1:])}},
+					},
+				}},
+				OverviewPolyline: response.OverviewPolyline{Points: "overview-is-coarser"},
+			}},
+		},
+	}
+	leg, err := NewDirectionService(stub, testLegStore(t)).Route(context.Background(), request.DirectionRequest{
+		Origin:      "10.77,106.70",
+		Destination: "10.79,106.71",
+		Vehicle:     enum.BIKE,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if leg.Polyline != polyline.Encode(points) {
+		t.Fatalf("polyline %q", leg.Polyline)
+	}
+	if len(leg.Steps) != 2 {
+		t.Fatalf("steps should stay on the leg, got %d", len(leg.Steps))
 	}
 }
