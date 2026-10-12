@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -37,7 +39,7 @@ func (config *DatabaseConfig) GetDatabase() *gorm.DB {
 	return config.db
 }
 func (config *DatabaseConfig) connectByURL(url string) error {
-	db, err := gorm.Open(postgres.Open(url), &gorm.Config{})
+	db, err := openPostgres(url)
 	if err != nil {
 		fmt.Println("postgres:", err)
 	} else {
@@ -71,10 +73,38 @@ func (config *DatabaseConfig) connectByVar() error {
 		host, user, password, dbname, port, sslmode, tz,
 	)
 
-	database, err := gorm.Open(postgres.Open(config.dsn), &gorm.Config{})
+	database, err := openPostgres(config.dsn)
 	if err != nil {
 		return fmt.Errorf("connect postgres: %w", err)
 	}
 	config.db = database
 	return err
+}
+
+// openPostgres talks to Postgres through GORM. Supabase's transaction pooler
+// (port 6543) hands the same server session to different clients, so pgx's
+// named prepared statements collide with SQLSTATE 42P05. Simple protocol
+// skips that cache. A direct connection keeps prepared statements.
+func openPostgres(dsn string) (*gorm.DB, error) {
+	return gorm.Open(postgres.New(postgres.Config{
+		DSN:                  dsn,
+		PreferSimpleProtocol: postgresPort(dsn) == "6543",
+	}), &gorm.Config{})
+}
+
+func postgresPort(dsn string) string {
+	if strings.Contains(dsn, "://") {
+		if parsed, err := url.Parse(dsn); err == nil {
+			if port := parsed.Port(); port != "" {
+				return port
+			}
+		}
+	}
+	for _, field := range strings.Fields(dsn) {
+		key, value, ok := strings.Cut(field, "=")
+		if ok && strings.EqualFold(key, "port") {
+			return value
+		}
+	}
+	return ""
 }
