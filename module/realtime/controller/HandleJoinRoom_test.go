@@ -57,24 +57,6 @@ func TestJoinRoomRequiresUser(t *testing.T) {
 	}
 }
 
-func TestLiftAccessTokenOnlyWhenHeaderMissing(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/?access_token=abc", nil)
-
-	liftAccessToken()(c)
-	if got := c.GetHeader("Authorization"); got != "Bearer abc" {
-		t.Fatalf("authorization %q", got)
-	}
-
-	c.Request.Header.Set("Authorization", "Bearer header")
-	liftAccessToken()(c)
-	if got := c.GetHeader("Authorization"); got != "Bearer header" {
-		t.Fatalf("header overwritten: %q", got)
-	}
-}
-
 type stubAuthorizer struct {
 	err error
 }

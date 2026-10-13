@@ -34,7 +34,7 @@ func NewLobbyController(auth *middleware.AuthenticationMiddleware, hub *realtime
 }
 
 func (ctrl *LobbyController) RegisterRoutes(router *gin.RouterGroup) {
-	rooms := router.Group("/realtime/rooms", liftAccessToken(), ctrl.auth.RequireAuth())
+	rooms := router.Group("/realtime/rooms", ctrl.auth.RequireAuth())
 	rooms.GET("/:roomId", ctrl.HandleJoinRoom())
 }
 
@@ -44,17 +44,4 @@ var upgrader = websocket.Upgrader{
 	// Browsers send Origin on the upgrade. Restrict this to the app origin
 	// before the lobby is exposed beyond local development.
 	CheckOrigin: func(r *http.Request) bool { return true },
-}
-
-// liftAccessToken copies ?access_token= into Authorization when the header is
-// absent. The browser WebSocket API cannot set that header. Header auth still wins.
-func liftAccessToken() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if c.GetHeader("Authorization") == "" {
-			if token := c.Query("access_token"); token != "" {
-				c.Request.Header.Set("Authorization", "Bearer "+token)
-			}
-		}
-		c.Next()
-	}
 }
