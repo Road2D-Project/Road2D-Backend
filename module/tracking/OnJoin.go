@@ -1,11 +1,12 @@
 package tracking
 
 import (
+	"log"
+
 	"Road-To-Destination-BE/module/realtime"
 	"Road-To-Destination-BE/module/tracking/engine"
 	"Road-To-Destination-BE/module/tracking/model"
 	"Road-To-Destination-BE/utils/enum"
-	"log"
 
 	"github.com/google/uuid"
 )
@@ -22,13 +23,19 @@ func (t *TrackingCoordinator) OnJoin(s realtime.Session, userID uuid.UUID) {
 			"userId":           userID,
 			"connectionStatus": prg.ConnectionStatus,
 		})
-		prg.PendingPoint = make(chan model.Point, 1)
 		prg.ConnectionStatus = enum.CONNECTING
-		go engine.PendingPosition(prg, t.tripInformation)
+		prg.StartSnap(t.branch(prg.BranchID))
 		s.Send(userID, "tracking.success", "Welcome back")
 		return
 	}
 	t.progresses[userID] = engine.NewTravelProgress(userID, rider.AssignedBranchID)
-	go engine.PendingPosition(t.progresses[userID], t.tripInformation)
+	t.progresses[userID].StartSnap(t.branch(rider.AssignedBranchID))
 	s.Send(userID, "tracking.success", "Go go")
+}
+
+func (t *TrackingCoordinator) branch(id uuid.UUID) *model.TravelBranch {
+	if t.tripInformation == nil {
+		return nil
+	}
+	return t.tripInformation.Branches[id]
 }

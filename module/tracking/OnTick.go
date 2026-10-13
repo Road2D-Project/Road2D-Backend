@@ -1,10 +1,10 @@
 package tracking
 
 import (
-	"Road-To-Destination-BE/module/realtime"
-	"Road-To-Destination-BE/module/tracking/model"
-	"Road-To-Destination-BE/utils/enum"
 	"time"
+
+	"Road-To-Destination-BE/module/realtime"
+	"Road-To-Destination-BE/utils/enum"
 
 	"github.com/google/uuid"
 )
@@ -26,16 +26,12 @@ func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.
 	msg := make([]position, n)
 	return func() {
 		for userId, progress := range t.progresses {
+			progress.ApplySnap()
 			// A stopped rider is omitted. The client keeps the last pin it saw.
 			if progress.DriveStatus == enum.STOP {
 				continue
 			}
-			if progress.PendingPoint != nil && !progress.ObservedAt.IsZero() {
-				select {
-				case progress.PendingPoint <- model.Point{Lat: progress.Lat, Lng: progress.Lng}:
-				default:
-				}
-			}
+			progress.SubmitSample()
 			msg[i] = position{
 				UserId:           userId,
 				Lat:              progress.Lat,

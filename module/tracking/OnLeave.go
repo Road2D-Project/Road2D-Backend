@@ -13,9 +13,6 @@ func (t *TrackingCoordinator) OnLeave(s realtime.Session, userID uuid.UUID) {
 		return
 	}
 	progress.ConnectionStatus = enum.DISCONNECTED
-	if progress.PendingPoint != nil {
-		close(progress.PendingPoint)
-		progress.PendingPoint = nil
-	}
+	progress.StopSnap()
 	s.Broadcast("tracking.onLeave", "Goodbye user"+userID.String())
 }

@@ -1,10 +1,11 @@
 package engine
 
 import (
-	"Road-To-Destination-BE/module/tracking/geo"
-	"Road-To-Destination-BE/module/tracking/model"
-	"Road-To-Destination-BE/utils/enum"
+	"context"
 	"time"
+
+	"Road-To-Destination-BE/module/tracking/geo"
+	"Road-To-Destination-BE/utils/enum"
 
 	"github.com/google/uuid"
 )
@@ -25,9 +26,13 @@ type TravelProgress struct {
 	ImmuneUntil      time.Time
 	Arrived          map[uuid.UUID]struct{}
 
-	PendingPoint chan model.Point
-	LastSegIndex int     // số thứ tự segment hiện tại
-	Progress     float64 // số m đi được
+	// jobs, updates, and cancel belong to the room goroutine.
+	// The snap loop only receives jobs and sends SnapUpdate.
+	jobs         chan snapJob
+	updates      chan SnapUpdate
+	cancel       context.CancelFunc
+	LastSegIndex int
+	Progress     float64
 	Route        *geo.Route
 }
 
@@ -46,7 +51,6 @@ func NewTravelProgress(riderID uuid.UUID, branch uuid.UUID) *TravelProgress {
 		ImmuneUntil:      time.Time{},
 		Arrived:          nil,
 		ConnectionStatus: enum.CONNECTING,
-		PendingPoint:     make(chan model.Point, 1),
 		LastSegIndex:     0,
 		Progress:         0,
 		Route:            nil,
