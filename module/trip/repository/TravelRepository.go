@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"Road-To-Destination-BE/module/trip/model"
 
@@ -14,6 +15,21 @@ type TravelRepository struct {
 	db *gorm.DB
 }
 
+// FrozenTravels marks every stored leg of the trip as history.
+// A trip with no travels still succeeds.
+func (r *TravelRepository) FrozenTravels(ctx context.Context, tripID uuid.UUID) error {
+	if r == nil || r.db == nil {
+		return ErrInternalServerError
+	}
+	return freezeTravels(r.db.WithContext(ctx), tripID, time.Now())
+}
+
+func freezeTravels(db *gorm.DB, tripID uuid.UUID, now time.Time) error {
+	return db.Model(&model.Travel{}).Where("trip_id = ?", tripID).Updates(map[string]any{
+		"is_frozen":  true,
+		"updated_at": now,
+	}).Error
+}
 func NewTravelRepository(db *gorm.DB) *TravelRepository {
 	return &TravelRepository{db: db}
 }

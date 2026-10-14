@@ -28,6 +28,7 @@ type TripRecordRepository interface {
 	UpdateTripInfo(ctx context.Context, id uuid.UUID, updates map[string]any) error
 	UpdateInviteToken(ctx context.Context, id uuid.UUID, token string) error
 	DeleteTrip(ctx context.Context, id uuid.UUID) error
+	CompleteTrip(ctx context.Context, id uuid.UUID) error
 	ListActiveTripByUser(ctx context.Context, userID uuid.UUID) ([]repository.ActiveTripByUser, error)
 	ListPublicTrips(ctx context.Context, limit int) ([]model.Trip, error)
 }
@@ -330,6 +331,13 @@ func (s *TripService) ListPublicTrips(ctx context.Context) (*response.TripListRe
 
 // UpdateTrip writes the provided fields. TripType and MemberLimit are not accepted.
 func (s *TripService) UpdateTrip(ctx context.Context, tripID uuid.UUID, req request.UpdateTripRequest, myRole enum.TripRole) (*response.TripResponse, error) {
+	trip, err := s.trips.FindTripByID(ctx, tripID)
+	if err != nil {
+		return nil, err
+	}
+	if trip.Status == enum.TripCompleted {
+		return nil, repository.ErrTripAlreadyCompleted
+	}
 	updates := map[string]any{}
 	if req.Name != nil {
 		cleaned := utils.Santize(*req.Name)
@@ -354,10 +362,6 @@ func (s *TripService) UpdateTrip(ctx context.Context, tripID uuid.UUID, req requ
 		return nil, repository.ErrNoTripUpdate
 	}
 	if err := s.trips.UpdateTripInfo(ctx, tripID, updates); err != nil {
-		return nil, err
-	}
-	trip, err := s.trips.FindTripByID(ctx, tripID)
-	if err != nil {
 		return nil, err
 	}
 	return tripResponseWithRole(trip, myRole), nil
@@ -442,6 +446,43 @@ func (s *TripService) cacheTripMemberRole(ctx context.Context, tripID, userID uu
 		return
 	}
 	_ = s.roleCache.SetCachedTripMemberRole(ctx, tripID, userID, role)
+}
+
+// StartTrip is the leader's signal that realtime tracking may begin.
+// Only a planning trip becomes active.
+func (s *TripService) StartTrip(ctx context.Context, id uuid.UUID) error {
+	trip, err := s.trips.FindTripByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	switch trip.Status {
+	case enum.TripPlanning:
+		return s.trips.UpdateTripInfo(ctx, id, map[string]any{
+			"status":     enum.TripActive,
+			"updated_at": time.Now(),
+		})
+	case enum.TripCompleted:
+		return repository.ErrTripAlreadyCompleted
+	default:
+		return repository.ErrTripCannotActivate
+	}
+}
+
+// CompleteTrip is the leader's confirmation that the trip is finished.
+// Active and stay trips lock; their stored travels freeze with the status change.
+func (s *TripService) CompleteTrip(ctx context.Context, id uuid.UUID) error {
+	trip, err := s.trips.FindTripByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	switch trip.Status {
+	case enum.TripActive, enum.TripStay:
+		return s.trips.CompleteTrip(ctx, id)
+	case enum.TripCompleted:
+		return repository.ErrTripAlreadyCompleted
+	default:
+		return repository.ErrTripNotActive
+	}
 }
 
 func tripResponseWithRole(trip *model.Trip, role enum.TripRole) *response.TripResponse {

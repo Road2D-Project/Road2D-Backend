@@ -59,6 +59,10 @@ type stubTravelStore struct {
 	upsertCall int
 }
 
+func (s *stubTravelStore) FrozenTravels(context.Context, uuid.UUID) error {
+	return nil
+}
+
 func (s *stubTravelStore) FindTravelsByTrip(_ context.Context, _ uuid.UUID) ([]model.Travel, error) {
 	if s.findErr != nil {
 		return nil, s.findErr

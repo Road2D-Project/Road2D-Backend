@@ -29,6 +29,7 @@ type LegRouter interface {
 type TravelStore interface {
 	FindTravelsByTrip(ctx context.Context, tripID uuid.UUID) ([]model.Travel, error)
 	UpsertTravels(ctx context.Context, tripID uuid.UUID, travels []model.Travel) error
+	FrozenTravels(ctx context.Context, tripID uuid.UUID) error
 }
 
 // DestinationPointFinder loads one trip pin. Preview routing uses it; ComputeTrip does not.

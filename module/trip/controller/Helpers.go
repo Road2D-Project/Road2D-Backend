@@ -171,7 +171,10 @@ func mapTripError(c *gin.Context, err error) {
 		errors.Is(err, repository.ErrTripMemberLimit),
 		errors.Is(err, repository.ErrNoSuccessorToTransfer),
 		errors.Is(err, repository.ErrDestinationNotEditing),
-		errors.Is(err, repository.ErrDestinationInUse):
+		errors.Is(err, repository.ErrDestinationInUse),
+		errors.Is(err, repository.ErrTripAlreadyCompleted),
+		errors.Is(err, repository.ErrTripNotActive),
+		errors.Is(err, repository.ErrTripCannotActivate):
 		jsonError(c, http.StatusConflict, err.Error())
 	case errors.Is(err, repository.ErrMemberNotFriend),
 		errors.Is(err, repository.ErrUserNotTripMember),

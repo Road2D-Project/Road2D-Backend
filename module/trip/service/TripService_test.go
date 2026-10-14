@@ -78,6 +78,18 @@ func (s *stubTripRecords) UpdateTripInfo(_ context.Context, id uuid.UUID, update
 	if visibility, ok := updates["visibility"].(bool); ok {
 		trip.Visibility = visibility
 	}
+	if status, ok := updates["status"].(enum.TripStatus); ok {
+		trip.Status = status
+	}
+	return nil
+}
+
+func (s *stubTripRecords) CompleteTrip(_ context.Context, id uuid.UUID) error {
+	trip, ok := s.byID[id]
+	if !ok {
+		return repository.ErrTripNotFound
+	}
+	trip.Status = enum.TripCompleted
 	return nil
 }
 
@@ -489,6 +501,92 @@ type stubAcceptedFriends struct {
 
 func (s stubAcceptedFriends) MissingFriends(context.Context, uuid.UUID, []uuid.UUID) ([]uuid.UUID, error) {
 	return s.missing, nil
+}
+
+func TestStartTripActivatesAPlanningTrip(t *testing.T) {
+	id := uuid.New()
+	trips := &stubTripRecords{byID: map[uuid.UUID]*model.Trip{
+		id: {Status: enum.TripPlanning},
+	}}
+	svc := NewTripService(trips, nil, nil, nil, nil, nil, stubAcceptedFriends{})
+	if err := svc.StartTrip(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	if trips.byID[id].Status != enum.TripActive {
+		t.Fatalf("status %s", trips.byID[id].Status)
+	}
+}
+
+func TestStartTripRejectsACompletedTrip(t *testing.T) {
+	id := uuid.New()
+	svc := NewTripService(&stubTripRecords{byID: map[uuid.UUID]*model.Trip{
+		id: {Status: enum.TripCompleted},
+	}}, nil, nil, nil, nil, nil, stubAcceptedFriends{})
+	err := svc.StartTrip(context.Background(), id)
+	if !errors.Is(err, repository.ErrTripAlreadyCompleted) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestStartTripRejectsATripThatIsAlreadyUnderway(t *testing.T) {
+	id := uuid.New()
+	svc := NewTripService(&stubTripRecords{byID: map[uuid.UUID]*model.Trip{
+		id: {Status: enum.TripActive},
+	}}, nil, nil, nil, nil, nil, stubAcceptedFriends{})
+	err := svc.StartTrip(context.Background(), id)
+	if !errors.Is(err, repository.ErrTripCannotActivate) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestCompleteTripLocksAnActiveTrip(t *testing.T) {
+	id := uuid.New()
+	trips := &stubTripRecords{byID: map[uuid.UUID]*model.Trip{
+		id: {Status: enum.TripActive},
+	}}
+	svc := NewTripService(trips, nil, nil, nil, nil, nil, stubAcceptedFriends{})
+	if err := svc.CompleteTrip(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	if trips.byID[id].Status != enum.TripCompleted {
+		t.Fatalf("status %s", trips.byID[id].Status)
+	}
+}
+
+func TestCompleteTripLocksAStayTrip(t *testing.T) {
+	id := uuid.New()
+	trips := &stubTripRecords{byID: map[uuid.UUID]*model.Trip{
+		id: {Status: enum.TripStay},
+	}}
+	svc := NewTripService(trips, nil, nil, nil, nil, nil, stubAcceptedFriends{})
+	if err := svc.CompleteTrip(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	if trips.byID[id].Status != enum.TripCompleted {
+		t.Fatalf("status %s", trips.byID[id].Status)
+	}
+}
+
+func TestCompleteTripRejectsPlanning(t *testing.T) {
+	id := uuid.New()
+	svc := NewTripService(&stubTripRecords{byID: map[uuid.UUID]*model.Trip{
+		id: {Status: enum.TripPlanning},
+	}}, nil, nil, nil, nil, nil, stubAcceptedFriends{})
+	err := svc.CompleteTrip(context.Background(), id)
+	if !errors.Is(err, repository.ErrTripNotActive) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestCompleteTripRejectsAnAlreadyCompletedTrip(t *testing.T) {
+	id := uuid.New()
+	svc := NewTripService(&stubTripRecords{byID: map[uuid.UUID]*model.Trip{
+		id: {Status: enum.TripCompleted},
+	}}, nil, nil, nil, nil, nil, stubAcceptedFriends{})
+	err := svc.CompleteTrip(context.Background(), id)
+	if !errors.Is(err, repository.ErrTripAlreadyCompleted) {
+		t.Fatalf("got %v", err)
+	}
 }
 
 func TestForkTripRequiresSourceMembership(t *testing.T) {

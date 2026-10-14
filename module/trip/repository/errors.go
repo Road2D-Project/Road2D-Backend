@@ -39,4 +39,7 @@ var (
 	ErrDraftBranchExcluded       = errors.New("draft branch is excluded from the route")
 	ErrNoBranchStopUpdate        = errors.New("no fields to update on the branch stop")
 	ErrNoDestinationUpdate       = errors.New("no fields to update on the destination")
+	ErrTripNotActive             = errors.New("trip is not active")
+	ErrTripAlreadyCompleted      = errors.New("trip already completed")
+	ErrTripCannotActivate        = errors.New("trip cannot be activated")
 )

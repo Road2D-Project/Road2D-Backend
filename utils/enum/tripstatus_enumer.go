@@ -9,11 +9,11 @@ import (
 	"strings"
 )
 
-const _TripStatusName = "planninglocked"
+const _TripStatusName = "planninglockedactivecompletedstay"
 
-var _TripStatusIndex = [...]uint8{0, 8, 14}
+var _TripStatusIndex = [...]uint8{0, 8, 14, 20, 29, 33}
 
-const _TripStatusLowerName = "planninglocked"
+const _TripStatusLowerName = "planninglockedactivecompletedstay"
 
 func (i TripStatus) String() string {
 	if i < 0 || i >= TripStatus(len(_TripStatusIndex)-1) {
@@ -28,20 +28,32 @@ func _TripStatusNoOp() {
 	var x [1]struct{}
 	_ = x[TripPlanning-(0)]
 	_ = x[TripLocked-(1)]
+	_ = x[TripActive-(2)]
+	_ = x[TripCompleted-(3)]
+	_ = x[TripStay-(4)]
 }
 
-var _TripStatusValues = []TripStatus{TripPlanning, TripLocked}
+var _TripStatusValues = []TripStatus{TripPlanning, TripLocked, TripActive, TripCompleted, TripStay}
 
 var _TripStatusNameToValueMap = map[string]TripStatus{
-	_TripStatusName[0:8]:       TripPlanning,
-	_TripStatusLowerName[0:8]:  TripPlanning,
-	_TripStatusName[8:14]:      TripLocked,
-	_TripStatusLowerName[8:14]: TripLocked,
+	_TripStatusName[0:8]:        TripPlanning,
+	_TripStatusLowerName[0:8]:   TripPlanning,
+	_TripStatusName[8:14]:       TripLocked,
+	_TripStatusLowerName[8:14]:  TripLocked,
+	_TripStatusName[14:20]:      TripActive,
+	_TripStatusLowerName[14:20]: TripActive,
+	_TripStatusName[20:29]:      TripCompleted,
+	_TripStatusLowerName[20:29]: TripCompleted,
+	_TripStatusName[29:33]:      TripStay,
+	_TripStatusLowerName[29:33]: TripStay,
 }
 
 var _TripStatusNames = []string{
 	_TripStatusName[0:8],
 	_TripStatusName[8:14],
+	_TripStatusName[14:20],
+	_TripStatusName[20:29],
+	_TripStatusName[29:33],
 }
 
 // TripStatusString retrieves an enum value from the enum constants string name.

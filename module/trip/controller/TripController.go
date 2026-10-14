@@ -33,6 +33,7 @@ var (
 	_ = request.AddDraftDestinationRequest{}
 	_ = response.DraftDestinationsResponse{}
 	_ = response.TripResponse{}
+	_ = response.TripActionResponse{}
 	_ = response.TripListResponse{}
 	_ = response.TripMemberResponse{}
 	_ = response.TripMemberListResponse{}
@@ -100,6 +101,8 @@ func (ctrl *TripController) registerTripRoutes(trips *gin.RouterGroup) {
 	trips.POST("/:tripId/fork", ctrl.handleActiveTripRole(), ctrl.HandleForkTrip())
 	trips.PATCH("/:tripId", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader, enum.TripRoleAdmin), ctrl.HandleUpdateTrip())
 	trips.DELETE("/:tripId", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleDeleteTrip())
+	trips.PATCH("/:tripId/active", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleStartTrip())
+	trips.POST("/:tripId/complete", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleCompleteTrip())
 }
 
 func (ctrl *TripController) registerMemberRoutes(trips *gin.RouterGroup) {

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"Road-To-Destination-BE/module/trip/model"
 	"Road-To-Destination-BE/utils/enum"
@@ -104,6 +105,27 @@ func (r *TripRepository) FindTripByInviteToken(ctx context.Context, token string
 		return nil, err
 	}
 	return &trip, nil
+}
+
+// CompleteTrip records the leader's lock and freezes that trip's travels together.
+func (r *TripRepository) CompleteTrip(ctx context.Context, id uuid.UUID) error {
+	if r == nil || r.db == nil {
+		return ErrInternalServerError
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		now := time.Now()
+		result := tx.Model(&model.Trip{}).Where("id = ?", id).Updates(map[string]any{
+			"status":     enum.TripCompleted,
+			"updated_at": now,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return ErrTripNotFound
+		}
+		return freezeTravels(tx, id, now)
+	})
 }
 
 func (r *TripRepository) UpdateTripInfo(ctx context.Context, id uuid.UUID, updates map[string]any) error {
