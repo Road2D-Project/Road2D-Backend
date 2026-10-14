@@ -110,6 +110,25 @@ func TestLeaveStayRestoresOnlyRestingRiders(t *testing.T) {
 	}
 }
 
+func TestTickLocksTheTripWhenEveryJoinedRiderFinishes(t *testing.T) {
+	leader := uuid.New()
+	member := uuid.New()
+	coord, session := stayFixture(leader, map[uuid.UUID]enum.DriveStatus{
+		leader: enum.COMPLETED,
+		member: enum.OnROUTE,
+	})
+	coord.OnTick(session, time.Now())
+	if coord.tripInformation.Status != enum.TripActive {
+		t.Fatalf("status %s", coord.tripInformation.Status)
+	}
+
+	coord.progresses[member].DriveStatus = enum.COMPLETED
+	coord.OnTick(session, time.Now())
+	if coord.tripInformation.Status != enum.TripCompleted {
+		t.Fatalf("status %s", coord.tripInformation.Status)
+	}
+}
+
 func TestCompletedTripIgnoresStay(t *testing.T) {
 	leader := uuid.New()
 	coord, session := stayFixture(leader, map[uuid.UUID]enum.DriveStatus{leader: enum.OnROUTE})
@@ -159,8 +178,7 @@ func stayFixture(leader uuid.UUID, drives map[uuid.UUID]enum.DriveStatus) (*Trac
 			Status: enum.TripActive,
 			Riders: riders,
 		},
-		progresses:     progresses,
-		completedRider: make(chan uuid.UUID, 1),
+		progresses: progresses,
 	}, &recordSession{}
 }
 

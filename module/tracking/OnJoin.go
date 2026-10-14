@@ -29,12 +29,6 @@ func (t *TrackingCoordinator) OnJoin(s realtime.Session, userID uuid.UUID) {
 		return
 	}
 	t.progresses[userID] = engine.NewTravelProgress(userID, rider.AssignedBranchID)
-	t.progresses[userID].CompletedChannel = &t.completedRider
-	t.progresses[userID].OnRiderComplete = func(prg *engine.TravelProgress) error {
-		prg.DriveStatus = enum.COMPLETED
-		*prg.CompletedChannel <- prg.UserID
-		return nil
-	}
 	t.progresses[userID].StartSnap(t.branch(rider.AssignedBranchID))
 	s.Send(userID, "tracking.success", "Go go")
 }

@@ -7,7 +7,7 @@ import (
 
 const earthRadius = 6371000.0
 
-// toXY: đổi p sang mét, gốc toạ độ tại ref
+// toXY: Convert p to meters, with the coordinate origin at ref.
 func toXY(ref, p model.Point) (x, y float64) {
 	const d2r = math.Pi / 180
 	x = (p.Lng - ref.Lng) * d2r * earthRadius * math.Cos(ref.Lat*d2r)
@@ -18,6 +18,7 @@ func toXY(ref, p model.Point) (x, y float64) {
 // PointToSegment returns the distance in meters from c to segment ab.
 // t is 0 at a and 1 at b. segLen is |AB| in meters.
 func PointToSegment(a, b, c model.Point) (dist, t, segLen float64) {
+	// a is origin at reference point
 	abX, abY := toXY(a, b)
 	acX, acY := toXY(a, c)
 

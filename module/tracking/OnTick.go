@@ -11,7 +11,7 @@ import (
 
 func (t *TrackingCoordinator) OnTick(s realtime.Session, now time.Time) {
 	t.updateMemberPosition(s, now)()
-	t.IsComplete(s, now)
+	t.markTripComplete()
 }
 func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.Time) func() {
 	var (
@@ -37,12 +37,14 @@ func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.
 					continue
 				}
 			case enum.TripActive:
-				if progress.DriveStatus == enum.STOP || progress.DriveStatus == enum.StayPrivate {
+				if progress.DriveStatus == enum.STOP || progress.DriveStatus == enum.StayPrivate || progress.DriveStatus == enum.COMPLETED {
 					continue
 				}
 				progress.ApplySnap()
 				// A stopped rider is omitted. The client keeps the last pin it saw.
-				progress.SubmitSample()
+				if progress.DriveStatus != enum.COMPLETED {
+					progress.SubmitSample()
+				}
 			default:
 				continue
 			}
@@ -64,21 +66,16 @@ func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.
 	}
 
 }
-func (t *TrackingCoordinator) IsComplete(s realtime.Session, now time.Time) {
-	select {
-	case userId := <-t.completedRider:
-		user, ok := t.progresses[userId]
-		if !ok {
-			return
-		}
-		if user.DriveStatus == enum.COMPLETED {
-			// tránh duplicate
-			return
-		}
-		t.currCompletedRider++
-		if t.currCompletedRider == len(t.progresses) {
-			t.tripInformation.Status = enum.TripCompleted
-		}
-	default:
+
+// markTripComplete locks the trip once every rider who has joined this room has finished.
+func (t *TrackingCoordinator) markTripComplete() {
+	if t.tripInformation == nil || len(t.progresses) == 0 {
+		return
 	}
+	for _, progress := range t.progresses {
+		if progress.DriveStatus != enum.COMPLETED {
+			return
+		}
+	}
+	t.tripInformation.Status = enum.TripCompleted
 }

@@ -19,14 +19,28 @@ func TestSnapPointOnBranchStepsOntoTheNextHop(t *testing.T) {
 		{Points: []model.Point{b, c}, Ready: true},
 	}}
 
-	prg := &TravelProgress{}
-	stayed, ok := prg.snapPointOnBranch(hopCursor{}, branch, a)
-	if !ok || stayed.hop != 0 || stayed.route == nil {
+	stayed, ok := snapPointOnBranch(hopCursor{}, branch, a)
+	if !ok || stayed.hop != 0 || stayed.route == nil || stayed.finished {
 		t.Fatalf("start of hop: %+v ok=%v", stayed, ok)
 	}
-	stepped, ok := prg.snapPointOnBranch(stayed, branch, b)
-	if !ok || stepped.hop != 1 {
+	stepped, ok := snapPointOnBranch(stayed, branch, b)
+	if !ok || stepped.hop != 1 || stepped.finished {
 		t.Fatalf("end of hop: %+v ok=%v", stepped, ok)
+	}
+	finished, ok := snapPointOnBranch(stepped, branch, c)
+	if !ok || !finished.finished {
+		t.Fatalf("end of route: %+v ok=%v", finished, ok)
+	}
+}
+
+func TestApplySnapMarksTheRiderCompleted(t *testing.T) {
+	prg := NewTravelProgress(uuid.New(), uuid.New())
+	prg.updates = make(chan SnapUpdate, 1)
+	prg.updates <- SnapUpdate{HopIndex: 1, Finished: true}
+
+	prg.ApplySnap()
+	if prg.DriveStatus != enum.COMPLETED || prg.HopIndex != 1 {
+		t.Fatalf("status %s hop %d", prg.DriveStatus, prg.HopIndex)
 	}
 }
 

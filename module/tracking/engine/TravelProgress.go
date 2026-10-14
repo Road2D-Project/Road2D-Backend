@@ -28,16 +28,13 @@ type TravelProgress struct {
 
 	// jobs, updates, and cancel belong to the room goroutine.
 	// The snap loop only receives jobs and sends SnapUpdate.
-	jobs             chan snapJob
-	updates          chan SnapUpdate
-	cancel           context.CancelFunc
-	LastSegIndex     int
-	Progress         float64
-	Route            *geo.Route
-	CompletedChannel *chan uuid.UUID
-	OnRiderComplete  OnComplete
+	jobs         chan snapJob
+	updates      chan SnapUpdate
+	cancel       context.CancelFunc
+	LastSegIndex int
+	Progress     float64
+	Route        *geo.Route
 }
-type OnComplete func(prg *TravelProgress) error
 
 func NewTravelProgress(riderID uuid.UUID, branch uuid.UUID) *TravelProgress {
 	return &TravelProgress{

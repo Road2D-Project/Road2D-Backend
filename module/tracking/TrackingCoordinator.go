@@ -17,9 +17,6 @@ type TrackingCoordinator struct {
 	db              *gorm.DB
 	tripInformation *model.TripInformation
 	progresses      map[uuid.UUID]*engine.TravelProgress
-
-	completedRider     chan uuid.UUID
-	currCompletedRider int
 }
 
 func NewTrackingModule(db *gorm.DB) realtime.ModuleFactory {
@@ -35,7 +32,6 @@ func NewTrackingModule(db *gorm.DB) realtime.ModuleFactory {
 			db:              db,
 			tripInformation: information,
 			progresses:      make(map[uuid.UUID]*engine.TravelProgress),
-			completedRider:  make(chan uuid.UUID, 1),
 		}, nil
 	}
 }

@@ -21,11 +21,14 @@ type snapJob struct {
 }
 
 // SnapUpdate is the worker's result. Only the room goroutine copies it onto TravelProgress.
+// Finished stays set once the rider reaches the end of the last hop, so a newer
+// update cannot discard the arrival.
 type SnapUpdate struct {
 	HopIndex     int
 	LastSegIndex int
 	Progress     float64
 	Route        *geo.Route
+	Finished     bool
 }
 
 // hopCursor is the worker's private copy of hop state.
@@ -34,6 +37,7 @@ type hopCursor struct {
 	seg      int
 	progress float64
 	route    *geo.Route
+	finished bool
 }
 
 func (c hopCursor) update() SnapUpdate {
@@ -42,6 +46,7 @@ func (c hopCursor) update() SnapUpdate {
 		LastSegIndex: c.seg,
 		Progress:     c.progress,
 		Route:        c.route,
+		Finished:     c.finished,
 	}
 }
 
@@ -88,6 +93,9 @@ func (p *TravelProgress) ApplySnap() {
 			p.LastSegIndex = update.LastSegIndex
 			p.Progress = update.Progress
 			p.Route = update.Route
+			if update.Finished {
+				p.DriveStatus = enum.COMPLETED
+			}
 		default:
 			return
 		}
@@ -126,12 +134,15 @@ func (p *TravelProgress) runSnap(ctx context.Context, jobs <-chan snapJob, updat
 			if job.drive == enum.STOP {
 				continue
 			}
-			next, ok := p.snapPointOnBranch(cursor, branch, job.point)
+			next, ok := snapPointOnBranch(cursor, branch, job.point)
 			if !ok {
 				return
 			}
 			cursor = next
 			sendLatestUpdate(ctx, updates, cursor.update())
+			if cursor.finished {
+				return
+			}
 		}
 	}
 }
@@ -161,7 +172,10 @@ func sendLatestUpdate(ctx context.Context, updates chan SnapUpdate, update SnapU
 // snapPointOnBranch snaps the GPS point onto the current hop polyline.
 // A point at the end of the hop moves the cursor onto the next hop.
 // false means this hop has no usable polyline, so the snap loop should stop.
-func (p *TravelProgress) snapPointOnBranch(cursor hopCursor, branch *model.TravelBranch, point model.Point) (hopCursor, bool) {
+func snapPointOnBranch(cursor hopCursor, branch *model.TravelBranch, point model.Point) (hopCursor, bool) {
+	if cursor.finished {
+		return cursor, true
+	}
 	if cursor.route == nil || len(cursor.route.Points) < 2 {
 		if !cursor.loadHopPolyline(branch, cursor.hop, 0) {
 			return cursor, false
@@ -174,13 +188,7 @@ func (p *TravelProgress) snapPointOnBranch(cursor hopCursor, branch *model.Trave
 		return cursor, true
 	}
 	if cursor.hop+1 >= len(branch.Hops) {
-		if p.OnRiderComplete != nil {
-			err := p.OnRiderComplete(p)
-			if err != nil {
-				return hopCursor{}, false
-			}
-
-		}
+		cursor.finished = true
 		return cursor, true
 	}
 	base := cursor.route.TotalM()
