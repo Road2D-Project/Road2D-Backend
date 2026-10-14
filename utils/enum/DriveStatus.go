@@ -9,4 +9,7 @@ const (
 	DEVIATED
 	STOP // velocity = 0
 	EMERGENCY
+	StayPublic
+	StayPrivate
+	COMPLETED
 )

@@ -17,22 +17,25 @@ type TrackingCoordinator struct {
 	db              *gorm.DB
 	tripInformation *model.TripInformation
 	progresses      map[uuid.UUID]*engine.TravelProgress
+
+	completedRider     chan uuid.UUID
+	currCompletedRider int
 }
 
 func NewTrackingModule(db *gorm.DB) realtime.ModuleFactory {
-	return func(roomID string) realtime.Module {
+	return func(roomID string) (realtime.Module, error) {
 		start := time.Now()
 		information, err := model.LoadTripInformation(db, roomID)
 		if err != nil {
-			// A nil module refuses room creation. The lobby then closes the socket.
 			log.Printf("tracking: load trip %s: %v", roomID, err)
-			return nil
+			return nil, err
 		}
 		log.Printf("Tracking %s module initialized in %d ns", roomID, time.Since(start).Nanoseconds())
 		return &TrackingCoordinator{
 			db:              db,
 			tripInformation: information,
 			progresses:      make(map[uuid.UUID]*engine.TravelProgress),
-		}
+			completedRider:  make(chan uuid.UUID, 1),
+		}, nil
 	}
 }

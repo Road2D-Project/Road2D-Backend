@@ -1,6 +1,7 @@
 package run
 
 import (
+	"Road-To-Destination-BE/utils/enum"
 	"context"
 	"errors"
 
@@ -21,6 +22,13 @@ func (a activeTripMemberAuthorizer) AuthorizeRoom(ctx context.Context, userID uu
 	tripID, err := uuid.Parse(roomID)
 	if err != nil {
 		return realtime.ErrNotMember
+	}
+	trip, errTrip := triprepo.NewTripRepository(a.db).FindTripByID(ctx, tripID)
+	if errTrip != nil {
+		return errTrip
+	}
+	if trip.Status != enum.TripActive {
+		return triprepo.ErrTripNotActive
 	}
 	_, err = triprepo.NewTripMemberRepository(a.db).FindTripActiveMemberRole(ctx, tripID, userID)
 	if errors.Is(err, triprepo.ErrUserNotTripMember) {

@@ -11,6 +11,7 @@ import (
 
 func (t *TrackingCoordinator) OnTick(s realtime.Session, now time.Time) {
 	t.updateMemberPosition(s, now)()
+	t.IsComplete(s, now)
 }
 func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.Time) func() {
 	var (
@@ -25,13 +26,27 @@ func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.
 	}
 	msg := make([]position, n)
 	return func() {
+		status := t.tripInformation.Status
+		if status == enum.TripCompleted {
+			return
+		}
 		for userId, progress := range t.progresses {
-			progress.ApplySnap()
-			// A stopped rider is omitted. The client keeps the last pin it saw.
-			if progress.DriveStatus == enum.STOP {
+			switch status {
+			case enum.TripStay:
+				if progress.DriveStatus != enum.StayPublic {
+					continue
+				}
+			case enum.TripActive:
+				if progress.DriveStatus == enum.STOP || progress.DriveStatus == enum.StayPrivate {
+					continue
+				}
+				progress.ApplySnap()
+				// A stopped rider is omitted. The client keeps the last pin it saw.
+				progress.SubmitSample()
+			default:
 				continue
 			}
-			progress.SubmitSample()
+
 			msg[i] = position{
 				UserId:           userId,
 				Lat:              progress.Lat,
@@ -48,4 +63,22 @@ func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.
 		i = 0
 	}
 
+}
+func (t *TrackingCoordinator) IsComplete(s realtime.Session, now time.Time) {
+	select {
+	case userId := <-t.completedRider:
+		user, ok := t.progresses[userId]
+		if !ok {
+			return
+		}
+		if user.DriveStatus == enum.COMPLETED {
+			// tránh duplicate
+			return
+		}
+		t.currCompletedRider++
+		if t.currCompletedRider == len(t.progresses) {
+			t.tripInformation.Status = enum.TripCompleted
+		}
+	default:
+	}
 }

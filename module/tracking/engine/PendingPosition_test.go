@@ -19,11 +19,12 @@ func TestSnapPointOnBranchStepsOntoTheNextHop(t *testing.T) {
 		{Points: []model.Point{b, c}, Ready: true},
 	}}
 
-	stayed, ok := snapPointOnBranch(hopCursor{}, branch, a)
+	prg := &TravelProgress{}
+	stayed, ok := prg.snapPointOnBranch(hopCursor{}, branch, a)
 	if !ok || stayed.hop != 0 || stayed.route == nil {
 		t.Fatalf("start of hop: %+v ok=%v", stayed, ok)
 	}
-	stepped, ok := snapPointOnBranch(stayed, branch, b)
+	stepped, ok := prg.snapPointOnBranch(stayed, branch, b)
 	if !ok || stepped.hop != 1 {
 		t.Fatalf("end of hop: %+v ok=%v", stepped, ok)
 	}

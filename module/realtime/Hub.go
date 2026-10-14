@@ -79,7 +79,10 @@ func (h *Hub) getOrCreate(roomID string) (*Room, error) {
 	// Factories run outside the lock so a slow constructor cannot stall every room.
 	modules := make(map[string]Module, len(factories))
 	for namespace, factory := range factories {
-		module := factory(roomID)
+		module, err := factory(roomID)
+		if err != nil {
+			return nil, err
+		}
 		if module == nil {
 			// A peer may have created the room while this factory failed.
 			h.mu.Lock()

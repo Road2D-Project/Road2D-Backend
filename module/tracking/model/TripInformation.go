@@ -15,3 +15,7 @@ type TripInformation struct {
 	Riders       map[uuid.UUID]*Rider
 	Branches     map[uuid.UUID]*TravelBranch
 }
+
+func (t *TripInformation) IsStayMode() bool {
+	return t.Status == enum.TripStay
+}

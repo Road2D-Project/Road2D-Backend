@@ -16,7 +16,7 @@ import (
 
 func TestMountRejectsReservedDuplicateAndEmpty(t *testing.T) {
 	hub := NewHub()
-	factory := func(string) Module { return nopModule{} }
+	factory := func(string) (Module, error) { return nopModule{}, nil }
 
 	if err := hub.Mount("system", factory); err == nil || !errors.Is(err, ErrInvalidNamespace) {
 		t.Fatalf("system namespace: %v", err)
@@ -54,7 +54,7 @@ func TestJoinRejectsBadIdentity(t *testing.T) {
 
 func TestJoinFailsWhenModuleFactoryReturnsNil(t *testing.T) {
 	hub := NewHub()
-	if err := hub.Mount("tracking", func(string) Module { return nil }); err != nil {
+	if err := hub.Mount("tracking", func(string) (Module, error) { return nil, nil }); err != nil {
 		t.Fatal(err)
 	}
 	err := hub.Join("room", uuid.New(), &websocket.Conn{})
@@ -71,7 +71,7 @@ func TestJoinFailsWhenModuleFactoryReturnsNil(t *testing.T) {
 func TestRoomRoutesMessageAndBatchesLatest(t *testing.T) {
 	mod := newScriptModule()
 	hub := NewHub()
-	if err := hub.Mount("tracking", func(string) Module { return mod }); err != nil {
+	if err := hub.Mount("tracking", func(string) (Module, error) { return mod, nil }); err != nil {
 		t.Fatal(err)
 	}
 
@@ -119,7 +119,7 @@ func TestRoomRoutesMessageAndBatchesLatest(t *testing.T) {
 func TestReplacedConnectionDoesNotLeave(t *testing.T) {
 	mod := newScriptModule()
 	hub := NewHub()
-	if err := hub.Mount("tracking", func(string) Module { return mod }); err != nil {
+	if err := hub.Mount("tracking", func(string) (Module, error) { return mod, nil }); err != nil {
 		t.Fatal(err)
 	}
 	userID := uuid.New()

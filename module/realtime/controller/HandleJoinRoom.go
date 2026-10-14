@@ -32,6 +32,8 @@ func (ctrl *LobbyController) HandleJoinRoom() gin.HandlerFunc {
 		}
 		// Membership is checked before Upgrade so a denial is still a normal HTTP status.
 		if err := ctrl.authorizer.AuthorizeRoom(c.Request.Context(), user.ID, roomID); err != nil {
+			// This runs before any tracking log. Without it, a denial is only a gin status line.
+			log.Printf("realtime: authorize room %s user %s: %v", roomID, user.ID, err)
 			mapLobbyError(c, err)
 			return
 		}
@@ -74,6 +76,6 @@ func mapLobbyError(c *gin.Context, err error) {
 	case errors.Is(err, realtime.ErrInvalidRoom):
 		c.JSON(http.StatusBadRequest, share.NewError(http.StatusBadRequest, "invalid room id"))
 	default:
-		c.JSON(http.StatusInternalServerError, share.NewError(http.StatusInternalServerError, "failed to authorize room"))
+		c.JSON(http.StatusInternalServerError, share.NewError(http.StatusInternalServerError, err.Error()))
 	}
 }

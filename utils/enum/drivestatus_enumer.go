@@ -9,11 +9,11 @@ import (
 	"strings"
 )
 
-const _DriveStatusName = "OnROUTEDEVIATEDSTOPEMERGENCY"
+const _DriveStatusName = "OnROUTEDEVIATEDSTOPEMERGENCYStayPublicStayPrivateCOMPLETED"
 
-var _DriveStatusIndex = [...]uint8{0, 7, 15, 19, 28}
+var _DriveStatusIndex = [...]uint8{0, 7, 15, 19, 28, 38, 49, 58}
 
-const _DriveStatusLowerName = "onroutedeviatedstopemergency"
+const _DriveStatusLowerName = "onroutedeviatedstopemergencystaypublicstayprivatecompleted"
 
 func (i DriveStatus) String() string {
 	if i < 0 || i >= DriveStatus(len(_DriveStatusIndex)-1) {
@@ -30,9 +30,12 @@ func _DriveStatusNoOp() {
 	_ = x[DEVIATED-(1)]
 	_ = x[STOP-(2)]
 	_ = x[EMERGENCY-(3)]
+	_ = x[StayPublic-(4)]
+	_ = x[StayPrivate-(5)]
+	_ = x[COMPLETED-(6)]
 }
 
-var _DriveStatusValues = []DriveStatus{OnROUTE, DEVIATED, STOP, EMERGENCY}
+var _DriveStatusValues = []DriveStatus{OnROUTE, DEVIATED, STOP, EMERGENCY, StayPublic, StayPrivate, COMPLETED}
 
 var _DriveStatusNameToValueMap = map[string]DriveStatus{
 	_DriveStatusName[0:7]:        OnROUTE,
@@ -43,6 +46,12 @@ var _DriveStatusNameToValueMap = map[string]DriveStatus{
 	_DriveStatusLowerName[15:19]: STOP,
 	_DriveStatusName[19:28]:      EMERGENCY,
 	_DriveStatusLowerName[19:28]: EMERGENCY,
+	_DriveStatusName[28:38]:      StayPublic,
+	_DriveStatusLowerName[28:38]: StayPublic,
+	_DriveStatusName[38:49]:      StayPrivate,
+	_DriveStatusLowerName[38:49]: StayPrivate,
+	_DriveStatusName[49:58]:      COMPLETED,
+	_DriveStatusLowerName[49:58]: COMPLETED,
 }
 
 var _DriveStatusNames = []string{
@@ -50,6 +59,9 @@ var _DriveStatusNames = []string{
 	_DriveStatusName[7:15],
 	_DriveStatusName[15:19],
 	_DriveStatusName[19:28],
+	_DriveStatusName[28:38],
+	_DriveStatusName[38:49],
+	_DriveStatusName[49:58],
 }
 
 // DriveStatusString retrieves an enum value from the enum constants string name.

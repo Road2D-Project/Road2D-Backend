@@ -61,7 +61,7 @@ func (p *TravelProgress) StartSnap(branch *model.TravelBranch) {
 	p.jobs = jobs
 	p.updates = updates
 	cursor := hopCursor{hop: p.HopIndex, seg: p.LastSegIndex, progress: p.Progress, route: p.Route}
-	go runSnap(ctx, jobs, updates, branch, cursor)
+	go p.runSnap(ctx, jobs, updates, branch, cursor)
 }
 
 // StopSnap cancels the loop. It does not close the job channel: the loop
@@ -110,7 +110,7 @@ func (p *TravelProgress) SubmitSample() {
 	}
 }
 
-func runSnap(ctx context.Context, jobs <-chan snapJob, updates chan SnapUpdate, branch *model.TravelBranch, cursor hopCursor) {
+func (p *TravelProgress) runSnap(ctx context.Context, jobs <-chan snapJob, updates chan SnapUpdate, branch *model.TravelBranch, cursor hopCursor) {
 	activeSnapWorkers.Add(1)
 	defer activeSnapWorkers.Add(-1)
 	defer func() {
@@ -126,7 +126,7 @@ func runSnap(ctx context.Context, jobs <-chan snapJob, updates chan SnapUpdate, 
 			if job.drive == enum.STOP {
 				continue
 			}
-			next, ok := snapPointOnBranch(cursor, branch, job.point)
+			next, ok := p.snapPointOnBranch(cursor, branch, job.point)
 			if !ok {
 				return
 			}
@@ -161,7 +161,7 @@ func sendLatestUpdate(ctx context.Context, updates chan SnapUpdate, update SnapU
 // snapPointOnBranch snaps the GPS point onto the current hop polyline.
 // A point at the end of the hop moves the cursor onto the next hop.
 // false means this hop has no usable polyline, so the snap loop should stop.
-func snapPointOnBranch(cursor hopCursor, branch *model.TravelBranch, point model.Point) (hopCursor, bool) {
+func (p *TravelProgress) snapPointOnBranch(cursor hopCursor, branch *model.TravelBranch, point model.Point) (hopCursor, bool) {
 	if cursor.route == nil || len(cursor.route.Points) < 2 {
 		if !cursor.loadHopPolyline(branch, cursor.hop, 0) {
 			return cursor, false
@@ -174,6 +174,13 @@ func snapPointOnBranch(cursor hopCursor, branch *model.TravelBranch, point model
 		return cursor, true
 	}
 	if cursor.hop+1 >= len(branch.Hops) {
+		if p.OnRiderComplete != nil {
+			err := p.OnRiderComplete(p)
+			if err != nil {
+				return hopCursor{}, false
+			}
+
+		}
 		return cursor, true
 	}
 	base := cursor.route.TotalM()

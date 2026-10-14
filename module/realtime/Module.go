@@ -35,4 +35,4 @@ type Module interface {
 // across rooms. The factory must not call back into the Hub and must not start
 // its own goroutines. A slow factory does not hold the hub lock, but it still
 // delays the first join of that room.
-type ModuleFactory func(roomID string) Module
+type ModuleFactory func(roomID string) (Module, error)
