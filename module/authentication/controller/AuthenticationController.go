@@ -38,6 +38,9 @@ var (
 	_ = response.ForgetPasswordResponse{}
 	_ = request.ResetPasswordRequest{}
 	_ = response.ResetPasswordResponse{}
+	_ = request.ConfirmAvatarRequest{}
+	_ = response.AvatarUploadResponse{}
+	_ = response.AvatarURLResponse{}
 	_ = share.ErrorResponse{}
 )
 
@@ -58,6 +61,9 @@ func (ctrl AuthenticationController) RegisterRoutes(router *gin.RouterGroup) {
 		nodeGroup.POST("/user/register", ctrl.HandleRegister())
 		nodeGroup.POST("/user/login", ctrl.HandleLogin())
 		nodeGroup.GET("/user/me", auth.RequireAuth(), ctrl.HandleMyProfile())
+		nodeGroup.POST("/user/avatar", auth.RequireAuth(), ctrl.HandleRequestAvatar())
+		nodeGroup.POST("/user/avatar/confirm", auth.RequireAuth(), ctrl.HandleConfirmAvatar())
+		nodeGroup.DELETE("/user/avatar", auth.RequireAuth(), ctrl.HandleDeleteAvatar())
 		nodeGroup.GET("/user/:id", ctrl.HandleGetUserProfile())
 		nodeGroup.POST("/user/refresh", ctrl.HandleRefreshToken())
 		nodeGroup.POST("/user/logout", ctrl.HandleLogout())

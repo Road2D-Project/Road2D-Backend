@@ -27,6 +27,7 @@ type Trip struct {
 	EndTime       *time.Time      `json:"endTime,omitempty" gorm:"column:end_time"`
 	TotalDistance float64         `json:"totalDistance" gorm:"column:total_distance;not null;default:0"`
 	Note          string          `json:"note" gorm:"column:note;type:text"`
+	ImageURL      *string         `json:"imageUrl,omitempty" gorm:"column:image_url;type:text"`
 	InviteToken   string          `json:"-" gorm:"column:invite_token;type:varchar(64);uniqueIndex;not null" swaggerignore:"true"`
 	Branches      []TripBranch    `json:"branches,omitempty" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 	Members       []TripMember    `json:"-" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" swaggerignore:"true"`

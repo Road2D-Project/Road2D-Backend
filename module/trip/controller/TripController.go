@@ -30,6 +30,7 @@ var (
 	_ = request.EnsureLocationRequest{}
 	_ = request.ComputeTravelGraphRequest{}
 	_ = request.UpdateBranchStopRequest{}
+	_ = request.ConfirmTripImageRequest{}
 	_ = request.AddDraftDestinationRequest{}
 	_ = response.DraftDestinationsResponse{}
 	_ = response.TripResponse{}
@@ -44,6 +45,8 @@ var (
 	_ = response.ComputeBranchResponse{}
 	_ = response.PreviewLocationsResponse{}
 	_ = response.EnsureLocationResponse{}
+	_ = response.TripImageUploadResponse{}
+	_ = response.TripImageURLResponse{}
 	_ = response.ComputeTripResponse{}
 	_ = share.ErrorResponse{}
 )
@@ -100,6 +103,9 @@ func (ctrl *TripController) registerTripRoutes(trips *gin.RouterGroup) {
 	trips.GET("/:tripId", ctrl.HandleGetTrip())
 	trips.POST("/:tripId/fork", ctrl.handleActiveTripRole(), ctrl.HandleForkTrip())
 	trips.PATCH("/:tripId", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader, enum.TripRoleAdmin), ctrl.HandleUpdateTrip())
+	trips.POST("/:tripId/image", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader, enum.TripRoleAdmin), ctrl.HandleRequestTripImage())
+	trips.POST("/:tripId/image/confirm", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader, enum.TripRoleAdmin), ctrl.HandleConfirmTripImage())
+	trips.DELETE("/:tripId/image", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader, enum.TripRoleAdmin), ctrl.HandleDeleteTripImage())
 	trips.DELETE("/:tripId", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleDeleteTrip())
 	trips.PATCH("/:tripId/active", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleStartTrip())
 	trips.POST("/:tripId/complete", ctrl.handleActiveTripRole(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleCompleteTrip())

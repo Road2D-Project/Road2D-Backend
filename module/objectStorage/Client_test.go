@@ -182,6 +182,23 @@ func TestExistsUsesObjectInfo(t *testing.T) {
 	}
 }
 
+func TestPublicObjectPathRoundTrip(t *testing.T) {
+	t.Setenv("SUPABASE_URL", "https://project.supabase.co")
+	t.Setenv("SUPABASE_SECRET_KEY", "secret")
+
+	publicURL, err := NewClient().PublicObjectURL("avatar", "user/user.png")
+	if err != nil {
+		t.Fatalf("public url: %v", err)
+	}
+	key, ok := PublicObjectPath(publicURL, "avatar")
+	if !ok || key != "user/user.png" {
+		t.Fatalf("key = %q ok=%v", key, ok)
+	}
+	if _, ok := PublicObjectPath(publicURL, "trip"); ok {
+		t.Fatal("trip bucket should not match an avatar url")
+	}
+}
+
 func TestImageExt(t *testing.T) {
 	ext, ok := ImageExt("image/jpeg")
 	if !ok || ext != ".jpg" {

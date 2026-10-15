@@ -13,7 +13,8 @@ type User struct {
 	Email    string `json:"email" gorm:"column:email;type:varchar(255);unique;not null" validate:"email"`
 	Password string `json:"-" gorm:"column:password;type:varchar(255);not null" swaggerignore:"true" validate:"strongPassword"`
 	// TODO: custom validator
-	NumberPhone string `json:"numberPhone" gorm:"column:number_phone;type:varchar(255);not null" validate:"numeric"`
+	NumberPhone string  `json:"numberPhone" gorm:"column:number_phone;type:varchar(255);not null" validate:"numeric"`
+	AvatarURL   *string `json:"avatarUrl,omitempty" gorm:"column:avatar_url;type:text"`
 }
 
 var (

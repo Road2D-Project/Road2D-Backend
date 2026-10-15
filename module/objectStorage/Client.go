@@ -109,6 +109,24 @@ func (c *Client) PublicObjectURL(bucket, objectPath string) (string, error) {
 	return baseURL + "/storage/v1/object/public/" + bucket + "/" + requestPath, nil
 }
 
+// PublicObjectPath reads the object key back out of a URL from PublicObjectURL.
+func PublicObjectPath(publicURL, bucket string) (string, bool) {
+	marker := "/storage/v1/object/public/" + url.PathEscape(strings.Trim(bucket, "/")) + "/"
+	i := strings.Index(publicURL, marker)
+	if i < 0 {
+		return "", false
+	}
+	key := publicURL[i+len(marker):]
+	if cut := strings.Index(key, "?"); cut >= 0 {
+		key = key[:cut]
+	}
+	key, err := url.PathUnescape(key)
+	if err != nil || key == "" || strings.Contains(key, "..") {
+		return "", false
+	}
+	return key, true
+}
+
 // Exists reports whether the object key is already in the bucket.
 // The info route returns metadata only, so the image bytes are not downloaded.
 func (c *Client) Exists(ctx context.Context, bucket, objectPath string) (bool, error) {

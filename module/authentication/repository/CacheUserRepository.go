@@ -17,6 +17,7 @@ type cachedUser struct {
 	Username  string    `json:"username"`
 	Email     string    `json:"email"`
 	Password  string    `json:"password"`
+	AvatarURL *string   `json:"avatarUrl,omitempty"`
 	CreatedAt time.Time `json:"createdTime"`
 	UpdatedAt time.Time `json:"updatedTime"`
 }
@@ -27,6 +28,7 @@ func cachedUserFromModel(user *model.User) cachedUser {
 		Username:  user.Username,
 		Email:     user.Email,
 		Password:  user.Password,
+		AvatarURL: user.AvatarURL,
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 	}
@@ -34,9 +36,10 @@ func cachedUserFromModel(user *model.User) cachedUser {
 
 func (record cachedUser) toModel() *model.User {
 	user := &model.User{
-		Username: record.Username,
-		Email:    record.Email,
-		Password: record.Password,
+		Username:  record.Username,
+		Email:     record.Email,
+		Password:  record.Password,
+		AvatarURL: record.AvatarURL,
 	}
 	user.ID = record.ID
 	user.CreatedAt = record.CreatedAt

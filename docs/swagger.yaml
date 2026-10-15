@@ -37,6 +37,8 @@ definitions:
       id:
         format: uuid
         type: string
+      imageUrl:
+        type: string
       memberLimit:
         example: 15
         type: integer
@@ -293,6 +295,8 @@ definitions:
     type: object
   model.User:
     properties:
+      avatarUrl:
+        type: string
       createdTime:
         type: string
       email:
@@ -346,6 +350,20 @@ definitions:
         type: array
     required:
     - branches
+    type: object
+  request.ConfirmAvatarRequest:
+    properties:
+      path:
+        type: string
+    required:
+    - path
+    type: object
+  request.ConfirmTripImageRequest:
+    properties:
+      path:
+        type: string
+    required:
+    - path
     type: object
   request.CreateGroupRequest:
     properties:
@@ -650,6 +668,18 @@ definitions:
           $ref: '#/definitions/response.PlacePrediction'
         type: array
       status:
+        type: string
+    type: object
+  response.AvatarURLResponse:
+    properties:
+      url:
+        type: string
+    type: object
+  response.AvatarUploadResponse:
+    properties:
+      path:
+        type: string
+      url:
         type: string
     type: object
   response.BranchResponse:
@@ -1187,6 +1217,8 @@ definitions:
       id:
         format: uuid
         type: string
+      imageUrl:
+        type: string
       memberLimit:
         example: 15
         type: integer
@@ -1214,6 +1246,18 @@ definitions:
         type: string
       visibility:
         type: boolean
+    type: object
+  response.TripImageURLResponse:
+    properties:
+      url:
+        type: string
+    type: object
+  response.TripImageUploadResponse:
+    properties:
+      path:
+        type: string
+      url:
+        type: string
     type: object
   response.TripInvitationListResponse:
     properties:
@@ -1325,6 +1369,87 @@ paths:
           schema:
             $ref: '#/definitions/share.ErrorResponse'
       summary: Get user profile
+      tags:
+      - auth
+  /auth/user/avatar:
+    delete:
+      description: Removes the stored avatar from Storage, then clears avatarUrl.
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete avatar
+      tags:
+      - auth
+    post:
+      description: Returns a signed URL. PUT the image bytes to url, then call confirm
+        with path. contentType is image/png, image/jpeg, or image/webp.
+      parameters:
+      - description: Image content type
+        in: query
+        name: contentType
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.AvatarUploadResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Sign avatar upload
+      tags:
+      - auth
+  /auth/user/avatar/confirm:
+    post:
+      consumes:
+      - application/json
+      description: Stores the public avatar URL after the file is in Storage. path
+        is the object key returned by the sign call.
+      parameters:
+      - description: Object key
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.ConfirmAvatarRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.AvatarURLResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Confirm avatar upload
       tags:
       - auth
   /auth/user/forget-password:
@@ -3626,6 +3751,127 @@ paths:
       security:
       - BearerAuth: []
       summary: Set trip graph
+      tags:
+      - trips
+  /trips/{tripId}/image:
+    delete:
+      description: Leader or admin. Removes the stored image from Storage, then clears
+        imageUrl.
+      parameters:
+      - description: Trip UUID
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete trip image
+      tags:
+      - trips
+    post:
+      description: Leader or admin. PUT the image bytes to url, then call confirm
+        with path. contentType is image/png, image/jpeg, or image/webp.
+      parameters:
+      - description: Trip UUID
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      - description: Image content type
+        in: query
+        name: contentType
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TripImageUploadResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Sign trip image upload
+      tags:
+      - trips
+  /trips/{tripId}/image/confirm:
+    post:
+      consumes:
+      - application/json
+      description: Leader or admin. Stores the public image URL after the file is
+        in Storage. path is the object key returned by the sign call.
+      parameters:
+      - description: Trip UUID
+        format: uuid
+        in: path
+        name: tripId
+        required: true
+        type: string
+      - description: Object key
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.ConfirmTripImageRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TripImageURLResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Confirm trip image upload
       tags:
       - trips
   /trips/{tripId}/invitations:

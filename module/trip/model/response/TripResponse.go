@@ -22,6 +22,7 @@ type TripResponse struct {
 	EndTime       *time.Time      `json:"endTime,omitempty"`
 	TotalDistance float64         `json:"totalDistance"`
 	Note          string          `json:"note"`
+	ImageURL      *string         `json:"imageUrl,omitempty"`
 	MyRole        *enum.TripRole  `json:"myRole,omitempty" swaggertype:"string" example:"leader"`
 	CreatedTime   time.Time       `json:"createdTime"`
 	UpdatedTime   time.Time       `json:"updatedTime"`
@@ -44,6 +45,7 @@ func FromTrip(trip *model.Trip, role *enum.TripRole) TripResponse {
 		EndTime:       trip.EndTime,
 		TotalDistance: trip.TotalDistance,
 		Note:          trip.Note,
+		ImageURL:      trip.ImageURL,
 		MyRole:        role,
 		CreatedTime:   trip.CreatedAt,
 		UpdatedTime:   trip.UpdatedAt,
