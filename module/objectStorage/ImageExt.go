@@ -13,3 +13,5 @@ func ImageExt(contentType string) (string, bool) {
 	ext, ok := imageExts[contentType]
 	return ext, ok
 }
+
+type ConnectExt func(contentType string) (string, bool)

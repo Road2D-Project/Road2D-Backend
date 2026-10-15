@@ -152,6 +152,36 @@ func TestDeleteHidesUpstreamBody(t *testing.T) {
 	}
 }
 
+func TestExistsUsesObjectInfo(t *testing.T) {
+	const secret = "service-role-secret"
+	var gotPath, gotKey string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotKey = r.Header.Get("apikey")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `{"name":"avatar/user/user.png"}`)
+	}))
+	defer server.Close()
+
+	t.Setenv("SUPABASE_URL", server.URL)
+	t.Setenv("SUPABASE_SECRET_KEY", secret)
+
+	ok, err := NewClient().Exists(context.Background(), "image", "avatar/user/user.png")
+	if err != nil {
+		t.Fatalf("exists: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected the object to exist")
+	}
+	if gotKey != secret {
+		t.Fatalf("apikey = %q", gotKey)
+	}
+	if gotPath != "/storage/v1/object/info/image/avatar/user/user.png" {
+		t.Fatalf("path = %s", gotPath)
+	}
+}
+
 func TestImageExt(t *testing.T) {
 	ext, ok := ImageExt("image/jpeg")
 	if !ok || ext != ".jpg" {

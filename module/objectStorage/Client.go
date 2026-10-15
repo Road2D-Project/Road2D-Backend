@@ -109,6 +109,45 @@ func (c *Client) PublicObjectURL(bucket, objectPath string) (string, error) {
 	return baseURL + "/storage/v1/object/public/" + bucket + "/" + requestPath, nil
 }
 
+// Exists reports whether the object key is already in the bucket.
+// The info route returns metadata only, so the image bytes are not downloaded.
+func (c *Client) Exists(ctx context.Context, bucket, objectPath string) (bool, error) {
+	baseURL, key, err := supabaseConfig()
+	if err != nil {
+		return false, err
+	}
+	bucket, err = cleanBucket(bucket)
+	if err != nil {
+		return false, err
+	}
+	_, requestPath, err := cleanObjectPath(objectPath)
+	if err != nil {
+		return false, err
+	}
+	endpoint := baseURL + "/storage/v1/object/info/" + bucket + "/" + requestPath
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Authorization", "Bearer "+key)
+	req.Header.Set("apikey", key)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return true, nil
+	case http.StatusNotFound, http.StatusBadRequest:
+		return false, nil
+	default:
+		return false, fmt.Errorf("status %d", resp.StatusCode)
+	}
+}
+
 // Delete removes object keys from a bucket. The caller decides which keys, then updates its own database.
 func (c *Client) Delete(ctx context.Context, bucket string, objectPaths []string) error {
 	if len(objectPaths) == 0 {
