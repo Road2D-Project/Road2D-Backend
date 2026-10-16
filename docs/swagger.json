@@ -2650,7 +2650,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Create a planning trip. The caller becomes leader and must name at least one other accepted friend, seated as a member. Bronze caps the trip at 15 seats. Trip type and member limit cannot be changed later. Optional mainBranch is the response of POST /planning/preview and becomes the trip's initial main branch. A group chat is not created yet.",
+                "description": "Create a planning trip. The caller becomes leader and must name at least one other accepted friend, seated as a member. Bronze caps the trip at 15 seats. Trip type and member limit cannot be changed later. Optional mainBranch is the response of POST /planning/preview and becomes the trip's initial main branch. A group chat is not created yet. idempotencyKey is a client UUID kept across reload and back. The same key and the same trip returns 200 with the existing row. The same key with a different body returns 409.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2663,7 +2663,7 @@
                 "summary": "Create trip",
                 "parameters": [
                     {
-                        "description": "Name, trip type, members, optional note, times, visibility, and reviewed main branch",
+                        "description": "Idempotency key, name, trip type, members, optional note, times, visibility, and reviewed main branch",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -2673,6 +2673,12 @@
                     }
                 ],
                 "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/Road-To-Destination-BE_module_trip_model_response.TripResponse"
+                        }
+                    },
                     "201": {
                         "description": "Created",
                         "schema": {
@@ -2699,6 +2705,12 @@
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/share.ErrorResponse"
                         }
@@ -5261,6 +5273,7 @@
         "request.CreateTripRequest": {
             "type": "object",
             "required": [
+                "idempotencyKey",
                 "memberUserIds",
                 "name",
                 "tripType"
@@ -5268,6 +5281,10 @@
             "properties": {
                 "endTime": {
                     "type": "string"
+                },
+                "idempotencyKey": {
+                    "type": "string",
+                    "format": "uuid"
                 },
                 "mainBranch": {
                     "$ref": "#/definitions/response.PreviewLocationsResponse"
