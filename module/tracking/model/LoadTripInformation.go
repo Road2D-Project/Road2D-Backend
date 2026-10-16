@@ -11,6 +11,7 @@ import (
 
 var (
 	ErrTripNotActive = errors.New("Trip is not active")
+	ErrTripCompleted = errors.New("Trip is completed")
 )
 
 // LoadTripInformation reads the trip once for a tracking room.
@@ -66,6 +67,9 @@ func loadActiveTrip(db *gorm.DB, roomID string) (*model.Trip, error) {
 		return nil, err
 	}
 	if out.Status != enum.TripActive {
+		if out.Status == enum.TripCompleted {
+			return nil, ErrTripCompleted
+		}
 		return nil, ErrTripNotActive
 	}
 	return &out, nil

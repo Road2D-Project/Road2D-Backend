@@ -21,6 +21,10 @@ type stubTripRecords struct {
 	main        *model.InitialMainBranch
 	byID        map[uuid.UUID]*model.Trip
 	byToken     map[string]*model.Trip
+	byOwnerKey  map[string]*model.Trip
+	createCalls int
+	loseKeyOnce bool
+	clashOnce   bool
 	listed      []repository.ActiveTripByUser
 	publicTrips []model.Trip
 	inviteToken string
@@ -31,19 +35,56 @@ func (s *stubTripRecords) CreateTripWithMembers(_ context.Context, trip *model.T
 	if trip.ID == uuid.Nil {
 		trip.ID = uuid.New()
 	}
-	copied := *trip
-	s.created = &copied
+	s.createCalls++
+	if s.clashOnce {
+		s.clashOnce = false
+		clash := *trip
+		clash.IdempotencyHash = "other-body"
+		s.storeTrip(&clash)
+		return repository.ErrIdempotencyKeyTaken
+	}
+	if s.loseKeyOnce {
+		s.loseKeyOnce = false
+		s.storeTrip(trip)
+		return repository.ErrIdempotencyKeyTaken
+	}
+	s.storeTrip(trip)
 	s.members = append([]model.TripMember(nil), members...)
+	s.main = main
+	return nil
+}
+
+func (s *stubTripRecords) storeTrip(trip *model.Trip) {
+	copied := *trip
 	if s.byID == nil {
 		s.byID = map[uuid.UUID]*model.Trip{}
 	}
 	if s.byToken == nil {
 		s.byToken = map[string]*model.Trip{}
 	}
-	s.byID[trip.ID] = &copied
-	s.byToken[trip.InviteToken] = &copied
-	s.main = main
-	return nil
+	if s.byOwnerKey == nil {
+		s.byOwnerKey = map[string]*model.Trip{}
+	}
+	s.byID[copied.ID] = &copied
+	if copied.InviteToken != "" {
+		s.byToken[copied.InviteToken] = &copied
+	}
+	if copied.OwnerID != uuid.Nil && copied.IdempotencyKey != "" {
+		s.byOwnerKey[copied.OwnerID.String()+"|"+copied.IdempotencyKey] = &copied
+	}
+	s.created = &copied
+}
+
+func (s *stubTripRecords) FindTripByOwnerIdempotencyKey(_ context.Context, ownerID uuid.UUID, key string) (*model.Trip, error) {
+	if s.byOwnerKey == nil {
+		return nil, repository.ErrTripNotFound
+	}
+	trip, ok := s.byOwnerKey[ownerID.String()+"|"+key]
+	if !ok {
+		return nil, repository.ErrTripNotFound
+	}
+	copied := *trip
+	return &copied, nil
 }
 
 func (s *stubTripRecords) FindTripByID(_ context.Context, id uuid.UUID) (*model.Trip, error) {
@@ -188,14 +229,18 @@ func TestCreateTripCallerBecomesLeaderAndSeatsMembers(t *testing.T) {
 	trips := &stubTripRecords{}
 	svc := NewTripService(trips, stubUsersByID{byID: map[uuid.UUID]*authModel.User{member.ID: member}}, nil, nil, nil, nil, stubAcceptedFriends{})
 
-	got, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
-		Name:          " Ha Giang ",
-		Note:          " helmets ",
-		TripType:      bronzeType(),
-		MemberUserIDs: []uuid.UUID{member.ID, owner.ID, member.ID},
+	got, created, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
+		IdempotencyKey: uuid.New().String(),
+		Name:           " Ha Giang ",
+		Note:           " helmets ",
+		TripType:       bronzeType(),
+		MemberUserIDs:  []uuid.UUID{member.ID, owner.ID, member.ID},
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !created {
+		t.Fatal("first create should insert")
 	}
 	if got.Name != "Ha Giang" || trips.created.Note != "helmets" {
 		t.Fatalf("got %+v", got)
@@ -206,11 +251,158 @@ func TestCreateTripCallerBecomesLeaderAndSeatsMembers(t *testing.T) {
 	if got.OwnerID != owner.ID || got.TripType != enum.TripTypeBronze || got.MemberLimit != 15 || got.Visibility {
 		t.Fatalf("trip fields = %+v", got)
 	}
-	if trips.created.InviteToken == "" {
-		t.Fatal("invite token should be minted on create")
+	if trips.created.InviteToken == "" || trips.created.IdempotencyKey == "" || trips.created.IdempotencyHash == "" {
+		t.Fatal("invite token and idempotency key should be stored on create")
 	}
 	if len(trips.members) != 2 || trips.members[0].Role != enum.TripRoleLeader || trips.members[1].Role != enum.TripRoleMember || trips.members[1].UserID != member.ID {
 		t.Fatalf("members = %+v", trips.members)
+	}
+}
+
+func TestCreateTripReplaysTheSameIdempotencyKey(t *testing.T) {
+	owner := &authModel.User{Username: "leader"}
+	owner.ID = uuid.New()
+	member := &authModel.User{Username: "scout"}
+	member.ID = uuid.New()
+	trips := &stubTripRecords{}
+	svc := NewTripService(trips, stubUsersByID{byID: map[uuid.UUID]*authModel.User{member.ID: member}}, nil, nil, nil, nil, stubAcceptedFriends{})
+	key := uuid.New().String()
+	firstBody := request.CreateTripRequest{
+		IdempotencyKey: key,
+		Name:           " Ha Giang ",
+		Note:           " helmets ",
+		TripType:       bronzeType(),
+		MemberUserIDs:  []uuid.UUID{member.ID, owner.ID, member.ID},
+	}
+	first, inserted, err := svc.CreateTrip(context.Background(), owner, firstBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondBody := firstBody
+	secondBody.Name = "Ha Giang"
+	secondBody.Note = "helmets"
+	secondBody.MemberUserIDs = []uuid.UUID{member.ID}
+	second, replayedInsert, err := svc.CreateTrip(context.Background(), owner, secondBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !inserted || replayedInsert {
+		t.Fatal("only the first call should insert")
+	}
+	if second.ID != first.ID || trips.createCalls != 1 {
+		t.Fatalf("replay id %s calls %d", second.ID, trips.createCalls)
+	}
+}
+
+func TestCreateTripRejectsSameKeyWithADifferentBody(t *testing.T) {
+	owner := &authModel.User{Username: "leader"}
+	owner.ID = uuid.New()
+	member := &authModel.User{Username: "scout"}
+	member.ID = uuid.New()
+	trips := &stubTripRecords{}
+	svc := NewTripService(trips, stubUsersByID{byID: map[uuid.UUID]*authModel.User{member.ID: member}}, nil, nil, nil, nil, stubAcceptedFriends{})
+	key := uuid.New().String()
+	_, _, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
+		IdempotencyKey: key,
+		Name:           "Ha Giang",
+		TripType:       bronzeType(),
+		MemberUserIDs:  []uuid.UUID{member.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
+		IdempotencyKey: key,
+		Name:           "Other road",
+		TripType:       bronzeType(),
+		MemberUserIDs:  []uuid.UUID{member.ID},
+	})
+	if !errors.Is(err, repository.ErrIdempotencyConflict) {
+		t.Fatalf("got %v", err)
+	}
+	if trips.createCalls != 1 {
+		t.Fatalf("create calls = %d", trips.createCalls)
+	}
+}
+
+func TestCreateTripReplaysWhenInsertLosesTheKey(t *testing.T) {
+	owner := &authModel.User{Username: "leader"}
+	owner.ID = uuid.New()
+	member := &authModel.User{Username: "scout"}
+	member.ID = uuid.New()
+	trips := &stubTripRecords{loseKeyOnce: true}
+	svc := NewTripService(trips, stubUsersByID{byID: map[uuid.UUID]*authModel.User{member.ID: member}}, nil, nil, nil, nil, stubAcceptedFriends{})
+	got, inserted, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
+		IdempotencyKey: uuid.New().String(),
+		Name:           "Ha Giang",
+		TripType:       bronzeType(),
+		MemberUserIDs:  []uuid.UUID{member.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inserted || got.ID != trips.created.ID {
+		t.Fatalf("inserted %v id %s stored %s", inserted, got.ID, trips.created.ID)
+	}
+}
+
+func TestCreateTripConflictWhenInsertLosesToADifferentBody(t *testing.T) {
+	owner := &authModel.User{Username: "leader"}
+	owner.ID = uuid.New()
+	member := &authModel.User{Username: "scout"}
+	member.ID = uuid.New()
+	trips := &stubTripRecords{clashOnce: true}
+	svc := NewTripService(trips, stubUsersByID{byID: map[uuid.UUID]*authModel.User{member.ID: member}}, nil, nil, nil, nil, stubAcceptedFriends{})
+	_, _, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
+		IdempotencyKey: uuid.New().String(),
+		Name:           "Ha Giang",
+		TripType:       bronzeType(),
+		MemberUserIDs:  []uuid.UUID{member.ID},
+	})
+	if !errors.Is(err, repository.ErrIdempotencyConflict) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestCreateTripSameKeyIsPerOwner(t *testing.T) {
+	owner := &authModel.User{Username: "leader"}
+	owner.ID = uuid.New()
+	other := &authModel.User{Username: "other"}
+	other.ID = uuid.New()
+	member := &authModel.User{Username: "scout"}
+	member.ID = uuid.New()
+	trips := &stubTripRecords{}
+	svc := NewTripService(trips, stubUsersByID{byID: map[uuid.UUID]*authModel.User{member.ID: member}}, nil, nil, nil, nil, stubAcceptedFriends{})
+	body := request.CreateTripRequest{
+		IdempotencyKey: uuid.New().String(),
+		Name:           "Ha Giang",
+		TripType:       bronzeType(),
+		MemberUserIDs:  []uuid.UUID{member.ID},
+	}
+	first, _, err := svc.CreateTrip(context.Background(), owner, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, inserted, err := svc.CreateTrip(context.Background(), other, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !inserted || second.ID == first.ID || trips.createCalls != 2 {
+		t.Fatalf("second %+v calls %d", second, trips.createCalls)
+	}
+}
+
+func TestCreateTripRequiresIdempotencyKey(t *testing.T) {
+	owner := &authModel.User{Username: "leader"}
+	owner.ID = uuid.New()
+	svc := NewTripService(&stubTripRecords{}, stubUsersByID{}, nil, nil, nil, nil, stubAcceptedFriends{})
+	_, _, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
+		Name:          "Loop",
+		TripType:      bronzeType(),
+		MemberUserIDs: []uuid.UUID{uuid.New()},
+	})
+	if !errors.Is(err, repository.ErrIdempotencyKeyRequired) {
+		t.Fatalf("got %v", err)
 	}
 }
 
@@ -218,10 +410,11 @@ func TestCreateTripRequiresAnotherMember(t *testing.T) {
 	owner := &authModel.User{Username: "leader"}
 	owner.ID = uuid.New()
 	svc := NewTripService(&stubTripRecords{}, stubUsersByID{}, nil, nil, nil, nil, stubAcceptedFriends{})
-	_, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
-		Name:          "Loop",
-		TripType:      bronzeType(),
-		MemberUserIDs: []uuid.UUID{owner.ID},
+	_, _, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
+		IdempotencyKey: uuid.New().String(),
+		Name:           "Loop",
+		TripType:       bronzeType(),
+		MemberUserIDs:  []uuid.UUID{owner.ID},
 	})
 	if !errors.Is(err, repository.ErrTripMembersRequired) {
 		t.Fatalf("got %v", err)
@@ -232,10 +425,11 @@ func TestCreateTripUnknownMemberAborts(t *testing.T) {
 	owner := &authModel.User{Username: "leader"}
 	owner.ID = uuid.New()
 	svc := NewTripService(&stubTripRecords{}, stubUsersByID{}, nil, nil, nil, nil, stubAcceptedFriends{})
-	_, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
-		Name:          "Loop",
-		TripType:      bronzeType(),
-		MemberUserIDs: []uuid.UUID{uuid.New()},
+	_, _, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
+		IdempotencyKey: uuid.New().String(),
+		Name:           "Loop",
+		TripType:       bronzeType(),
+		MemberUserIDs:  []uuid.UUID{uuid.New()},
 	})
 	if !errors.Is(err, repository.ErrUserNotFound) {
 		t.Fatalf("got %v", err)
@@ -250,10 +444,11 @@ func TestCreateTripRejectsTierWithoutPolicy(t *testing.T) {
 	svc := NewTripService(&stubTripRecords{}, stubUsersByID{byID: map[uuid.UUID]*authModel.User{
 		memberID: {Username: "scout"},
 	}}, nil, nil, nil, nil, stubAcceptedFriends{})
-	_, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
-		Name:          "Loop",
-		TripType:      &silver,
-		MemberUserIDs: []uuid.UUID{memberID},
+	_, _, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
+		IdempotencyKey: uuid.New().String(),
+		Name:           "Loop",
+		TripType:       &silver,
+		MemberUserIDs:  []uuid.UUID{memberID},
 	})
 	if !errors.Is(err, repository.ErrTripTypePolicyUnset) {
 		t.Fatalf("got %v", err)
@@ -273,10 +468,11 @@ func TestCreateTripRejectsRosterPastBronzeLimit(t *testing.T) {
 		users.byID[id] = account
 	}
 	svc := NewTripService(&stubTripRecords{}, users, nil, nil, nil, nil, stubAcceptedFriends{})
-	_, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
-		Name:          "Loop",
-		TripType:      bronzeType(),
-		MemberUserIDs: ids,
+	_, _, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
+		IdempotencyKey: uuid.New().String(),
+		Name:           "Loop",
+		TripType:       bronzeType(),
+		MemberUserIDs:  ids,
 	})
 	if !errors.Is(err, repository.ErrTripMemberLimit) {
 		t.Fatalf("got %v", err)
@@ -431,11 +627,12 @@ func TestCreateTripStoresReviewedMainBranch(t *testing.T) {
 		byID: map[uuid.UUID]*model.Location{from.ID: &from, to.ID: &to},
 	}, stubAcceptedFriends{})
 
-	_, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
-		Name:          "Ha Giang",
-		TripType:      bronzeType(),
-		MemberUserIDs: []uuid.UUID{member.ID},
-		MainBranch:    reviewedPair(from, to),
+	_, _, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
+		IdempotencyKey: uuid.New().String(),
+		Name:           "Ha Giang",
+		TripType:       bronzeType(),
+		MemberUserIDs:  []uuid.UUID{member.ID},
+		MainBranch:     reviewedPair(from, to),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -466,11 +663,12 @@ func TestCreateTripRejectsMisalignedMainBranch(t *testing.T) {
 	svc := NewTripService(&stubTripRecords{}, stubUsersByID{byID: map[uuid.UUID]*authModel.User{member.ID: member}}, nil, nil, nil, &stubLocations{
 		byID: map[uuid.UUID]*model.Location{from.ID: &from, to.ID: &to},
 	}, stubAcceptedFriends{})
-	_, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
-		Name:          "Loop",
-		TripType:      bronzeType(),
-		MemberUserIDs: []uuid.UUID{member.ID},
-		MainBranch:    branch,
+	_, _, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
+		IdempotencyKey: uuid.New().String(),
+		Name:           "Loop",
+		TripType:       bronzeType(),
+		MemberUserIDs:  []uuid.UUID{member.ID},
+		MainBranch:     branch,
 	})
 	if !errors.Is(err, repository.ErrInvalidTripGraph) {
 		t.Fatalf("got %v", err)
@@ -485,10 +683,11 @@ func TestCreateTripRejectsMemberWhoIsNotAFriend(t *testing.T) {
 	svc := NewTripService(&stubTripRecords{}, stubUsersByID{byID: map[uuid.UUID]*authModel.User{member.ID: member}}, nil, nil, nil, nil, stubAcceptedFriends{
 		missing: []uuid.UUID{member.ID},
 	})
-	_, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
-		Name:          "Loop",
-		TripType:      bronzeType(),
-		MemberUserIDs: []uuid.UUID{member.ID},
+	_, _, err := svc.CreateTrip(context.Background(), owner, request.CreateTripRequest{
+		IdempotencyKey: uuid.New().String(),
+		Name:           "Loop",
+		TripType:       bronzeType(),
+		MemberUserIDs:  []uuid.UUID{member.ID},
 	})
 	if !errors.Is(err, repository.ErrMemberNotFriend) {
 		t.Fatalf("got %v", err)

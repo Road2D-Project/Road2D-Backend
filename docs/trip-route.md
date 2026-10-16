@@ -246,5 +246,5 @@ The draft branch is created with the trip. `IsDraft` is the flag. The label `Dra
 - Nothing sets `IsFrozen` to true.
 - Replacing the graph does not delete old travels.
 - Preview does not check that a point belongs to the trip's saved graph.
-- Friend graph. Trip create and invite still take raw user ids. See [trip membership](trip-members.md).
+- Friend graph on later invites. Create already rejects a member who is not an accepted friend. Invite by user id does not. See [trip membership](trip-members.md).
 - Group chat. A trip should be created with one chat whose members match the trip. That object is not stored yet. See [trip membership](trip-members.md).

@@ -3,12 +3,14 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"Road-To-Destination-BE/module/trip/model"
 	"Road-To-Destination-BE/utils/enum"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 )
 
@@ -29,6 +31,9 @@ func NewTripRepository(db *gorm.DB) *TripRepository {
 func (r *TripRepository) CreateTripWithMembers(ctx context.Context, trip *model.Trip, members []model.TripMember, main *model.InitialMainBranch) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(trip).Error; err != nil {
+			if idempotencyKeyTaken(err) {
+				return ErrIdempotencyKeyTaken
+			}
 			return err
 		}
 		for i := range members {
@@ -93,6 +98,23 @@ func (r *TripRepository) FindTripByID(ctx context.Context, id uuid.UUID) (*model
 		return nil, err
 	}
 	return &trip, nil
+}
+
+func (r *TripRepository) FindTripByOwnerIdempotencyKey(ctx context.Context, ownerID uuid.UUID, key string) (*model.Trip, error) {
+	var trip model.Trip
+	err := r.db.WithContext(ctx).Where("owner_id = ? AND idempotency_key = ?", ownerID, key).First(&trip).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrTripNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &trip, nil
+}
+
+func idempotencyKeyTaken(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505" && strings.Contains(pgErr.ConstraintName, "idempotency")
 }
 
 func (r *TripRepository) FindTripByInviteToken(ctx context.Context, token string) (*model.Trip, error) {

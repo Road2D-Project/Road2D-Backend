@@ -174,7 +174,9 @@ func mapTripError(c *gin.Context, err error) {
 		errors.Is(err, repository.ErrDestinationInUse),
 		errors.Is(err, repository.ErrTripAlreadyCompleted),
 		errors.Is(err, repository.ErrTripNotActive),
-		errors.Is(err, repository.ErrTripCannotActivate):
+		errors.Is(err, repository.ErrTripCannotActivate),
+		errors.Is(err, repository.ErrIdempotencyConflict),
+		errors.Is(err, repository.ErrIdempotencyKeyTaken):
 		jsonError(c, http.StatusConflict, err.Error())
 	case errors.Is(err, repository.ErrMemberNotFriend),
 		errors.Is(err, repository.ErrUserNotTripMember),
@@ -189,6 +191,7 @@ func mapTripError(c *gin.Context, err error) {
 		errors.Is(err, repository.ErrNoTripMemberUpdate),
 		errors.Is(err, repository.ErrNoBranchStopUpdate),
 		errors.Is(err, repository.ErrTripMembersRequired),
+		errors.Is(err, repository.ErrIdempotencyKeyRequired),
 		errors.Is(err, repository.ErrTripTypePolicyUnset),
 		errors.Is(err, repository.ErrCannotInviteSelf),
 		errors.Is(err, repository.ErrNoDestinationUpdate),

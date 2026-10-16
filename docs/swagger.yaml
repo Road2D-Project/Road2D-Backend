@@ -389,6 +389,9 @@ definitions:
     properties:
       endTime:
         type: string
+      idempotencyKey:
+        format: uuid
+        type: string
       mainBranch:
         $ref: '#/definitions/response.PreviewLocationsResponse'
       memberUserIds:
@@ -411,6 +414,7 @@ definitions:
       visibility:
         type: boolean
     required:
+    - idempotencyKey
     - memberUserIds
     - name
     - tripType
@@ -3116,10 +3120,12 @@ paths:
         at least one other accepted friend, seated as a member. Bronze caps the trip
         at 15 seats. Trip type and member limit cannot be changed later. Optional
         mainBranch is the response of POST /planning/preview and becomes the trip's
-        initial main branch. A group chat is not created yet.
+        initial main branch. A group chat is not created yet. idempotencyKey is a
+        client UUID kept across reload and back. The same key and the same trip returns
+        200 with the existing row. The same key with a different body returns 409.
       parameters:
-      - description: Name, trip type, members, optional note, times, visibility, and
-          reviewed main branch
+      - description: Idempotency key, name, trip type, members, optional note, times,
+          visibility, and reviewed main branch
         in: body
         name: body
         required: true
@@ -3128,6 +3134,10 @@ paths:
       produces:
       - application/json
       responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/Road-To-Destination-BE_module_trip_model_response.TripResponse'
         "201":
           description: Created
           schema:
@@ -3146,6 +3156,10 @@ paths:
             $ref: '#/definitions/share.ErrorResponse'
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/share.ErrorResponse'
       security:

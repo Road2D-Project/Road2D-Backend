@@ -25,6 +25,7 @@ const (
 type TripRecordRepository interface {
 	CreateTripWithMembers(ctx context.Context, trip *model.Trip, members []model.TripMember, main *model.InitialMainBranch) error
 	FindTripByID(ctx context.Context, id uuid.UUID) (*model.Trip, error)
+	FindTripByOwnerIdempotencyKey(ctx context.Context, ownerID uuid.UUID, key string) (*model.Trip, error)
 	UpdateTripInfo(ctx context.Context, id uuid.UUID, updates map[string]any) error
 	UpdateInviteToken(ctx context.Context, id uuid.UUID, token string) error
 	DeleteTrip(ctx context.Context, id uuid.UUID) error
@@ -97,24 +98,39 @@ func NewTripService(
 // seated immediately, and each of them must already be an accepted friend.
 // A matching group chat is not created yet; that roster must stay aligned
 // with these members once chat exists.
-func (s *TripService) CreateTrip(ctx context.Context, owner *authModel.User, req request.CreateTripRequest) (*response.TripResponse, error) {
+// The bool is true only when this call inserted the row. The same owner and
+// idempotency key returns the stored trip when the normalized body still matches.
+func (s *TripService) CreateTrip(ctx context.Context, owner *authModel.User, req request.CreateTripRequest) (*response.TripResponse, bool, error) {
 	if owner == nil {
-		return nil, errors.New("missing current user")
+		return nil, false, errors.New("missing current user")
 	}
 	if req.TripType == nil {
-		return nil, repository.ErrTripTypePolicyUnset
+		return nil, false, repository.ErrTripTypePolicyUnset
 	}
 	name := utils.Santize(req.Name)
 	if name == "" {
-		return nil, errors.New("name is required")
+		return nil, false, errors.New("name is required")
+	}
+	key, err := parseIdempotencyKey(req.IdempotencyKey)
+	if err != nil {
+		return nil, false, err
 	}
 	limit, err := memberLimitFor(*req.TripType)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	memberIDs, err := otherMemberIDs(owner.ID, req.MemberUserIDs)
 	if err != nil {
-		return nil, err
+		return nil, false, err
+	}
+	note := utils.Santize(req.Note)
+	hash, err := createRequestHash(name, note, *req.TripType, req.Visibility, req.StartTime, req.EndTime, memberIDs, req.MainBranch)
+	if err != nil {
+		return nil, false, err
+	}
+	replayed, err := s.replayCreate(ctx, owner.ID, key, hash)
+	if err != nil || replayed != nil {
+		return replayed, false, err
 	}
 	now := time.Now().UTC()
 	members := []model.TripMember{{
@@ -127,7 +143,7 @@ func (s *TripService) CreateTrip(ctx context.Context, owner *authModel.User, req
 	for _, id := range memberIDs {
 		user, err := s.lookupUser(ctx, id)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		joined := now
 		members = append(members, model.TripMember{
@@ -139,38 +155,63 @@ func (s *TripService) CreateTrip(ctx context.Context, owner *authModel.User, req
 		})
 	}
 	if err := s.requireFriends(ctx, owner.ID, memberIDs); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if err := seatsFit(len(members), limit); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	main, err := s.initialMainBranch(ctx, req.MainBranch)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	trip := &model.Trip{
-		OwnerID:     owner.ID,
-		Name:        name,
-		Status:      enum.TripPlanning,
-		TripType:    *req.TripType,
-		MemberLimit: limit,
-		Visibility:  req.Visibility,
-		StartTime:   req.StartTime,
-		EndTime:     req.EndTime,
-		Note:        utils.Santize(req.Note),
-		InviteToken: uuid.New().String(),
+		OwnerID:         owner.ID,
+		Name:            name,
+		Status:          enum.TripPlanning,
+		TripType:        *req.TripType,
+		MemberLimit:     limit,
+		Visibility:      req.Visibility,
+		StartTime:       req.StartTime,
+		EndTime:         req.EndTime,
+		Note:            note,
+		InviteToken:     uuid.New().String(),
+		IdempotencyKey:  key,
+		IdempotencyHash: hash,
 	}
 	if err := s.trips.CreateTripWithMembers(ctx, trip, members, main); err != nil {
-		return nil, err
+		if errors.Is(err, repository.ErrIdempotencyKeyTaken) {
+			replayed, replayErr := s.replayCreate(ctx, owner.ID, key, hash)
+			if replayErr != nil || replayed != nil {
+				return replayed, false, replayErr
+			}
+		}
+		return nil, false, err
 	}
 	for _, member := range members {
 		s.cacheTripMemberRole(ctx, trip.ID, member.UserID, member.Role)
+	}
+	return tripResponseWithRole(trip, enum.TripRoleLeader), true, nil
+}
+
+// replayCreate returns the trip already stored for this owner and key.
+// A nil trip and a nil error means the key is free.
+func (s *TripService) replayCreate(ctx context.Context, ownerID uuid.UUID, key, hash string) (*response.TripResponse, error) {
+	trip, err := s.trips.FindTripByOwnerIdempotencyKey(ctx, ownerID, key)
+	if errors.Is(err, repository.ErrTripNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if trip.IdempotencyHash != hash {
+		return nil, repository.ErrIdempotencyConflict
 	}
 	return tripResponseWithRole(trip, enum.TripRoleLeader), nil
 }
 
 // ForkTrip opens a new trip owned by the caller. Active members of the source
 // are copied as members, minus excludeUserIds. The route graph is not copied.
+// The new row gets its own idempotency key, so a fork is never a replay of create.
 func (s *TripService) ForkTrip(ctx context.Context, caller *authModel.User, sourceID uuid.UUID, req request.ForkTripRequest) (*response.TripResponse, error) {
 	if caller == nil {
 		return nil, errors.New("missing current user")
@@ -260,16 +301,18 @@ func (s *TripService) ForkTrip(ctx context.Context, caller *authModel.User, sour
 		end = req.EndTime
 	}
 	trip := &model.Trip{
-		OwnerID:     caller.ID,
-		Name:        name,
-		Status:      enum.TripPlanning,
-		TripType:    tripType,
-		MemberLimit: limit,
-		Visibility:  visibility,
-		StartTime:   start,
-		EndTime:     end,
-		Note:        note,
-		InviteToken: uuid.New().String(),
+		OwnerID:         caller.ID,
+		Name:            name,
+		Status:          enum.TripPlanning,
+		TripType:        tripType,
+		MemberLimit:     limit,
+		Visibility:      visibility,
+		StartTime:       start,
+		EndTime:         end,
+		Note:            note,
+		InviteToken:     uuid.New().String(),
+		IdempotencyKey:  uuid.New().String(),
+		IdempotencyHash: forkedTripIdempotencyHash,
 	}
 	if err := s.trips.CreateTripWithMembers(ctx, trip, members, nil); err != nil {
 		return nil, err
@@ -345,18 +388,24 @@ func (s *TripService) UpdateTrip(ctx context.Context, tripID uuid.UUID, req requ
 			return nil, errors.New("name is required")
 		}
 		updates["name"] = cleaned
+		trip.Name = cleaned
 	}
 	if req.Note != nil {
-		updates["note"] = utils.Santize(*req.Note)
+		cleaned := utils.Santize(*req.Note)
+		updates["note"] = cleaned
+		trip.Note = cleaned
 	}
 	if req.StartTime != nil {
 		updates["start_time"] = *req.StartTime
+		trip.StartTime = req.StartTime
 	}
 	if req.EndTime != nil {
 		updates["end_time"] = *req.EndTime
+		trip.EndTime = req.EndTime
 	}
 	if req.Visibility != nil {
 		updates["visibility"] = *req.Visibility
+		trip.Visibility = *req.Visibility
 	}
 	if len(updates) == 0 {
 		return nil, repository.ErrNoTripUpdate

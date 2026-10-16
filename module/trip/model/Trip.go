@@ -16,7 +16,7 @@ import (
 // only an active member can read it.
 type Trip struct {
 	utils.Base
-	OwnerID       uuid.UUID       `json:"ownerId" gorm:"type:uuid;index;not null" swaggertype:"string" format:"uuid"`
+	OwnerID       uuid.UUID       `json:"ownerId" gorm:"type:uuid;index;uniqueIndex:idx_trip_owner_idempotency,priority:1;not null" swaggertype:"string" format:"uuid"`
 	Owner         *authModel.User `json:"-" gorm:"constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;" swaggerignore:"true"`
 	Name          string          `json:"name" gorm:"column:name;type:varchar(255);not null"`
 	Status        enum.TripStatus `json:"status" gorm:"column:status;type:varchar(32);not null"`
@@ -29,8 +29,12 @@ type Trip struct {
 	Note          string          `json:"note" gorm:"column:note;type:text"`
 	ImageURL      *string         `json:"imageUrl,omitempty" gorm:"column:image_url;type:text"`
 	InviteToken   string          `json:"-" gorm:"column:invite_token;type:varchar(64);uniqueIndex;not null" swaggerignore:"true"`
-	Branches      []TripBranch    `json:"branches,omitempty" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
-	Members       []TripMember    `json:"-" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" swaggerignore:"true"`
+	// IdempotencyKey is the wizard's create attempt. Unique with OwnerID.
+	// IdempotencyHash is the normalized body of that attempt. Neither is returned on the trip payload.
+	IdempotencyKey  string       `json:"-" gorm:"column:idempotency_key;type:varchar(64);uniqueIndex:idx_trip_owner_idempotency,priority:2;not null" swaggerignore:"true"`
+	IdempotencyHash string       `json:"-" gorm:"column:idempotency_hash;type:varchar(64);not null" swaggerignore:"true"`
+	Branches        []TripBranch `json:"branches,omitempty" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	Members         []TripMember `json:"-" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" swaggerignore:"true"`
 }
 
 func (Trip) TableName() string {

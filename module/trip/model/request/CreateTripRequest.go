@@ -15,13 +15,16 @@ import (
 // Visibility true publishes the trip for discovery.
 // MainBranch, when set, is the response of POST /planning/preview. That
 // reviewed route becomes the trip's initial main branch.
+// IdempotencyKey is a client UUID kept for the whole wizard. The same owner
+// and key replay the stored trip when the body still matches.
 type CreateTripRequest struct {
-	Name          string                             `json:"name" binding:"required,min=1,max=255"`
-	Note          string                             `json:"note" binding:"max=4000"`
-	StartTime     *time.Time                         `json:"startTime" binding:"omitempty"`
-	EndTime       *time.Time                         `json:"endTime" binding:"omitempty"`
-	TripType      *enum.TripType                     `json:"tripType" binding:"required" swaggertype:"string" example:"bronze"`
-	Visibility    bool                               `json:"visibility"`
-	MemberUserIDs []uuid.UUID                        `json:"memberUserIds" binding:"required,min=1,dive,required" swaggertype:"array,string"`
-	MainBranch    *response.PreviewLocationsResponse `json:"mainBranch,omitempty"`
+	IdempotencyKey string                             `json:"idempotencyKey" binding:"required,uuid" swaggertype:"string" format:"uuid"`
+	Name           string                             `json:"name" binding:"required,min=1,max=255"`
+	Note           string                             `json:"note" binding:"max=4000"`
+	StartTime      *time.Time                         `json:"startTime" binding:"omitempty"`
+	EndTime        *time.Time                         `json:"endTime" binding:"omitempty"`
+	TripType       *enum.TripType                     `json:"tripType" binding:"required" swaggertype:"string" example:"bronze"`
+	Visibility     bool                               `json:"visibility"`
+	MemberUserIDs  []uuid.UUID                        `json:"memberUserIds" binding:"required,min=1,dive,required" swaggertype:"array,string"`
+	MainBranch     *response.PreviewLocationsResponse `json:"mainBranch,omitempty"`
 }

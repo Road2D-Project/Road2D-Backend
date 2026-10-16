@@ -73,12 +73,13 @@ func Seed(ctx context.Context, db *gorm.DB, redisClient *redis.Client, opts Opti
 		tripRepo.NewLocationRepository(db),
 		friendRepo.NewFriendshipRepository(db),
 	)
-	createdTrip, err := trips.CreateTrip(ctx, owner, tripRequest.CreateTripRequest{
-		Name:          opts.Name,
-		Note:          opts.Note,
-		TripType:      &tripType,
-		Visibility:    opts.Visibility,
-		MemberUserIDs: memberIDs,
+	createdTrip, _, err := trips.CreateTrip(ctx, owner, tripRequest.CreateTripRequest{
+		IdempotencyKey: uuid.New().String(),
+		Name:           opts.Name,
+		Note:           opts.Note,
+		TripType:       &tripType,
+		Visibility:     opts.Visibility,
+		MemberUserIDs:  memberIDs,
 	})
 	if err != nil {
 		return nil, err

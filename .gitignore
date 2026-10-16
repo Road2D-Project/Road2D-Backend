@@ -2,6 +2,7 @@ docs/prompt/
 docs/research/
 docs/.obsidian/
 docs/review
+docs/improvement/
 persistence/
 .env
 .vcs
@@ -16,3 +17,5 @@ module/tracking/test
 internal/test-realtime/
 internal/seed/friend/
 tmp_*/
+module/tracking/todo.md
+

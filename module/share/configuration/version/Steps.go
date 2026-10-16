@@ -22,6 +22,7 @@ var Steps = []Step{
 	{Name: "V5_RepairAssignedBranchColumn", Run: V5_RepairAssignedBranchColumn},
 	{Name: "V6_AddUserNumberPhone", Run: V6_AddUserNumberPhone},
 	{Name: "V7_AddImageURLColumns", Run: V7_AddImageURLColumns},
+	{Name: "V8_AddTripIdempotencyKey", Run: V8_AddTripIdempotencyKey},
 }
 
 // Apply runs Steps in order. AutoMigrate follows, and it will not undo these repairs.

@@ -8,7 +8,9 @@ The invite token is never returned on the trip payload. `POST /trips/{tripId}/in
 
 `POST /trips`
 
-The caller becomes the leader. `memberUserIds` is required and those accounts are seated immediately as members. There is no friend graph yet, so any user id is accepted. Optional `mainBranch` is the response of `POST /planning/preview`. That reviewed location route becomes the trip's initial main branch.
+The caller becomes the leader. `memberUserIds` is required and those accounts are seated immediately as members. Each id besides the caller must already be an accepted friend. Optional `mainBranch` is the response of `POST /planning/preview`. That reviewed location route becomes the trip's initial main branch.
+
+`idempotencyKey` is a client UUID, unique per owner. The wizard keeps that same key across reload and back. The same key and the same trip (name, note, times, type, visibility, seated members, reviewed main branch) returns the existing trip with 200 and does not insert again. The same key with a different body returns 409. A new attempt needs a new key. The invite token is still only the join link.
 
 `tripType` freezes `memberLimit`. Today only `bronze` has a policy: 15 seats, counting the leader. `silver`, `gold`, and `diamond` are reserved names; creating or forking them returns 400 until a subscription policy sets their cap. `PATCH /trips/{tripId}` can change name, note, times, and `visibility`. It cannot change `tripType` or `memberLimit`.
 
@@ -44,7 +46,7 @@ Any active member may fork. The caller is the leader of the new trip. Other acti
 
 ### Friend system
 
-Create and invite take raw user ids. When friends exist, those calls should reject an account that is not a friend of the caller. Nothing in this module checks that today.
+Create rejects a member who is not an accepted friend of the caller. A later invite by user id does not check that yet.
 
 ### Group chat
 
