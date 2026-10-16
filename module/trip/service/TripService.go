@@ -388,18 +388,24 @@ func (s *TripService) UpdateTrip(ctx context.Context, tripID uuid.UUID, req requ
 			return nil, errors.New("name is required")
 		}
 		updates["name"] = cleaned
+		trip.Name = cleaned
 	}
 	if req.Note != nil {
-		updates["note"] = utils.Santize(*req.Note)
+		cleaned := utils.Santize(*req.Note)
+		updates["note"] = cleaned
+		trip.Note = cleaned
 	}
 	if req.StartTime != nil {
 		updates["start_time"] = *req.StartTime
+		trip.StartTime = req.StartTime
 	}
 	if req.EndTime != nil {
 		updates["end_time"] = *req.EndTime
+		trip.EndTime = req.EndTime
 	}
 	if req.Visibility != nil {
 		updates["visibility"] = *req.Visibility
+		trip.Visibility = *req.Visibility
 	}
 	if len(updates) == 0 {
 		return nil, repository.ErrNoTripUpdate

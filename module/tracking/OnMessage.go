@@ -86,7 +86,7 @@ func (t *TrackingCoordinator) beginStay() {
 		if progress.DriveStatus == enum.COMPLETED {
 			continue
 		}
-		progress.DriveStatus = enum.StayPublic
+		progress.DriveStatus = enum.StayPrivate
 	}
 }
 
