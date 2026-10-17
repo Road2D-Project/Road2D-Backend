@@ -1,0 +1,1 @@
+window.GOONG_MAP_RENDER_API_KEY="";
