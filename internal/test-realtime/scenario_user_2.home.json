@@ -1,0 +1,69 @@
+{
+    "name": "home-ride",
+    "description": "Ngồi ở nhà, giả một rider quanh quận 1. path.polyline là đường điện thoại báo lên. Muốn bám đường của trip thì dán polyline của trip vào đó.",
+    "server": "http://127.0.0.1:8080",
+    "roomId": "737461f0-1775-4876-b05e-f0a2f093bf9c",
+    "auth": {
+      "accessToken": "",
+      "username": "anhnam",
+      "password": ""
+    },
+    "motion": {
+      "speedMps": 8,
+      "sendEveryMs": 1000,
+      "batteryPercent": 84,
+      "signalDbm": -74,
+      "loop": false
+    },
+    "path": {
+      "polyline": "c_w`AomfjSsIoP{JgOkMsIsNsNkM_I"
+    },
+    "events": [
+      {
+        "name": "weakSignal",
+        "at": 8,
+        "duration": 12,
+        "signalDbm": -118,
+        "note": "Sóng yếu. Vẫn gửi position."
+      },
+      {
+        "name": "disconnect",
+        "at": 25,
+        "duration": 50,
+        "note": "Mất mạng. Đóng socket, đứng yên, hết giờ thì nối lại."
+      },
+      {
+        "name": "pause",
+        "at": 85,
+        "duration": 10,
+        "note": "Dừng chân. Socket vẫn mở, gửi lại đúng một điểm."
+      },
+      {
+        "name": "lowBattery",
+        "at": 100,
+        "duration": 20,
+        "batteryPercent": 8,
+        "note": "Pin yếu trên các mẫu position."
+      },
+      {
+        "name": "deviate",
+        "at": 125,
+        "duration": 15,
+        "offsetMeters": 80,
+        "note": "Lệch sang phải hướng đi, ra khỏi polyline."
+      },
+      {
+        "name": "stayMode",
+        "at": 150,
+        "duration": 30,
+        "note": "Chỉ leader. Server chuyển trip sang nghỉ."
+      },
+      {
+        "name": "userStayPublic",
+        "at": 155,
+        "duration": 20,
+        "note": "Phải nằm trong stayMode thì server mới phát lại vị trí."
+      }
+    ]
+  }
+  

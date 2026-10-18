@@ -14,7 +14,8 @@ persistence/
 module/maps/test
 module/realtime/test
 module/tracking/test
-internal/test-realtime/
+# Goong map key for the local simulation page. Copy config.example.js to config.js.
+internal/test-realtime/config.js
 internal/seed/friend/
 tmp_*/
 module/tracking/todo.md
