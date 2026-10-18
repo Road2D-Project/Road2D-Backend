@@ -133,6 +133,24 @@ func (r *TripBranchRepository) DeleteDestination(ctx context.Context, destinatio
 	return nil
 }
 
+// UpdateBranchInfo patches description and color. The branch id stays, and a
+// draft row is a valid target: this does not touch stops, split, or merge.
+func (r *TripBranchRepository) UpdateBranchInfo(ctx context.Context, tripID, branchID uuid.UUID, updates map[string]any) error {
+	if len(updates) == 0 {
+		return ErrNoBranchUpdate
+	}
+	result := r.db.WithContext(ctx).Model(&model.TripBranch{}).
+		Where("id = ? AND trip_id = ?", branchID, tripID).
+		Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrBranchNotFound
+	}
+	return nil
+}
+
 func nullableUUID(id *uuid.UUID) any {
 	if id == nil {
 		return nil

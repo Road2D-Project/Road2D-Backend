@@ -21,6 +21,8 @@ func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.
 	type position struct {
 		UserId           uuid.UUID
 		Lat, Lng         float64
+		BatteryPercent   int
+		SignalBars       int
 		DriveStatus      enum.DriveStatus
 		ConnectionStatus enum.ConnectionStatus
 	}
@@ -53,6 +55,8 @@ func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.
 				UserId:           userId,
 				Lat:              progress.Lat,
 				Lng:              progress.Lng,
+				BatteryPercent:   progress.BatteryPercent,
+				SignalBars:       progress.SignalBars,
 				DriveStatus:      progress.DriveStatus,
 				ConnectionStatus: progress.ConnectionStatus,
 			}

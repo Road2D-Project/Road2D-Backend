@@ -16,6 +16,7 @@ type TripBranchRecordRepository interface {
 	ReplaceTripBranches(ctx context.Context, tripID uuid.UUID, branches []model.TripBranch) error
 	FindTripWithBranches(ctx context.Context, id uuid.UUID) (*model.Trip, error)
 	UpdateBranchStops(ctx context.Context, branch model.TripBranch) error
+	UpdateBranchInfo(ctx context.Context, tripID, branchID uuid.UUID, updates map[string]any) error
 	ListTripIDsByDestination(ctx context.Context, destinationID uuid.UUID) ([]uuid.UUID, error)
 	DeleteDestination(ctx context.Context, destinationID uuid.UUID) error
 }

@@ -20,6 +20,7 @@ type graphRecords struct {
 	replaced           []model.TripBranch
 	withBranches       *model.Trip
 	updated            []model.TripBranch
+	branchInfo         []recordedBranchInfo
 	tripsByDestination map[uuid.UUID][]uuid.UUID
 	deleted            []uuid.UUID
 }
@@ -64,6 +65,28 @@ func (g *graphRecords) DeleteDestination(_ context.Context, destinationID uuid.U
 	delete(g.destinations, destinationID)
 	g.deleted = append(g.deleted, destinationID)
 	return nil
+}
+
+type recordedBranchInfo struct {
+	branchID uuid.UUID
+	updates  map[string]any
+}
+
+func (g *graphRecords) UpdateBranchInfo(_ context.Context, _, branchID uuid.UUID, updates map[string]any) error {
+	copied := make(map[string]any, len(updates))
+	for key, value := range updates {
+		copied[key] = value
+	}
+	g.branchInfo = append(g.branchInfo, recordedBranchInfo{branchID: branchID, updates: copied})
+	if g.withBranches == nil {
+		return repository.ErrBranchNotFound
+	}
+	for i := range g.withBranches.Branches {
+		if g.withBranches.Branches[i].ID == branchID {
+			return nil
+		}
+	}
+	return repository.ErrBranchNotFound
 }
 
 func (g *graphRecords) UpdateBranchStops(_ context.Context, branch model.TripBranch) error {

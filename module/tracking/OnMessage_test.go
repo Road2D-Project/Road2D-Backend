@@ -33,6 +33,37 @@ func (s *recordSession) BroadcastLatest(string, string, any) {}
 
 func (s *recordSession) IsOnline(uuid.UUID) bool { return true }
 
+func TestPositionCarriesBatteryAndSignal(t *testing.T) {
+	leader := uuid.New()
+	coord, session := stayFixture(leader, map[uuid.UUID]enum.DriveStatus{leader: enum.OnROUTE})
+	body := json.RawMessage(`{"Lat":11.1,"Lng":106.2,"BatteryPercent":80,"SignalDbm":-90}`)
+	coord.OnMessage(session, leader, string(message.Position), body)
+
+	prg := coord.progresses[leader]
+	if prg.Lat != 11.1 || prg.Lng != 106.2 || prg.BatteryPercent != 80 || prg.SignalBars != 3 {
+		t.Fatalf("stored %+v", prg)
+	}
+
+	coord.OnTick(session, time.Now())
+	if len(session.broadcasts) != 1 || session.broadcasts[0].msgType != "tracking.positions" {
+		t.Fatalf("broadcasts %#v", session.broadcasts)
+	}
+	raw, err := json.Marshal(session.broadcasts[0].payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var posted []struct {
+		BatteryPercent int
+		SignalBars     int
+	}
+	if err := json.Unmarshal(raw, &posted); err != nil {
+		t.Fatal(err)
+	}
+	if len(posted) != 1 || posted[0].BatteryPercent != 80 || posted[0].SignalBars != 3 {
+		t.Fatalf("posted %+v", posted)
+	}
+}
+
 func TestLeaderStayHidesRidersUntilTheyGoPublic(t *testing.T) {
 	leader := uuid.New()
 	member := uuid.New()

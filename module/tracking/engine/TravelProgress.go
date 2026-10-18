@@ -19,6 +19,8 @@ type TravelProgress struct {
 	ConnectionStatus enum.ConnectionStatus
 	Lat              float64
 	Lng              float64
+	BatteryPercent   int
+	SignalBars       int
 	ObservedAt       time.Time
 	OffRouteSamples  int
 	ArriveSamples    int

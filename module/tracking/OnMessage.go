@@ -25,6 +25,8 @@ func (t *TrackingCoordinator) OnMessage(s realtime.Session, userID uuid.UUID, ms
 		}
 		progress.Lat = positionMsg.Lat
 		progress.Lng = positionMsg.Lng
+		progress.BatteryPercent = positionMsg.Battery()
+		progress.SignalBars = positionMsg.SignalBars()
 		progress.ObservedAt = time.Now()
 	case message.StayMode:
 		rider := t.tripInformation.Riders[userID]
