@@ -20,6 +20,8 @@ type TripDetailResponse struct {
 type BranchResponse struct {
 	ID                     uuid.UUID         `json:"id" swaggertype:"string" format:"uuid"`
 	Label                  string            `json:"label"`
+	Description            string            `json:"description"`
+	Color                  string            `json:"color"`
 	SplitFromDestinationID *uuid.UUID        `json:"splitFromDestinationId,omitempty" swaggertype:"string" format:"uuid"`
 	MergeToDestinationID   *uuid.UUID        `json:"mergeToDestinationId,omitempty" swaggertype:"string" format:"uuid"`
 	Stops                  []StopResponse    `json:"stops"`
@@ -60,6 +62,8 @@ func branchResponse(branch *model.TripBranch) BranchResponse {
 	return BranchResponse{
 		ID:                     branch.ID,
 		Label:                  branch.Label,
+		Description:            branch.Description,
+		Color:                  branch.Color,
 		SplitFromDestinationID: branch.SplitFromDestinationID,
 		MergeToDestinationID:   branch.MergeToDestinationID,
 		Stops:                  stops,
