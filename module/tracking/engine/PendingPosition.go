@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"sync/atomic"
+	"time"
 
 	"Road-To-Destination-BE/module/tracking/geo"
 	"Road-To-Destination-BE/module/tracking/model"
@@ -15,20 +16,38 @@ import (
 var activeSnapWorkers atomic.Int32
 
 // snapJob is a sample copied on the room goroutine. The worker never reads TravelProgress.
+// redirect is the temporary route to measure against while deviated; nil otherwise.
 type snapJob struct {
-	point model.Point
-	drive enum.DriveStatus
+	point       model.Point
+	observedAt  time.Time
+	drive       enum.DriveStatus
+	redirect    *geo.Route
+	redirectGen uint64
 }
 
 // SnapUpdate is the worker's result. Only the room goroutine copies it onto TravelProgress.
 // Finished stays set once the rider reaches the end of the last hop, so a newer
 // update cannot discard the arrival.
+//
+// DistM and OffRoute describe the sample against the branch polyline. The
+// Redirect fields describe the same sample against the temporary route, and
+// RedirectGen says which route that was.
 type SnapUpdate struct {
 	HopIndex     int
 	LastSegIndex int
 	Progress     float64
 	Route        *geo.Route
 	Finished     bool
+
+	ObservedAt time.Time
+	DistM      float64
+	OffRoute   bool
+
+	RedirectGen      uint64
+	RedirectSeg      int
+	RedirectProgress float64
+	RedirectDistM    float64
+	RedirectArrived  bool
 }
 
 // hopCursor is the worker's private copy of hop state.
@@ -38,15 +57,34 @@ type hopCursor struct {
 	progress float64
 	route    *geo.Route
 	finished bool
+
+	observedAt time.Time
+	dist       float64
+	offRoute   bool
+
+	redirectRoute    *geo.Route
+	redirectGen      uint64
+	redirectSeg      int
+	redirectProgress float64
+	redirectDist     float64
+	redirectArrived  bool
 }
 
 func (c hopCursor) update() SnapUpdate {
 	return SnapUpdate{
-		HopIndex:     c.hop,
-		LastSegIndex: c.seg,
-		Progress:     c.progress,
-		Route:        c.route,
-		Finished:     c.finished,
+		HopIndex:         c.hop,
+		LastSegIndex:     c.seg,
+		Progress:         c.progress,
+		Route:            c.route,
+		Finished:         c.finished,
+		ObservedAt:       c.observedAt,
+		DistM:            c.dist,
+		OffRoute:         c.offRoute,
+		RedirectGen:      c.redirectGen,
+		RedirectSeg:      c.redirectSeg,
+		RedirectProgress: c.redirectProgress,
+		RedirectDistM:    c.redirectDist,
+		RedirectArrived:  c.redirectArrived,
 	}
 }
 
@@ -66,6 +104,12 @@ func (p *TravelProgress) StartSnap(branch *model.TravelBranch) {
 	p.jobs = jobs
 	p.updates = updates
 	cursor := hopCursor{hop: p.HopIndex, seg: p.LastSegIndex, progress: p.Progress, route: p.Route}
+	if p.Redirect != nil && p.Redirect.Route != nil {
+		cursor.redirectRoute = p.Redirect.Route
+		cursor.redirectGen = p.Redirect.Generation
+		cursor.redirectSeg = p.RedirectSeg
+		cursor.redirectProgress = p.RedirectProgress
+	}
 	go p.runSnap(ctx, jobs, updates, branch, cursor)
 }
 
@@ -93,6 +137,15 @@ func (p *TravelProgress) ApplySnap() {
 			p.LastSegIndex = update.LastSegIndex
 			p.Progress = update.Progress
 			p.Route = update.Route
+			p.LastSnapAt = update.ObservedAt
+			p.LastDistM = update.DistM
+			p.OffRoute = update.OffRoute
+			if p.Redirect != nil && update.RedirectGen == p.Redirect.Generation {
+				p.RedirectSeg = update.RedirectSeg
+				p.RedirectProgress = update.RedirectProgress
+				p.RedirectDistM = update.RedirectDistM
+				p.RedirectArrived = update.RedirectArrived
+			}
 			if update.Finished {
 				p.DriveStatus = enum.COMPLETED
 			}
@@ -109,8 +162,13 @@ func (p *TravelProgress) SubmitSample() {
 		return
 	}
 	job := snapJob{
-		point: model.Point{Lat: p.Lat, Lng: p.Lng},
-		drive: p.DriveStatus,
+		point:      model.Point{Lat: p.Lat, Lng: p.Lng},
+		observedAt: p.ObservedAt,
+		drive:      p.DriveStatus,
+	}
+	if p.DriveStatus == enum.DEVIATED && p.Redirect != nil && p.Redirect.Route != nil {
+		job.redirect = p.Redirect.Route
+		job.redirectGen = p.Redirect.Generation
 	}
 	select {
 	case p.jobs <- job:
@@ -138,7 +196,8 @@ func (p *TravelProgress) runSnap(ctx context.Context, jobs <-chan snapJob, updat
 			if !ok {
 				return
 			}
-			cursor = next
+			cursor = snapPointOnRedirect(next, job.redirect, job.redirectGen, job.point)
+			cursor.observedAt = job.observedAt
 			sendLatestUpdate(ctx, updates, cursor.update())
 			if cursor.finished {
 				return
@@ -170,7 +229,9 @@ func sendLatestUpdate(ctx context.Context, updates chan SnapUpdate, update SnapU
 }
 
 // snapPointOnBranch snaps the GPS point onto the current hop polyline.
-// A point at the end of the hop moves the cursor onto the next hop.
+// A point farther than geo.OffRouteM keeps the cursor where it was and only
+// reports the distance: an off-road sample must not drag the rider along the
+// line. A point at the end of the hop moves the cursor onto the next hop.
 // false means this hop has no usable polyline, so the snap loop should stop.
 func snapPointOnBranch(cursor hopCursor, branch *model.TravelBranch, point model.Point) (hopCursor, bool) {
 	if cursor.finished {
@@ -182,6 +243,12 @@ func snapPointOnBranch(cursor hopCursor, branch *model.TravelBranch, point model
 		}
 	}
 	snap := cursor.route.Snap(point, cursor.seg)
+	cursor.dist = snap.Dist
+	if snap.Dist > geo.OffRouteM {
+		cursor.offRoute = true
+		return cursor, true
+	}
+	cursor.offRoute = false
 	cursor.seg = snap.Seg
 	cursor.progress = snap.Progress
 	if !cursor.route.AtEnd(snap.Seg, snap.Progress, snap.Dist) {
@@ -196,6 +263,41 @@ func snapPointOnBranch(cursor hopCursor, branch *model.TravelBranch, point model
 		return cursor, true
 	}
 	return cursor, true
+}
+
+// snapPointOnRedirect measures the same sample against the temporary route.
+// It never touches the branch cursor. A new route pointer resets the redirect
+// cursor to its first segment. nil clears the redirect fields.
+func snapPointOnRedirect(cursor hopCursor, route *geo.Route, gen uint64, point model.Point) hopCursor {
+	if route == nil {
+		cursor.redirectRoute = nil
+		cursor.redirectGen = 0
+		cursor.redirectSeg = 0
+		cursor.redirectProgress = 0
+		cursor.redirectDist = 0
+		cursor.redirectArrived = false
+		return cursor
+	}
+	if cursor.redirectRoute != route {
+		cursor.redirectRoute = route
+		cursor.redirectSeg = 0
+		cursor.redirectProgress = 0
+		cursor.redirectArrived = false
+	}
+	// A refresh keeps the old route on screen until the new one answers, so
+	// the generation can move while the pointer stays the same.
+	cursor.redirectGen = gen
+	snap := route.Snap(point, cursor.redirectSeg)
+	cursor.redirectDist = snap.Dist
+	if snap.Dist > geo.OffRouteM {
+		return cursor
+	}
+	cursor.redirectSeg = snap.Seg
+	cursor.redirectProgress = snap.Progress
+	if route.AtEnd(snap.Seg, snap.Progress, snap.Dist) {
+		cursor.redirectArrived = true
+	}
+	return cursor
 }
 
 // loadHopPolyline builds the cursor route from branch.Hops[hopIndex].

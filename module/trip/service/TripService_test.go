@@ -177,6 +177,10 @@ func (s *stubTripRecords) UpdateBranchStops(context.Context, model.TripBranch) e
 	return nil
 }
 
+func (s *stubTripRecords) UpdateBranchInfo(context.Context, uuid.UUID, uuid.UUID, map[string]any) error {
+	return nil
+}
+
 func (s *stubTripRecords) ListTripIDsByDestination(context.Context, uuid.UUID) ([]uuid.UUID, error) {
 	return []uuid.UUID{}, nil
 }

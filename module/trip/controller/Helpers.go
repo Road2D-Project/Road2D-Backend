@@ -190,6 +190,8 @@ func mapTripError(c *gin.Context, err error) {
 	case errors.Is(err, repository.ErrNoTripUpdate),
 		errors.Is(err, repository.ErrNoTripMemberUpdate),
 		errors.Is(err, repository.ErrNoBranchStopUpdate),
+		errors.Is(err, repository.ErrNoBranchUpdate),
+		errors.Is(err, repository.ErrInvalidBranchColor),
 		errors.Is(err, repository.ErrTripMembersRequired),
 		errors.Is(err, repository.ErrIdempotencyKeyRequired),
 		errors.Is(err, repository.ErrTripTypePolicyUnset),

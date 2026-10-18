@@ -17,7 +17,6 @@ type Trip struct {
 	VisitOrder  []TripStop   `json:"visit_order"`
 	ComputedAt  time.Time    `json:"computed_at"`
 }
-
 // TripRoute is one optimized tour (usually a single element unless Goong returns several).
 type TripRoute struct {
 	Distance   float64   `json:"distance"`

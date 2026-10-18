@@ -201,7 +201,8 @@ func stayFixture(leader uuid.UUID, drives map[uuid.UUID]enum.DriveStatus) (*Trac
 		progress.DriveStatus = drive
 		progress.Lat = 10
 		progress.Lng = 106
-		progress.ObservedAt = time.Now()
+		// Older than SampleMinInterval so the first test sample is accepted.
+		progress.ObservedAt = time.Now().Add(-time.Second)
 		progresses[id] = progress
 	}
 	return &TrackingCoordinator{

@@ -9,6 +9,7 @@ import (
 	tripmodel "Road-To-Destination-BE/module/trip/model"
 	"Road-To-Destination-BE/utils/enum"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -51,13 +52,15 @@ func (r *LegRepository) Find(ctx context.Context, fromLat, fromLng, toLat, toLng
 	return &leg, nil
 }
 
-// Upsert writes the leg on the idx_leg_cache key. The Postgres driver appends
-// RETURNING, so leg.ID holds the stored row id afterwards and a Travel can point at it.
+// Upsert writes the leg on the idx_leg_cache key.
+// On conflict Postgres keeps the row that is already there. BeforeCreate may
+// have stamped a new id that was never inserted, so the stored id is copied
+// back before a travel or the Redis cache points at this leg.
 func (r *LegRepository) Upsert(ctx context.Context, leg *tripmodel.Leg) error {
 	if r == nil || r.db == nil || leg == nil {
 		return nil
 	}
-	return r.db.WithContext(ctx).
+	if err := r.db.WithContext(ctx).
 		Omit("FromLocation", "ToLocation").
 		Clauses(clause.OnConflict{
 			Columns: []clause.Column{
@@ -70,7 +73,29 @@ func (r *LegRepository) Upsert(ctx context.Context, leg *tripmodel.Leg) error {
 				"source", "last_computed_at", "ttl_seconds", "updated_at",
 			}),
 		}).
-		Create(leg).Error
+		Create(leg).Error; err != nil {
+		return err
+	}
+	var stored tripmodel.Leg
+	if err := r.db.WithContext(ctx).
+		Select("id").
+		Where("from_lat = ? AND from_lng = ? AND to_lat = ? AND to_lng = ? AND vehicle = ?",
+			leg.FromLat, leg.FromLng, leg.ToLat, leg.ToLng, leg.Vehicle).
+		Take(&stored).Error; err != nil {
+		return err
+	}
+	leg.ID = stored.ID
+	return nil
+}
+
+// Exists reports whether this id is a legs row. A Redis hit can outlive the row.
+func (r *LegRepository) Exists(ctx context.Context, id uuid.UUID) (bool, error) {
+	if r == nil || r.db == nil || id == uuid.Nil {
+		return false, nil
+	}
+	var n int64
+	err := r.db.WithContext(ctx).Model(&tripmodel.Leg{}).Where("id = ?", id).Count(&n).Error
+	return n > 0, err
 }
 
 var _ LegStore = (*LegRepository)(nil)

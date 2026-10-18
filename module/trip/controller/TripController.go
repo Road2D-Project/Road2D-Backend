@@ -30,6 +30,7 @@ var (
 	_ = request.EnsureLocationRequest{}
 	_ = request.ComputeTravelGraphRequest{}
 	_ = request.UpdateBranchStopRequest{}
+	_ = request.UpdateBranchRequest{}
 	_ = request.ConfirmTripImageRequest{}
 	_ = request.AddDraftDestinationRequest{}
 	_ = response.DraftDestinationsResponse{}
@@ -42,6 +43,7 @@ var (
 	_ = response.TripJoinRequestListResponse{}
 	_ = response.TripInviteLinkResponse{}
 	_ = response.TripDetailResponse{}
+	_ = response.BranchMetadataResponse{}
 	_ = response.ComputeBranchResponse{}
 	_ = response.PreviewLocationsResponse{}
 	_ = response.EnsureLocationResponse{}
@@ -135,6 +137,7 @@ func (ctrl *TripController) registerGraphRoutes(trips *gin.RouterGroup) {
 	trips.GET("/:tripId/travels", ctrl.handleActiveTripRole(), ctrl.CachedKeys("travels"), ctrl.cacheResponse.CacheAround(), ctrl.HandleGetStoredTravels())
 	trips.POST("/:tripId/travels", ctrl.handleActiveTripRole(), ctrl.CachedKeys("travels"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleComputeStoredTrip())
 	trips.POST("/:tripId/travels/graph", ctrl.handleActiveTripRole(), ctrl.CachedKeys("travels", "graph"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleComputeTravelGraph())
+	trips.PATCH("/:tripId/branches/:branchId", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph", "draft"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader, enum.TripRoleAdmin), ctrl.HandleUpdateBranch())
 	trips.PATCH("/:tripId/branches/:branchId/stops/:destinationId", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph", "travels"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleUpdateBranchStop())
 	trips.DELETE("/:tripId/branches/:branchId/stops/:destinationId", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph", "travels"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleDeleteBranchStop())
 }

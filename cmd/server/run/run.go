@@ -13,6 +13,7 @@ import (
 	groupController "Road-To-Destination-BE/module/group/controller"
 	mapsClient "Road-To-Destination-BE/module/maps/client"
 	mapsController "Road-To-Destination-BE/module/maps/controller"
+	mapsService "Road-To-Destination-BE/module/maps/service"
 	"Road-To-Destination-BE/module/realtime"
 	realtimeController "Road-To-Destination-BE/module/realtime/controller"
 	"Road-To-Destination-BE/module/share"
@@ -70,9 +71,11 @@ func Run() error {
 	)
 	responseCacheMw := middleware.NewResponseCache(redisConfig.Client())
 	// Mount domain modules on this hub before the listener accepts sockets.
-	// No module is mounted yet, so a joined room only carries system presence.
+	// Tracking gets its own Goong client: the redirect route starts at a raw
+	// GPS fix and must not go through the leg cache.
 	hub := realtime.NewHub()
-	err := hub.Mount("tracking", tracking.NewTrackingModule(dbConfig.GetDatabase()))
+	redirectRouter := mapsService.NewRedirectService(mapsClient.NewDefaultGoongClient())
+	err := hub.Mount("tracking", tracking.NewTrackingModule(dbConfig.GetDatabase(), redirectRouter))
 	if err != nil {
 		log.Fatal(err)
 	}

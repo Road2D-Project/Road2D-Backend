@@ -2,6 +2,7 @@ package tracking
 
 import (
 	"Road-To-Destination-BE/module/realtime"
+	"Road-To-Destination-BE/module/tracking/engine"
 	"Road-To-Destination-BE/module/tracking/model/message"
 	"Road-To-Destination-BE/utils/enum"
 	"encoding/json"
@@ -23,11 +24,17 @@ func (t *TrackingCoordinator) OnMessage(s realtime.Session, userID uuid.UUID, ms
 		if progress == nil {
 			return
 		}
+		now := time.Now()
+		// A fix sooner than SampleMinInterval after the previous one is noise
+		// for the deviation counter, so the whole sample is dropped.
+		if !progress.ObservedAt.IsZero() && now.Sub(progress.ObservedAt) < engine.SampleMinInterval {
+			return
+		}
 		progress.Lat = positionMsg.Lat
 		progress.Lng = positionMsg.Lng
 		progress.BatteryPercent = positionMsg.Battery()
 		progress.SignalBars = positionMsg.SignalBars()
-		progress.ObservedAt = time.Now()
+		progress.ObservedAt = now
 	case message.StayMode:
 		rider := t.tripInformation.Riders[userID]
 		if rider == nil || rider.Role != enum.TripRoleLeader {
@@ -82,12 +89,19 @@ func (t *TrackingCoordinator) OnMessage(s realtime.Session, userID uuid.UUID, ms
 }
 
 // beginStay hides every rider who has not finished. A rider appears again only after choosing public.
+// The drive status under the stay overlay is kept so a deviated rider resumes deviated.
 func (t *TrackingCoordinator) beginStay() {
 	t.tripInformation.Status = enum.TripStay
 	for _, progress := range t.progresses {
 		if progress.DriveStatus == enum.COMPLETED {
 			continue
 		}
+		if progress.DriveStatus == enum.OnROUTE || progress.DriveStatus == enum.DEVIATED {
+			progress.ResumeDrive = progress.DriveStatus
+			progress.HasResume = true
+		}
+		progress.OffRouteSamples = 0
+		progress.OnRouteSamples = 0
 		progress.DriveStatus = enum.StayPrivate
 	}
 }
@@ -100,5 +114,9 @@ func (t *TrackingCoordinator) endStay() {
 			continue
 		}
 		progress.DriveStatus = enum.OnROUTE
+		if progress.HasResume {
+			progress.DriveStatus = progress.ResumeDrive
+			progress.HasResume = false
+		}
 	}
 }

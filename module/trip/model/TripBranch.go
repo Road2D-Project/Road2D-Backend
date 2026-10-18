@@ -26,6 +26,8 @@ type TripBranch struct {
 	MergeToDestinationID   *uuid.UUID   `json:"mergeToDestinationId,omitempty" gorm:"type:uuid;index"`
 	MergeTo                *Destination `json:"mergeTo,omitempty" gorm:"foreignKey:MergeToDestinationID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
 	Label                  string       `json:"label" gorm:"column:label;type:varchar(255)"`
+	Description            string       `json:"description" gorm:"column:description;type:text;not null;default:''"`
+	Color                  string       `json:"color" gorm:"column:color;type:varchar(7);not null;default:''"`
 	// IsDraft marks the inbox that holds pins before they are placed on the route.
 	// Compute, stored travels, and the route graph skip this branch.
 	IsDraft bool                `json:"isDraft" gorm:"column:is_draft;not null;default:false"`
