@@ -10,6 +10,7 @@ The client sends raw GPS. It never sends "I am off the route". The room is the a
 - [Thresholds](#thresholds)
 - [Preconditions](#preconditions)
 - [Wire](#wire)
+- [How the temporary route is sent](#how-the-temporary-route-is-sent)
 - [Situations](#situations)
 - [Redirect target is the end of the current hop](#redirect-target-is-the-end-of-the-current-hop)
 - [Trade-off: the room does not jump to C](#trade-off-the-room-does-not-jump-to-c)
@@ -93,6 +94,69 @@ Redirect `reason`:
 | `providerError` | Router missing, Goong error, empty or bad polyline |
 
 `target` is the stop at the far end of the current hop: `destinationId`, `name`, `lat`, `lng`.
+
+## How the temporary route is sent
+
+There is **no HTTP** for this polyline. `POST /trips/{tripId}/travels` is the saved hop. Redirect never writes `Leg` / `Travel`. The client that must draw the detour listens on the **websocket**, type `tracking.redirect`.
+
+`tracking.positions` only carries the pin (`lat`, `lng`, `driveStatus`). It never carries the new line.
+
+Sequence after the third off-route snap:
+
+1. Room goroutine broadcasts `tracking.redirect` with `status: "pending"` and `target` (stop B). `polyline` is absent. Goong has not answered yet.
+2. A worker calls `RedirectRouter` (Goong Directions, bike, origin = current GPS, destination = B). Timeout 10 s.
+3. The next `OnTick` (≤ 500 ms after the result) drains the buffer and broadcasts `tracking.redirect` with `status: "ready"` **and** the encoded polyline.
+
+`Broadcast` sends that frame to **every** socket in the room, not only the lost rider. Filter on `userId`.
+
+Pending (no geometry yet):
+
+```json
+{
+  "type": "tracking.redirect",
+  "payload": {
+    "userId": "…",
+    "status": "pending",
+    "reason": "confirmed",
+    "origin": { "lat": 10.775, "lng": 106.701 },
+    "target": {
+      "destinationId": "…",
+      "name": "B",
+      "lat": 10.78,
+      "lng": 106.70
+    }
+  }
+}
+```
+
+Ready (this is the new route). `polyline` is Google/Goong precision 1e5, same codec as stored travels:
+
+```json
+{
+  "type": "tracking.redirect",
+  "payload": {
+    "userId": "…",
+    "status": "ready",
+    "reason": "confirmed",
+    "origin": { "lat": 10.775, "lng": 106.701 },
+    "target": {
+      "destinationId": "…",
+      "name": "B",
+      "lat": 10.78,
+      "lng": 106.70
+    },
+    "polyline": "_p~iF~ps|U_ulLnnqC",
+    "distanceM": 640,
+    "durationS": 95
+  }
+}
+```
+
+Client job: decode `polyline`, draw it as the detour to `target`, keep it until a later `tracking.redirect` with `status: "cleared"` (`rejoined` or `arrivedStop`) or a new `ready` (`reason: "refresh"`).
+
+A late `failed` has no polyline. Keep the previous `ready` line if a refresh is in flight. The room still holds that old route until the new generation answers.
+
+**Gap:** `OnJoin` does not replay the current redirect. A socket that connects while the rider is already `DEVIATED` gets `tracking.success` and later `tracking.positions` with `driveStatus: "DEVIATED"`, but not the polyline again. The line is in room memory only. Treat a join snapshot of redirect as future work.
 
 ## Situations
 
