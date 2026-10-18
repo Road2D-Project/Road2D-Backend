@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tripmodel "Road-To-Destination-BE/module/trip/model"
+	"Road-To-Destination-BE/utils"
 	"Road-To-Destination-BE/utils/enum"
 
 	"github.com/google/uuid"
@@ -60,6 +61,51 @@ func TestCachedLegStoreMemoryHitSkipsDatabase(t *testing.T) {
 	}
 	if rows.findCalls != 0 {
 		t.Fatal("a memory hit must not touch the database")
+	}
+}
+
+type idAwareRows struct {
+	stubLegStore
+	live map[uuid.UUID]bool
+}
+
+func (s *idAwareRows) Exists(_ context.Context, id uuid.UUID) (bool, error) {
+	return s.live[id], nil
+}
+
+func TestCachedLegStoreMemoryHitWithLiveIDSkipsDatabase(t *testing.T) {
+	id := uuid.New()
+	memory := &stubLegStore{leg: &tripmodel.Leg{Base: utils.Base{ID: id}, Polyline: "from-redis"}}
+	rows := &idAwareRows{
+		stubLegStore: stubLegStore{leg: &tripmodel.Leg{Polyline: "from-postgres"}},
+		live:         map[uuid.UUID]bool{id: true},
+	}
+
+	leg := find(t, NewCachedLegStore(memory, rows))
+
+	if leg == nil || leg.Polyline != "from-redis" {
+		t.Fatalf("leg = %+v", leg)
+	}
+	if rows.findCalls != 0 {
+		t.Fatal("a live cached id must not re-read the row")
+	}
+}
+
+func TestCachedLegStoreStaleMemoryIDUsesDatabaseRow(t *testing.T) {
+	staleID := uuid.New()
+	realID := uuid.New()
+	memory := &stubLegStore{leg: &tripmodel.Leg{Base: utils.Base{ID: staleID}, Polyline: "from-redis"}}
+	rows := &idAwareRows{
+		stubLegStore: stubLegStore{leg: &tripmodel.Leg{Base: utils.Base{ID: realID}, Polyline: "from-postgres"}},
+	}
+
+	leg := find(t, NewCachedLegStore(memory, rows))
+
+	if leg == nil || leg.ID != realID || leg.Polyline != "from-postgres" {
+		t.Fatalf("leg = %+v", leg)
+	}
+	if len(memory.upserted) != 1 || memory.upserted[0].ID != realID {
+		t.Fatalf("stale cache was not replaced: %+v", memory.upserted)
 	}
 }
 

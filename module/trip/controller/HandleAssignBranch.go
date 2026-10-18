@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var NoPermissionAssignBranch = errors.New("Only admin or leader can asssign another user with branch")
+var NoPermissionAssignBranch = errors.New("Only admin or leader can assign another user with branch")
 
 func (ctrl *TripController) HandleAssignBranch() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -37,7 +37,7 @@ func (ctrl *TripController) HandleAssignBranch() gin.HandlerFunc {
 				return
 			}
 			c.Status(http.StatusNoContent)
-
+			return
 		}
 		mapTripError(c, NoPermissionAssignBranch)
 
