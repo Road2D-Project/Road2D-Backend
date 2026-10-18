@@ -49,7 +49,7 @@ func (s *TripBranchService) AddDraftDestination(ctx context.Context, tripID, des
 	if stored == nil {
 		return nil, repository.ErrTripNotFound
 	}
-	if stored.Status != enum.TripPlanning {
+	if stored.Status != enum.TripCompleted {
 		return nil, repository.ErrInvalidTripGraph
 	}
 	draft := findDraftBranch(stored.Branches)
