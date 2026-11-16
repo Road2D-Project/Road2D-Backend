@@ -1,6 +1,6 @@
 # Realtime rooms
 
-The websocket runtime for a live trip. This page is the map for the next modules (tracking first, chat later). The annotated walkthrough of the original single-file sketch stays in [docs/research/realtime](research/realtime/road2d_websocket_main_explanation.md).
+The websocket runtime for a live trip. This page is the map for the next modules (tracking first, chat later). Off-route detection, lives, and the temporary redirect route are in [tracking deviation](tracking-deviation.md). The annotated walkthrough of the original single-file sketch stays in [docs/research/realtime](research/realtime/road2d_websocket_main_explanation.md).
 
 ## What this package owns
 
@@ -119,7 +119,7 @@ The client sends raw observations and intents. It never sends a computed result 
 
 | wire type | was | direction | behavior |
 | --- | --- | --- | --- |
-| `tracking.location` | `loc` | client to server | rate-limit per user, then `BroadcastLatest` keyed by the user id string |
+| `tracking.position` | `loc` / `tracking.location` in the sketch | client to server | GPS sample (`Lat`, `Lng`). Frames sooner than 900 ms are dropped. See [tracking deviation](tracking-deviation.md) |
 | `tracking.resync` | `resync` | client to server | `Send` the full snapshot to that user |
 | `tracking.switchBranch` | `intent` / `switch_branch` | client to server | accept only when the client's version matches the room; otherwise `Send` `tracking.error` with `stale_version` |
 | `tracking.offRoute` | `offroute` | server to room | `Broadcast` when the off-route flag changes |

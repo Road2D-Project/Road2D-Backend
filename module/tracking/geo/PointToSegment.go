@@ -15,6 +15,12 @@ func toXY(ref, p model.Point) (x, y float64) {
 	return
 }
 
+// DistanceM is the flat-earth distance in meters between two nearby points.
+func DistanceM(a, b model.Point) float64 {
+	x, y := toXY(a, b)
+	return math.Hypot(x, y)
+}
+
 // PointToSegment returns the distance in meters from c to segment ab.
 // t is 0 at a and 1 at b. segLen is |AB| in meters.
 func PointToSegment(a, b, c model.Point) (dist, t, segLen float64) {

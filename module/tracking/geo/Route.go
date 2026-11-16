@@ -7,10 +7,19 @@ import (
 )
 
 const (
-	segBack   = 2
-	segAhead  = 10
-	offRouteM = 50.0
-	arriveM   = 30.0
+	segBack  = 2
+	segAhead = 10
+	// OffRouteM is how far from the polyline a sample counts as off the road.
+	// The snap loop, the deviation counter, and the redirect route share it.
+	OffRouteM = 50.0
+	// ArriveM is how close to the end of a polyline counts as arrived.
+	ArriveM = 30.0
+)
+
+// offRouteM and arriveM keep the short names used inside this package.
+const (
+	offRouteM = OffRouteM
+	arriveM   = ArriveM
 )
 
 type Route struct {

@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Road2D realtime test</title>
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/@goongmaps/goong-js@1.0.9/dist/goong-js.css"
+  />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #10151c;
+      --panel: #18202b;
+      --line: #2a3646;
+      --text: #e7eef6;
+      --muted: #93a4b8;
+      --accent: #3ddc97;
+      --warn: #ffb020;
+      --danger: #ff6b6b;
+      --me: #ffd166;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: grid;
+      grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.4 "Segoe UI", system-ui, sans-serif;
+    }
+    aside {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-height: 0;
+      padding: 16px;
+      overflow: auto;
+      border-right: 1px solid var(--line);
+      background: var(--panel);
+    }
+    main { min-width: 0; min-height: 0; }
+    h1 { margin: 0; font-size: 18px; }
+    p.hint { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+    label { display: block; margin: 8px 0 4px; color: var(--muted); font-size: 12px; }
+    input, textarea, button {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0e141c;
+      color: var(--text);
+      font: inherit;
+    }
+    input, textarea { padding: 8px 10px; }
+    textarea { min-height: 96px; resize: vertical; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .actions { display: flex; gap: 8px; margin-top: 8px; }
+    button {
+      width: auto;
+      flex: 1;
+      padding: 8px 10px;
+      cursor: pointer;
+      background: #243140;
+    }
+    button.primary { background: #1d6b4a; border-color: #1d6b4a; }
+    button.branch {
+      width: 100%;
+      flex: none;
+      display: block;
+      margin-top: 6px;
+      text-align: left;
+      background: #101820;
+    }
+    button.branch.active { border-color: #ffd166; }
+    button.branch small { display: block; color: var(--muted); font-size: 12px; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 24px;
+      font-size: 13px;
+    }
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--danger);
+      flex: none;
+    }
+    .dot.on { background: var(--accent); }
+    .stats { color: var(--muted); font-size: 12px; }
+    #riders { display: flex; flex-direction: column; gap: 6px; }
+    .rider {
+      display: grid;
+      grid-template-columns: 12px 1fr;
+      gap: 8px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #101820;
+    }
+    .swatch { width: 12px; height: 12px; border-radius: 50%; margin-top: 3px; }
+    .rider b { font-weight: 600; }
+    .rider small { display: block; color: var(--muted); }
+    #log {
+      margin: 0;
+      max-height: 160px;
+      overflow: auto;
+      padding: 8px;
+      border-radius: 8px;
+      background: #0c1117;
+      color: #b7c6d6;
+      font: 11px/1.45 ui-monospace, Consolas, monospace;
+      white-space: pre-wrap;
+    }
+    #map { height: 100%; width: 100%; background: #0b1016; }
+    .check { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--text); }
+    .check input { width: auto; }
+    @media (max-width: 800px) {
+      body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(180px, 42vh); }
+      aside { border-right: 0; border-bottom: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <aside>
+    <div>
+      <h1>Realtime test client</h1>
+      <p class="hint">Tải graph của trip, chạy theo branch được gán, và vẫn nhận vị trí của client khác trên cùng socket.</p>
+    </div>
+
+    <div>
+      <div class="status"><span id="dot" class="dot"></span><span id="status">chưa kết nối</span></div>
+      <label for="base">Máy chủ</label>
+      <input id="base" value="ws://127.0.0.1:8080" autocomplete="off" />
+      <label for="room">Trip / room id</label>
+      <input id="room" placeholder="uuid của trip" autocomplete="off" />
+      <label for="token">Access token</label>
+      <input id="token" placeholder="JWT, gửi qua ?access_token=" autocomplete="off" />
+      <label for="me">User id của tôi (tuỳ chọn)</label>
+      <input id="me" placeholder="để gắn nhãn pin của bạn trong batch" autocomplete="off" />
+      <div class="actions">
+        <button id="connect" class="primary" type="button">Kết nối</button>
+        <button id="disconnect" type="button">Ngắt</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="actions">
+        <button id="loadGraph" class="primary" type="button">Tải graph</button>
+      </div>
+      <p class="hint">Gọi profile, members và GET /v1/trips/{id}/graph. Đường vàng là branch đang chạy. Các branch khác vẫn hiện mờ.</p>
+      <div id="branches"><p class="hint">Chưa tải graph.</p></div>
+    </div>
+
+    <div>
+      <label for="polyline">Polyline tay (ghi đè đường chạy)</label>
+      <textarea id="polyline" placeholder="Chuỗi encoded (precision 1e5), JSON [{lat,lng}], hoặc overview_polyline.points"></textarea>
+      <div class="row">
+        <div>
+          <label for="speed">Tốc độ (km/h)</label>
+          <input id="speed" type="number" min="0" max="300" step="1" value="25" />
+        </div>
+        <div>
+          <label for="interval">Gửi mỗi (ms)</label>
+          <input id="interval" type="number" min="200" max="5000" step="100" value="500" />
+        </div>
+      </div>
+      <label class="check"><input id="loop" type="checkbox" /> Lặp tuyến khi hết đường</label>
+      <label class="check"><input id="logPositions" type="checkbox" /> Ghi log từng batch vị trí</label>
+      <div class="actions">
+        <button id="apply" type="button">Áp dụng tuyến</button>
+        <button id="play" class="primary" type="button">Chạy</button>
+        <button id="pause" type="button">Tạm dừng</button>
+        <button id="reset" type="button">Về đầu</button>
+      </div>
+      <p id="routeInfo" class="hint">Chưa có tuyến.</p>
+    </div>
+
+    <div>
+      <div class="stats" id="counters">đã gửi 0 · đã nhận 0 batch</div>
+      <label>Client trong trip</label>
+      <div id="riders"><p class="hint">Chưa có vị trí nào.</p></div>
+    </div>
+
+    <div>
+      <label>Nhật ký</label>
+      <pre id="log"></pre>
+    </div>
+  </aside>
+  <main><div id="map"></div></main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@goongmaps/goong-js@1.0.9/dist/goong-js.js"></script>
+  <script src="config.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const STORAGE_KEY = "r2d-test-realtime";
+
+    const state = {
+      ws: null,
+      route: null,
+      distance: 0,
+      segIndex: 0,
+      playing: false,
+      finished: false,
+      lastFrame: 0,
+      lastSent: 0,
+      pendingPoint: null,
+      sent: 0,
+      batches: 0,
+      riders: new Map(),
+      markers: new Map(),
+      simMarker: null,
+      graph: null,
+      members: new Map(),
+      activeBranchId: "",
+      assignedBranchId: "",
+    };
+
+    let map = null;
+    let mapReady = false;
+    const whenMapReady = [];
+
+    function log(line) {
+      const box = $("log");
+      const stamp = new Date().toLocaleTimeString();
+      box.textContent = (box.textContent + stamp + "  " + line + "\n").split("\n").slice(-80).join("\n");
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function setConnected(on, text) {
+      $("dot").classList.toggle("on", on);
+      $("status").textContent = text;
+    }
+
+    function loadForm() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+        for (const id of ["base", "room", "token", "me", "speed", "interval"]) {
+          if (saved[id]) $(id).value = saved[id];
+        }
+        if (saved.loop) $("loop").checked = true;
+      } catch (_) { /* ignore broken local storage */ }
+    }
+
+    function saveForm() {
+      const data = {};
+      for (const id of ["base", "room", "token", "me", "speed", "interval"]) data[id] = $(id).value;
+      data.loop = $("loop").checked;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    }
+
+    function socketUrl() {
+      let base = $("base").value.trim().replace(/\/$/, "");
+      const room = $("room").value.trim();
+      if (!base || !room) throw new Error("Thiếu máy chủ hoặc room id");
+      if (!/\/v1\/realtime\/rooms$/i.test(base)) base += "/v1/realtime/rooms";
+      const url = new URL(base + "/" + encodeURIComponent(room));
+      const token = $("token").value.trim();
+      if (token) url.searchParams.set("access_token", token);
+      return url.toString();
+    }
+
+    function connect() {
+      saveForm();
+      disconnect(false);
+      clearRiders();
+      let url;
+      try { url = socketUrl(); }
+      catch (err) { setConnected(false, err.message); return; }
+      setConnected(false, "đang kết nối…");
+      log("mở " + url.replace(/access_token=[^&]+/, "access_token=***"));
+      const ws = new WebSocket(url);
+      state.ws = ws;
+      ws.onopen = () => {
+        setConnected(true, "đã kết nối");
+        log("socket mở");
+      };
+      ws.onmessage = (ev) => {
+        handleFrame(ev.data);
+      };
+      ws.onerror = () => log("socket lỗi");
+      ws.onclose = (ev) => {
+        if (state.ws === ws) state.ws = null;
+        state.playing = false;
+        const why = ev.reason ? " (" + ev.reason + ")" : "";
+        setConnected(false, "đã ngắt " + ev.code + why);
+        log("đóng " + ev.code + why);
+      };
+    }
+
+    function disconnect(userAction) {
+      const ws = state.ws;
+      state.ws = null;
+      state.playing = false;
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        ws.close(1000, userAction ? "client đóng" : "thay socket");
+      }
+      if (userAction) setConnected(false, "đã ngắt");
+    }
+
+    function handleFrame(raw) {
+      let msg;
+      try { msg = JSON.parse(raw); }
+      catch (_) { log("frame không phải JSON"); return; }
+      const type = msg.type;
+      const payload = msg.payload;
+      if (type === "tracking.positions" && Array.isArray(payload)) {
+        state.batches += 1;
+        for (const point of payload) applyPosition(point);
+        renderRiders();
+        updateCounters();
+        if ($("logPositions").checked) log("positions " + payload.length);
+        return;
+      }
+      if (type === "system.presence" && payload) {
+        applyPresence(payload);
+        renderRiders();
+        log("presence " + (payload.userId || payload.UserId) + " online=" + payload.online);
+        return;
+      }
+      if (type === "tracking.connection" && payload) {
+        applyConnection(payload);
+        renderRiders();
+        log("connection " + (payload.userId || payload.UserId) + " " + payload.connectionStatus);
+        return;
+      }
+      if (type === "tracking.onLeave") {
+        const text = typeof payload === "string" ? payload : "";
+        const id = text.replace(/^Goodbye user/, "");
+        if (id) markOffline(id);
+        renderRiders();
+        log(text || "onLeave");
+        return;
+      }
+      if (type === "system.error") {
+        log("lỗi " + (payload && payload.code ? payload.code : JSON.stringify(payload)));
+        return;
+      }
+      log(type + " " + (typeof payload === "string" ? payload : JSON.stringify(payload)));
+    }
+
+    function myId() {
+      return $("me").value.trim();
+    }
+
+    function applyPosition(point) {
+      const id = String(point.UserId || point.userId || "");
+      if (!id) return;
+      const prev = state.riders.get(id) || {};
+      const lat = Number(point.Lat ?? point.lat);
+      const lng = Number(point.Lng ?? point.lng);
+      state.riders.set(id, {
+        ...prev,
+        lat: Number.isFinite(lat) ? lat : prev.lat,
+        lng: Number.isFinite(lng) ? lng : prev.lng,
+        drive: point.DriveStatus || point.driveStatus || prev.drive || "",
+        connection: point.ConnectionStatus || point.connectionStatus || prev.connection || "",
+        online: true,
+        seen: Date.now(),
+      });
+      moveRiderMarker(id);
+    }
+
+    function applyPresence(payload) {
+      const id = String(payload.userId || payload.UserId || "");
+      if (!id) return;
+      const prev = state.riders.get(id) || { lat: null, lng: null };
+      state.riders.set(id, { ...prev, online: Boolean(payload.online), seen: prev.seen || Date.now() });
+      moveRiderMarker(id);
+    }
+
+    function applyConnection(payload) {
+      const id = String(payload.userId || payload.UserId || "");
+      if (!id) return;
+      const prev = state.riders.get(id) || {};
+      state.riders.set(id, {
+        ...prev,
+        connection: payload.connectionStatus || payload.ConnectionStatus || prev.connection || "",
+        seen: Date.now(),
+      });
+    }
+
+    function markOffline(id) {
+      const prev = state.riders.get(id);
+      if (!prev) {
+        state.riders.set(id, { lat: null, lng: null, online: false, seen: Date.now(), drive: "", connection: "DISCONNECTED" });
+        return;
+      }
+      prev.online = false;
+      prev.connection = "DISCONNECTED";
+    }
+
+    function clearRiders() {
+      state.riders.clear();
+      state.markers.forEach((marker) => marker.remove());
+      state.markers.clear();
+      renderRiders();
+    }
+
+    function markerDot(color, size, border) {
+      const el = document.createElement("div");
+      el.style.width = size + "px";
+      el.style.height = size + "px";
+      el.style.borderRadius = "50%";
+      el.style.background = color;
+      el.style.border = border;
+      el.style.boxSizing = "border-box";
+      return el;
+    }
+
+    function colorFor(id) {
+      let hash = 0;
+      for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+      return "hsl(" + (hash % 360) + " 72% 58%)";
+    }
+
+    function moveRiderMarker(id) {
+      const rider = state.riders.get(id);
+      if (!map || !rider || !Number.isFinite(rider.lat) || !Number.isFinite(rider.lng)) return;
+      const mine = id === myId();
+      let marker = state.markers.get(id);
+      if (!marker) {
+        const el = markerDot(colorFor(id), mine ? 16 : 14, mine ? "3px solid #fff" : "2px solid #10151c");
+        marker = new goongjs.Marker({ element: el, anchor: "center" }).setLngLat([rider.lng, rider.lat]).addTo(map);
+        marker._el = el;
+        state.markers.set(id, marker);
+      } else {
+        marker.setLngLat([rider.lng, rider.lat]);
+      }
+      marker._el.style.opacity = rider.online === false ? "0.4" : "1";
+      marker._el.title = (mine ? "bạn " : "") + id.slice(0, 8) + " · " + (branchLabel(memberBranchId(id)) || "—") + " · " + (rider.drive || "—");
+    }
+
+    function renderRiders() {
+      const box = $("riders");
+      if (state.riders.size === 0) {
+        box.innerHTML = '<p class="hint">Chưa có vị trí nào.</p>';
+        return;
+      }
+      const mine = myId();
+      const rows = [...state.riders.entries()].sort((a, b) => Number(b[0] === mine) - Number(a[0] === mine) || a[0].localeCompare(b[0]));
+      box.innerHTML = rows.map(([id, rider]) => {
+        const where = Number.isFinite(rider.lat) ? rider.lat.toFixed(5) + ", " + rider.lng.toFixed(5) : "chưa có toạ độ";
+        const age = rider.seen ? Math.max(0, Math.round((Date.now() - rider.seen) / 1000)) + "s" : "—";
+        const name = (id === mine ? "bạn · " : "") + id;
+        const branch = branchLabel(memberBranchId(id));
+        return '<div class="rider"><span class="swatch" style="background:' + colorFor(id) + '"></span><div><b>' +
+          escapeHtml(name) + '</b><small>' + escapeHtml(where) +
+          " · " + escapeHtml(branch || "chưa gán branch") +
+          " · " + escapeHtml(rider.drive || "—") +
+          " · " + escapeHtml(rider.connection || "—") +
+          " · " + (rider.online === false ? "offline" : "online") +
+          " · " + age + "</small></div></div>";
+      }).join("");
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+    }
+
+    function updateCounters() {
+      const point = state.pendingPoint;
+      const where = point ? " · " + point.lat.toFixed(5) + ", " + point.lng.toFixed(5) : "";
+      $("counters").textContent = "đã gửi " + state.sent + " · đã nhận " + state.batches + " batch" + where;
+    }
+
+    function decodeValue(encoded, index) {
+      let result = 0;
+      let shift = 0;
+      while (true) {
+        if (index >= encoded.length) throw new Error("polyline encoded bị cắt");
+        const bite = encoded.charCodeAt(index) - 63;
+        index += 1;
+        result += (bite & 0x1f) * (2 ** shift);
+        shift += 5;
+        if (bite < 0x20) break;
+      }
+      const value = result % 2 ? -Math.floor(result / 2) - 1 : Math.floor(result / 2);
+      return { value, index };
+    }
+
+    function decodePolyline(encoded) {
+      const points = [];
+      let lat = 0;
+      let lng = 0;
+      let index = 0;
+      while (index < encoded.length) {
+        const dLat = decodeValue(encoded, index);
+        index = dLat.index;
+        const dLng = decodeValue(encoded, index);
+        index = dLng.index;
+        lat += dLat.value;
+        lng += dLng.value;
+        points.push({ lat: lat / 1e5, lng: lng / 1e5 });
+      }
+      if (!points.length) throw new Error("polyline không ra điểm nào");
+      return points;
+    }
+
+    function pointsFromJson(data) {
+      const encoded = findEncoded(data);
+      if (encoded) return decodePolyline(encoded);
+      const points = findPoints(data);
+      if (points.length) return points;
+      throw new Error("JSON không có polyline hoặc danh sách toạ độ");
+    }
+
+    function findEncoded(data) {
+      if (!data || typeof data !== "object" || Array.isArray(data)) return "";
+      if (typeof data.polyline === "string") return data.polyline;
+      if (data.polyline && typeof data.polyline.points === "string") return data.polyline.points;
+      if (typeof data.points === "string") return data.points;
+      if (data.overview_polyline && typeof data.overview_polyline.points === "string") return data.overview_polyline.points;
+      if (Array.isArray(data.routes) && data.routes[0]) {
+        const fromRoute = findEncoded(data.routes[0]);
+        if (fromRoute) return fromRoute;
+      }
+      if (Array.isArray(data.legs)) {
+        const chunks = data.legs.map((leg) => findEncoded(leg)).filter(Boolean);
+        if (chunks.length) return chunks;
+      }
+      return "";
+    }
+
+    function findPoints(data) {
+      if (data && data.type === "LineString" && Array.isArray(data.coordinates)) {
+        return data.coordinates.map(([lng, lat]) => ({ lat: Number(lat), lng: Number(lng) }));
+      }
+      if (data && data.type === "Feature" && data.geometry) return findPoints(data.geometry);
+      if (data && !Array.isArray(data) && typeof data === "object") {
+        if (Array.isArray(data.points)) return findPoints(data.points);
+        if (Array.isArray(data.coordinates)) return findPoints(data.coordinates);
+        if (Array.isArray(data.path)) return findPoints(data.path);
+      }
+      if (!Array.isArray(data) || !data.length) return [];
+      if (typeof data[0] === "string") return data.flatMap((item) => decodePolyline(item));
+      if (Array.isArray(data[0]) && typeof data[0][0] === "number") {
+        return data.map(([lat, lng]) => ({ lat: Number(lat), lng: Number(lng) }));
+      }
+      if (typeof data[0] === "object") {
+        return data.map((point) => ({
+          lat: Number(point.lat ?? point.Lat ?? point.latitude),
+          lng: Number(point.lng ?? point.Lng ?? point.lon ?? point.longitude),
+        }));
+      }
+      return [];
+    }
+
+    function parseRouteInput(raw) {
+      const text = raw.trim();
+      if (!text) throw new Error("Polyline trống");
+      let points;
+      if (text[0] === "{" || text[0] === "[") {
+        let data;
+        try { data = JSON.parse(text); }
+        catch (err) { throw new Error("JSON không hợp lệ: " + err.message); }
+        const encoded = findEncoded(data);
+        points = Array.isArray(encoded) ? encoded.flatMap((item) => decodePolyline(item)) : pointsFromJson(data);
+      } else {
+        points = decodePolyline(text.replace(/\s+/g, ""));
+      }
+      points = points.filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+      if (points.length < 1) throw new Error("Không đọc được điểm nào");
+      return points;
+    }
+
+    function metersBetween(a, b) {
+      const R = 6371000;
+      const p1 = a.lat * Math.PI / 180;
+      const p2 = b.lat * Math.PI / 180;
+      const dp = (b.lat - a.lat) * Math.PI / 180;
+      const dl = (b.lng - a.lng) * Math.PI / 180;
+      const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+      return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+    }
+
+    function buildRoute(points) {
+      const cum = [0];
+      for (let i = 1; i < points.length; i++) cum.push(cum[i - 1] + metersBetween(points[i - 1], points[i]));
+      return { points, cum, total: cum[cum.length - 1] };
+    }
+
+    function applyRoute() {
+      let points;
+      try { points = parseRouteInput($("polyline").value); }
+      catch (err) {
+        $("routeInfo").textContent = err.message;
+        return;
+      }
+      state.route = buildRoute(points);
+      state.distance = 0;
+      state.segIndex = 0;
+      state.finished = false;
+      state.playing = false;
+      setRouteLine(points);
+      const start = points[0];
+      state.pendingPoint = start;
+      moveSim(start);
+      focusRoute(points);
+      const km = (state.route.total / 1000).toFixed(2);
+      $("routeInfo").textContent = points.length + " điểm · " + km + " km. Ghim vàng là vị trí đang gửi. Ghim màu là client khác.";
+      updateCounters();
+    }
+
+    function moveSim(point) {
+      if (!map) return;
+      if (!state.simMarker) {
+        const el = markerDot("#ffd166", 16, "2px solid #1b1404");
+        el.style.zIndex = "2";
+        el.title = "đang gửi";
+        state.simMarker = new goongjs.Marker({ element: el, anchor: "center" }).setLngLat([point.lng, point.lat]).addTo(map);
+      } else {
+        state.simMarker.setLngLat([point.lng, point.lat]);
+      }
+    }
+
+    function initMap() {
+      const key = window.GOONG_MAP_RENDER_API_KEY || "";
+      if (!key || typeof goongjs === "undefined") {
+        $("routeInfo").textContent = "Không tải được Goong. Kiểm tra config.js (GOONG_MAP_RENDER_API_KEY) và mạng.";
+        return;
+      }
+      goongjs.accessToken = key;
+      map = new goongjs.Map({
+        container: "map",
+        style: "https://tiles.goong.io/assets/goong_map_web.json",
+        center: [106.7009, 10.7769],
+        zoom: 12,
+      });
+      map.addControl(new goongjs.NavigationControl(), "top-right");
+      map.on("load", () => {
+        map.addSource("route", {
+          type: "geojson",
+          data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [] } },
+        });
+        map.addLayer({
+          id: "route-line",
+          type: "line",
+          source: "route",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: { "line-color": "#2563eb", "line-width": 4, "line-opacity": 0.9 },
+        });
+        const empty = { type: "FeatureCollection", features: [] };
+        map.addSource("branches", { type: "geojson", data: empty });
+        map.addLayer({
+          id: "branch-lines",
+          type: "line",
+          source: "branches",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": ["case", ["==", ["get", "mine"], true], "#ffd166", ["get", "color"]],
+            "line-width": ["case", ["==", ["get", "mine"], true], 6, 3],
+            "line-opacity": ["case", ["==", ["get", "mine"], true], 0.95, 0.4],
+          },
+        });
+        map.addSource("stops", { type: "geojson", data: empty });
+        map.addLayer({
+          id: "branch-stops",
+          type: "circle",
+          source: "stops",
+          paint: {
+            "circle-radius": ["case", ["==", ["get", "mine"], true], 6, 4],
+            "circle-color": ["case", ["==", ["get", "mine"], true], "#ffd166", "#8aa0b8"],
+            "circle-stroke-width": 1,
+            "circle-stroke-color": "#10151c",
+          },
+        });
+        map.on("click", "branch-lines", (event) => {
+          const feature = event.features && event.features[0];
+          if (feature && feature.properties && feature.properties.id) rideBranch(feature.properties.id);
+        });
+        map.on("mouseenter", "branch-lines", () => { map.getCanvas().style.cursor = "pointer"; });
+        map.on("mouseleave", "branch-lines", () => { map.getCanvas().style.cursor = ""; });
+        mapReady = true;
+        while (whenMapReady.length) whenMapReady.shift()();
+      });
+      map.on("error", (event) => {
+        if (state.mapErrorLogged) return;
+        state.mapErrorLogged = true;
+        log("bản đồ: " + (event && event.error ? event.error.message : "lỗi tile Goong"));
+      });
+      window.addEventListener("resize", () => map.resize());
+    }
+
+    function setRouteLine(points) {
+      const data = {
+        type: "Feature",
+        properties: {},
+        geometry: { type: "LineString", coordinates: points.map((point) => [point.lng, point.lat]) },
+      };
+      const draw = () => map.getSource("route").setData(data);
+      if (mapReady && map && map.getSource("route")) draw();
+      else whenMapReady.push(draw);
+    }
+
+    function setGeo(sourceId, data) {
+      const draw = () => {
+        const source = map && map.getSource(sourceId);
+        if (source) source.setData(data);
+      };
+      if (mapReady && map && map.getSource(sourceId)) draw();
+      else whenMapReady.push(draw);
+    }
+
+    function httpOrigin() {
+      const raw = $("base").value.trim();
+      if (!raw) throw new Error("Thiếu máy chủ");
+      const url = new URL(raw);
+      url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+      return url.origin;
+    }
+
+    async function apiGet(path) {
+      const token = $("token").value.trim();
+      let response;
+      try {
+        response = await fetch(httpOrigin() + path, {
+          headers: token ? { Authorization: "Bearer " + token } : {},
+        });
+      } catch (err) {
+        throw new Error("Không gọi được " + path + ". Server đang chạy và đã bật CORS chưa? " + err.message);
+      }
+      const text = await response.text();
+      let body = null;
+      try { body = text ? JSON.parse(text) : null; }
+      catch (_) { body = { message: text }; }
+      if (!response.ok) {
+        throw new Error(path + " → " + response.status + " " + ((body && body.message) || ""));
+      }
+      return body;
+    }
+
+    function memberBranchId(userId) {
+      const member = state.members.get(userId);
+      return (member && member.assignedBranchId) || "";
+    }
+
+    function branchById(id) {
+      return ((state.graph && state.graph.branches) || []).find((branch) => branch.id === id) || null;
+    }
+
+    function branchLabel(id) {
+      if (!id) return "";
+      const branch = branchById(id);
+      return branch ? (branch.label || id.slice(0, 8)) : id.slice(0, 8);
+    }
+
+    function appendPoints(into, extra) {
+      for (const point of extra) {
+        if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) continue;
+        const last = into[into.length - 1];
+        if (last && Math.abs(last.lat - point.lat) < 1e-6 && Math.abs(last.lng - point.lng) < 1e-6) continue;
+        into.push(point);
+      }
+    }
+
+    function branchPath(branch) {
+      const stops = branch.stops || [];
+      const travels = branch.travels || [];
+      const points = [];
+      let missing = 0;
+      const hops = Math.max(stops.length - 1, 0);
+      for (let i = 0; i < hops; i++) {
+        const hop = travels[i];
+        let hopPoints = [];
+        if (hop && hop.polyline) {
+          try { hopPoints = decodePolyline(hop.polyline); }
+          catch (_) { hopPoints = []; }
+        }
+        if (hopPoints.length < 2) {
+          missing += 1;
+          const from = stops[i];
+          const to = stops[i + 1];
+          if (from && to) hopPoints = [{ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng }];
+        }
+        appendPoints(points, hopPoints);
+      }
+      if (!points.length) {
+        for (const stop of stops) appendPoints(points, [{ lat: stop.lat, lng: stop.lng }]);
+      }
+      return { points, missing };
+    }
+
+    const branchColors = ["#7eb6ff", "#c084fc", "#34d399", "#fb7185", "#fbbf24", "#22d3ee"];
+
+    function drawGraph(fit) {
+      const branches = (state.graph && state.graph.branches) || [];
+      const lines = [];
+      const stops = [];
+      const camera = [];
+      branches.forEach((branch, index) => {
+        const built = branchPath(branch);
+        branch._points = built.points;
+        branch._missing = built.missing;
+        const mine = branch.id === state.activeBranchId;
+        if (built.points.length >= 2) {
+          lines.push({
+            type: "Feature",
+            properties: {
+              id: branch.id,
+              label: branch.label || "",
+              mine: mine,
+              color: branchColors[index % branchColors.length],
+            },
+            geometry: { type: "LineString", coordinates: built.points.map((point) => [point.lng, point.lat]) },
+          });
+        }
+        for (const stop of branch.stops || []) {
+          if (!Number.isFinite(stop.lat) || !Number.isFinite(stop.lng)) continue;
+          stops.push({
+            type: "Feature",
+            properties: { name: stop.name || "", mine: mine, branchId: branch.id },
+            geometry: { type: "Point", coordinates: [stop.lng, stop.lat] },
+          });
+          camera.push({ lat: stop.lat, lng: stop.lng });
+        }
+      });
+      setGeo("branches", { type: "FeatureCollection", features: lines });
+      setGeo("stops", { type: "FeatureCollection", features: stops });
+      if (fit && camera.length) focusRoute(camera);
+    }
+
+    function renderBranches() {
+      const box = $("branches");
+      const branches = (state.graph && state.graph.branches) || [];
+      if (!branches.length) {
+        box.innerHTML = '<p class="hint">Graph không có branch trên lộ trình.</p>';
+        return;
+      }
+      box.innerHTML = branches.map((branch) => {
+        const people = [];
+        for (const member of state.members.values()) {
+          if (member.assignedBranchId === branch.id) {
+            people.push(member.username || member.nickname || String(member.userId).slice(0, 8));
+          }
+        }
+        const km = branch._points ? (buildRoute(branch._points).total / 1000).toFixed(2) : "0";
+        const tags = [];
+        if (branch.id === state.assignedBranchId) tags.push("được gán");
+        if (branch.id === state.activeBranchId) tags.push("đang chạy");
+        const missing = branch._missing ? " · " + branch._missing + " hop nối thẳng" : "";
+        return '<button type="button" class="branch' + (branch.id === state.activeBranchId ? " active" : "") +
+          '" data-branch="' + escapeHtml(branch.id) + '"><b>' + escapeHtml(branch.label || branch.id.slice(0, 8)) +
+          "</b> " + escapeHtml(tags.join(" · ")) +
+          "<small>" + (branch.stops || []).length + " điểm · " + km + " km" + missing +
+          (people.length ? " · " + escapeHtml(people.join(", ")) : "") + "</small></button>";
+      }).join("");
+    }
+
+    function rideBranch(branchId) {
+      const branch = branchById(branchId);
+      if (!branch) return;
+      if (!branch._points) {
+        const built = branchPath(branch);
+        branch._points = built.points;
+        branch._missing = built.missing;
+      }
+      if (!branch._points.length) {
+        $("routeInfo").textContent = "Branch không có điểm để chạy.";
+        return;
+      }
+      const wasPlaying = state.playing;
+      state.activeBranchId = branchId;
+      state.route = buildRoute(branch._points);
+      state.distance = 0;
+      state.segIndex = 0;
+      state.finished = false;
+      state.pendingPoint = branch._points[0];
+      setRouteLine([]);
+      moveSim(branch._points[0]);
+      drawGraph(false);
+      focusRoute(branch._points);
+      renderBranches();
+      const km = (state.route.total / 1000).toFixed(2);
+      const assigned = branchId === state.assignedBranchId ? " Branch này là branch được gán." : " Đây không phải branch được gán.";
+      $("routeInfo").textContent = (branch.label || branchId.slice(0, 8)) + " · " + km + " km." + assigned +
+        (branch._missing ? " " + branch._missing + " hop chưa có polyline, đang nối thẳng điểm dừng." : "");
+      updateCounters();
+      if (wasPlaying) {
+        state.playing = true;
+        state.lastFrame = performance.now();
+        state.lastSent = 0;
+      }
+    }
+
+    async function loadGraph() {
+      saveForm();
+      const tripId = $("room").value.trim();
+      if (!tripId) {
+        $("routeInfo").textContent = "Thiếu trip id.";
+        return;
+      }
+      if (!$("token").value.trim()) {
+        $("routeInfo").textContent = "Thiếu access token.";
+        return;
+      }
+      $("routeInfo").textContent = "Đang tải graph…";
+      try {
+        const me = await apiGet("/v1/auth/user/me");
+        if (me && me.id) {
+          $("me").value = me.id;
+          saveForm();
+        }
+        const tripPath = "/v1/trips/" + encodeURIComponent(tripId);
+        const [graph, roster] = await Promise.all([
+          apiGet(tripPath + "/graph"),
+          apiGet(tripPath + "/members"),
+        ]);
+        state.graph = graph || { branches: [] };
+        state.members = new Map();
+        for (const member of (roster && roster.members) || []) {
+          if (member && member.userId) state.members.set(member.userId, member);
+        }
+        const mine = state.members.get($("me").value.trim());
+        state.assignedBranchId = (mine && mine.assignedBranchId) || "";
+        state.activeBranchId = state.assignedBranchId;
+        drawGraph(!state.activeBranchId);
+        renderBranches();
+        renderRiders();
+        const count = (state.graph.branches || []).length;
+        log("graph " + (graph.name || tripId) + " · " + count + " branch");
+        if (state.activeBranchId && branchById(state.activeBranchId)) rideBranch(state.activeBranchId);
+        else {
+          state.activeBranchId = "";
+          drawGraph(true);
+          renderBranches();
+          $("routeInfo").textContent = count + " branch. Bạn chưa được gán branch — bấm một branch để chạy.";
+        }
+      } catch (err) {
+        $("routeInfo").textContent = err.message;
+        log(err.message);
+      }
+    }
+
+    function focusRoute(points) {
+      if (!map || !points.length) return;
+      if (points.length === 1) {
+        map.jumpTo({ center: [points[0].lng, points[0].lat], zoom: 16 });
+        return;
+      }
+      const bounds = new goongjs.LngLatBounds();
+      for (const point of points) bounds.extend([point.lng, point.lat]);
+      map.fitBounds(bounds, { padding: 28, duration: 0 });
+    }
+
+    function pointAt(distance) {
+      const route = state.route;
+      if (!route) return null;
+      if (route.points.length === 1 || route.total <= 0) return route.points[0];
+      let traveled = distance;
+      if ($("loop").checked) traveled = traveled % route.total;
+      else if (traveled >= route.total) {
+        state.finished = true;
+        state.playing = false;
+        return route.points[route.points.length - 1];
+      }
+      let index = state.segIndex;
+      while (index < route.cum.length - 2 && route.cum[index + 1] < traveled) index += 1;
+      while (index > 0 && route.cum[index] > traveled) index -= 1;
+      state.segIndex = index;
+      const span = route.cum[index + 1] - route.cum[index];
+      const t = span === 0 ? 0 : (traveled - route.cum[index]) / span;
+      const a = route.points[index];
+      const b = route.points[index + 1];
+      return { lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t };
+    }
+
+    function sendPosition(point) {
+      const ws = state.ws;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({ type: "tracking.position", payload: { Lat: point.lat, Lng: point.lng } }));
+      state.sent += 1;
+      updateCounters();
+    }
+
+    function play() {
+      if (!state.route) {
+        $("routeInfo").textContent = "Hãy tải graph hoặc áp dụng polyline trước.";
+        return;
+      }
+      if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+        setConnected(false, "hãy kết nối trước khi chạy");
+        return;
+      }
+      if (state.finished && !$("loop").checked) {
+        state.distance = 0;
+        state.segIndex = 0;
+        state.finished = false;
+      }
+      state.playing = true;
+      state.lastFrame = performance.now();
+      state.lastSent = 0;
+      log("bắt đầu chạy tuyến");
+    }
+
+    function pause() {
+      state.playing = false;
+      log("tạm dừng");
+    }
+
+    function resetRoute() {
+      state.playing = false;
+      state.finished = false;
+      state.distance = 0;
+      state.segIndex = 0;
+      if (!state.route) return;
+      state.pendingPoint = state.route.points[0];
+      moveSim(state.pendingPoint);
+      updateCounters();
+    }
+
+    function frame(now) {
+      requestAnimationFrame(frame);
+      if (state.playing && state.route) {
+        const dt = Math.min(1, (now - state.lastFrame) / 1000);
+        state.lastFrame = now;
+        const speed = Number($("speed").value);
+        const metersPerSecond = (Number.isFinite(speed) ? speed : 0) * 1000 / 3600;
+        state.distance += metersPerSecond * dt;
+        const point = pointAt(state.distance);
+        if (point) {
+          state.pendingPoint = point;
+          moveSim(point);
+        }
+        const every = Math.max(200, Number($("interval").value) || 500);
+        if (point && now - state.lastSent >= every) {
+          state.lastSent = now;
+          sendPosition(point);
+        }
+        if (state.finished) {
+          $("routeInfo").textContent = "Đã hết tuyến. Các client khác vẫn được cập nhật khi còn kết nối.";
+          log("hết tuyến");
+        }
+      }
+      if (state.riders.size && Math.floor(now / 1000) !== Math.floor(state.lastAgePaint / 1000)) {
+        state.lastAgePaint = now;
+        renderRiders();
+      }
+    }
+
+    $("loadGraph").addEventListener("click", loadGraph);
+    $("branches").addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-branch]");
+      if (button) rideBranch(button.dataset.branch);
+    });
+    $("connect").addEventListener("click", connect);
+    $("disconnect").addEventListener("click", () => disconnect(true));
+    $("apply").addEventListener("click", applyRoute);
+    $("play").addEventListener("click", play);
+    $("pause").addEventListener("click", pause);
+    $("reset").addEventListener("click", resetRoute);
+    for (const id of ["base", "room", "token", "me", "speed", "interval", "loop"]) {
+      $(id).addEventListener("change", saveForm);
+    }
+
+    loadForm();
+    initMap();
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>

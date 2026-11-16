@@ -4,12 +4,12 @@ import (
 	"time"
 
 	"Road-To-Destination-BE/module/realtime"
+	"Road-To-Destination-BE/module/tracking/model/message"
 	"Road-To-Destination-BE/utils/enum"
-
-	"github.com/google/uuid"
 )
 
 func (t *TrackingCoordinator) OnTick(s realtime.Session, now time.Time) {
+	t.applyRedirectResults(s, now)
 	t.updateMemberPosition(s, now)()
 	t.markTripComplete()
 }
@@ -18,15 +18,7 @@ func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.
 		i = 0
 		n = len(t.progresses)
 	)
-	type position struct {
-		UserId           uuid.UUID
-		Lat, Lng         float64
-		BatteryPercent   int
-		SignalBars       int
-		DriveStatus      enum.DriveStatus
-		ConnectionStatus enum.ConnectionStatus
-	}
-	msg := make([]position, n)
+	msg := make([]message.RiderPosition, n)
 	return func() {
 		status := t.tripInformation.Status
 		if status == enum.TripCompleted {
@@ -43,6 +35,7 @@ func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.
 					continue
 				}
 				progress.ApplySnap()
+				t.applyDeviation(s, progress, now)
 				// A stopped rider is omitted. The client keeps the last pin it saw.
 				if progress.DriveStatus != enum.COMPLETED {
 					progress.SubmitSample()
@@ -51,8 +44,8 @@ func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.
 				continue
 			}
 
-			msg[i] = position{
-				UserId:           userId,
+			msg[i] = message.RiderPosition{
+				UserID:           userId,
 				Lat:              progress.Lat,
 				Lng:              progress.Lng,
 				BatteryPercent:   progress.BatteryPercent,
@@ -65,7 +58,7 @@ func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.
 		if i == 0 {
 			return
 		}
-		s.Broadcast("tracking.positions", msg[:i])
+		s.Broadcast(message.OutPositions, msg[:i])
 		i = 0
 	}
 
