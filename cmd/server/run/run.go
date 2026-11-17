@@ -79,8 +79,12 @@ func Run() error {
 	if err != nil {
 		log.Fatal(err)
 	}
+	bucketLimiter, bucketError := middleware.NewTokenBucket(middleware.DefaultTokenBucketConfig(), redisConfig.Client())
+	if bucketError != nil {
+		return bucketError
+	}
 	routerRegistrars := []share.RouterRegistrar{
-		authenController.NewAuthenticationController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator),
+		authenController.NewAuthenticationController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, bucketLimiter),
 		friendController.NewFriendController(dbConfig.GetDatabase(), authMw),
 		groupController.NewGroupController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw),
 		tripController.NewTripController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw, responseCacheMw),

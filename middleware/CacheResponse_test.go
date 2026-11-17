@@ -72,14 +72,15 @@ func TestCacheAroundSkipsSaveWhenAWriteLandsMidRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cache := testResponseCache(t)
 	router := gin.New()
+	router.PUT("/trips/:tripId/graph", putGraphKey, cache.MarkChanged(), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
 	router.GET("/trips/:tripId/graph", putGraphKey, cache.CacheAround(), func(c *gin.Context) {
-		// Cùng việc MarkChanged làm: đặt dấu changed rồi tăng generation, trong lúc GET này chưa ghi xong.
-		ctx := c.Request.Context()
-		if err := cache.client.Set(ctx, "resp:graph:trip-1", cacheChanged, cache.ttl).Err(); err != nil {
-			t.Fatal(err)
-		}
-		if err := cache.client.Incr(ctx, generationKey("resp:graph:trip-1")).Err(); err != nil {
-			t.Fatal(err)
+		// Finish a real write while this GET still holds the old generation.
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPut, "/trips/trip-1/graph", nil))
+		if recorder.Code != http.StatusNoContent {
+			t.Fatalf("write status = %d", recorder.Code)
 		}
 		c.JSON(http.StatusOK, gin.H{"stale": true})
 	})
@@ -91,6 +92,64 @@ func TestCacheAroundSkipsSaveWhenAWriteLandsMidRequest(t *testing.T) {
 	}
 	if raw != cacheChanged {
 		t.Fatalf("body = %q, want the changed mark", raw)
+	}
+}
+
+type cacheInvalidationTestKey struct{}
+
+// Simulate an old GET saving immediately after the first invalidation command.
+// Separate SET/INCR commands allow that body to survive the invalidation.
+type staleResponseSaveHook struct {
+	cache     *ResponseCache
+	attempted bool
+	saved     int
+	err       error
+}
+
+func (h *staleResponseSaveHook) DialHook(next redis.DialHook) redis.DialHook {
+	return next
+}
+
+func (h *staleResponseSaveHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return next
+}
+
+func (h *staleResponseSaveHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return func(ctx context.Context, cmd redis.Cmder) error {
+		err := next(ctx, cmd)
+		if err == nil && ctx.Value(cacheInvalidationTestKey{}) == true && !h.attempted {
+			h.attempted = true
+			h.saved, h.err = saveBody.Run(context.Background(), h.cache.client,
+				[]string{"resp:graph:trip-1", generationKey("resp:graph:trip-1")},
+				"0", `{"stale":true}`, int(h.cache.ttl.Seconds())).Int()
+		}
+		return err
+	}
+}
+
+func TestMarkChangedPreventsStaleSaveBetweenRedisCommands(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cache := testResponseCache(t)
+	// Initialize the connection before installing the command interleaving hook.
+	if err := cache.client.Ping(context.Background()).Err(); err != nil {
+		t.Fatal(err)
+	}
+	hook := &staleResponseSaveHook{cache: cache}
+	cache.client.AddHook(hook)
+	router := gin.New()
+	router.PUT("/trips/:tripId/graph", putGraphKey, cache.MarkChanged(), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+	ctx := context.WithValue(context.Background(), cacheInvalidationTestKey{}, true)
+	request := httptest.NewRequest(http.MethodPut, "/trips/trip-1/graph", nil).WithContext(ctx)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if !hook.attempted || hook.err != nil || hook.saved != 0 {
+		t.Fatalf("stale save attempted = %v, saved = %d, error = %v", hook.attempted, hook.saved, hook.err)
+	}
+	raw, err := cache.client.Get(context.Background(), "resp:graph:trip-1").Result()
+	if err != nil || raw != cacheChanged {
+		t.Fatalf("cached body = %q, error = %v", raw, err)
 	}
 }
 

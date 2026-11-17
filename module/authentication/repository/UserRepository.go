@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -18,14 +19,17 @@ func (u *UserRepository) ResetPassword(ctx context.Context, userId uuid.UUID, ne
 	if err != nil {
 		return err
 	}
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(newPassword))
+	if err == nil {
+		return errors.New("new password is same as old one ")
+	}
 	newHashPassword, err := model.HashPassword(newPassword)
 	if err != nil {
 		return err
 	}
-	if newHashPassword == user.Password {
-		return errors.New("new password is same as old one ")
+	if err := u.db.Table(model.User{}.TableName()).Where("id = ?", userId).Update("password", newHashPassword).Error; err != nil {
+		return err
 	}
-	u.db.Table(model.User{}.TableName()).Where("id = ?", userId).Update("password", newHashPassword)
 	return nil
 }
 

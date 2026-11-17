@@ -48,18 +48,19 @@ type AuthenticationController struct {
 	db          *gorm.DB
 	redisClient *redis.Client
 	validator   *validator.Validate
+	rateLimiter middleware.RateLimiter
 }
 
-func NewAuthenticationController(db *gorm.DB, client *redis.Client, validator *validator.Validate) *AuthenticationController {
-	return &AuthenticationController{db: db, redisClient: client, validator: validator}
+func NewAuthenticationController(db *gorm.DB, client *redis.Client, validator *validator.Validate, rateLimiter middleware.RateLimiter) *AuthenticationController {
+	return &AuthenticationController{db: db, redisClient: client, validator: validator, rateLimiter: rateLimiter}
 }
 
 func (ctrl AuthenticationController) RegisterRoutes(router *gin.RouterGroup) {
 	nodeGroup := router.Group("/auth")
 	{
 		auth := middleware.NewAuthenticationMiddleware(repository.NewCacheUserRepository(ctrl.db, ctrl.redisClient))
-		nodeGroup.POST("/user/register", ctrl.HandleRegister())
-		nodeGroup.POST("/user/login", ctrl.HandleLogin())
+		nodeGroup.POST("/user/register", ctrl.rateLimiter.RequireIPLimiter(), ctrl.HandleRegister())
+		nodeGroup.POST("/user/login", ctrl.rateLimiter.RequireIPLimiter(), ctrl.HandleLogin())
 		nodeGroup.GET("/user/me", auth.RequireAuth(), ctrl.HandleMyProfile())
 		nodeGroup.POST("/user/avatar", auth.RequireAuth(), ctrl.HandleRequestAvatar())
 		nodeGroup.POST("/user/avatar/confirm", auth.RequireAuth(), ctrl.HandleConfirmAvatar())
@@ -163,7 +164,8 @@ func (ctrl AuthenticationController) HandleGetUserProfile() gin.HandlerFunc {
 			jsonError(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		c.JSON(http.StatusOK, user)
+		isOwner := user.Username == middleware.GetCurrentUsername(c)
+		c.JSON(http.StatusOK, response.UserToUserProfileResponse(user, isOwner))
 	}
 }
 

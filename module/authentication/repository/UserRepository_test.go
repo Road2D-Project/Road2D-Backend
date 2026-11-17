@@ -1,0 +1,80 @@
+package repository
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"Road-To-Destination-BE/module/authentication/model"
+
+	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+)
+
+func TestResetPasswordRejectsReuseAndPropagatesWriteErrors(t *testing.T) {
+	const oldPassword = "OldPassword1!"
+	oldHash, err := bcrypt.GenerateFromPassword([]byte(oldPassword), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeError := errors.New("password update failed")
+	for _, test := range []struct {
+		name        string
+		password    string
+		writeError  error
+		wantError   bool
+		wantUpdates int
+	}{
+		{"different password is saved", "NewPassword1!", nil, false, 1},
+		{"same password is rejected", oldPassword, nil, true, 0},
+		{"database error is returned", "NewPassword1!", writeError, true, 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			db, err := gorm.Open(postgres.New(postgres.Config{
+				DSN: "host=127.0.0.1 port=5432 user=test dbname=test sslmode=disable",
+			}), &gorm.Config{DisableAutomaticPing: true, SkipDefaultTransaction: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			sqlDB, err := db.DB()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = sqlDB.Close() })
+			userID := uuid.New()
+			// Replace database operations so this regression test needs no server.
+			if err := db.Callback().Query().Replace("gorm:query", func(tx *gorm.DB) {
+				user := tx.Statement.Dest.(*model.User)
+				user.ID = userID
+				user.Password = string(oldHash)
+				tx.RowsAffected = 1
+			}); err != nil {
+				t.Fatal(err)
+			}
+			updates := 0
+			var savedHash string
+			if err := db.Callback().Update().Replace("gorm:update", func(tx *gorm.DB) {
+				updates++
+				savedHash = tx.Statement.Dest.(map[string]interface{})["password"].(string)
+				tx.RowsAffected = 1
+				if test.writeError != nil {
+					tx.AddError(test.writeError)
+				}
+			}); err != nil {
+				t.Fatal(err)
+			}
+			err = NewUserRepository(db).ResetPassword(context.Background(), userID, test.password)
+			if (err != nil) != test.wantError || updates != test.wantUpdates {
+				t.Fatalf("error = %v, updates = %d, want error = %v, updates = %d", err, updates, test.wantError, test.wantUpdates)
+			}
+			if test.writeError != nil && !errors.Is(err, test.writeError) {
+				t.Fatalf("error = %v, want %v", err, test.writeError)
+			}
+			if !test.wantError && bcrypt.CompareHashAndPassword([]byte(savedHash), []byte(test.password)) != nil {
+				t.Fatal("stored hash does not match the new password")
+			}
+		})
+	}
+}
