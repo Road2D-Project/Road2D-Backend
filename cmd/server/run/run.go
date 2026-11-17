@@ -9,6 +9,7 @@ import (
 	"Road-To-Destination-BE/middleware"
 	authenController "Road-To-Destination-BE/module/authentication/controller"
 	authenRepo "Road-To-Destination-BE/module/authentication/repository"
+	authenService "Road-To-Destination-BE/module/authentication/service"
 	friendController "Road-To-Destination-BE/module/friend/controller"
 	groupController "Road-To-Destination-BE/module/group/controller"
 	mapsClient "Road-To-Destination-BE/module/maps/client"
@@ -29,6 +30,9 @@ import (
 // Wire dependencies
 // Define controller
 func Run() error {
+	if err := authenService.ValidateJWTSecrets(); err != nil {
+		return err
+	}
 	dbConfig := configuration.DatabaseConfig{}
 	var redisConfig configuration.RedisConfiguration
 	redisConfig.Connect()
@@ -85,7 +89,7 @@ func Run() error {
 	}
 
 	authMw := middleware.NewAuthenticationMiddleware(
-		authenRepo.NewCacheUserRepository(dbConfig.GetDatabase(), redisConfig.Client()),
+		authenRepo.NewUserRepository(dbConfig.GetDatabase()),
 	)
 	responseCacheMw := middleware.NewResponseCache(redisConfig.Client())
 	// Mount domain modules on this hub before the listener accepts sockets.

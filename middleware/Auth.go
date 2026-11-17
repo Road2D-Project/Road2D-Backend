@@ -5,10 +5,12 @@ import (
 	"Road-To-Destination-BE/module/authentication/service"
 	"Road-To-Destination-BE/module/share"
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type AuthUserRepository interface {
@@ -50,7 +52,15 @@ func (auth *AuthenticationMiddleware) RequireAuth() gin.HandlerFunc {
 		}
 
 		authorizedUser, err := auth.userRepo.FindUserByUsername(c.Request.Context(), username)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, share.NewError(http.StatusServiceUnavailable, "Authentication temporarily unavailable"))
+			return
+		}
 		if err == nil && authorizedUser != nil {
+			if err := service.ValidateUserSession(claims, authorizedUser); err != nil {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, share.NewError(http.StatusUnauthorized, "Session has expired"))
+				return
+			}
 			c.Set("currentUser", authorizedUser)
 			c.Set("username", username)
 			c.Next()

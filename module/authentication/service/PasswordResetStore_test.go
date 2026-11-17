@@ -22,10 +22,10 @@ func testResetStore(t *testing.T) *repository.PasswordResetStore {
 }
 
 func TestForgetPasswordSkipsSecondMailWhileKeyExists(t *testing.T) {
-	t.Setenv("SECRET_MAIL_JWT", "test-mail-secret")
+	setTestJWTSecrets(t)
 	t.Setenv("APP_PUBLIC_URL", "http://localhost:8080")
 
-	user := &model.User{Username: "traveler", Email: "traveler@example.com"}
+	user := &model.User{Username: "traveler", Email: "traveler@example.com", SessionVersion: 1}
 	user.ID = uuid.New()
 	mailer := &stubMailClient{}
 	svc := NewForgetPasswordService(stubMailRepo{user: user}, mailer, testResetStore(t))
@@ -71,12 +71,28 @@ func TestForgetPasswordBlockedByResetCooldown(t *testing.T) {
 }
 
 type stubResetRepo struct {
-	calls int
+	calls      int
+	afterReset func()
 }
 
-func (s *stubResetRepo) ResetPassword(context.Context, uuid.UUID, string) error {
+func (s *stubResetRepo) ResetPassword(context.Context, uuid.UUID, string, int64) error {
 	s.calls++
+	if s.afterReset != nil {
+		s.afterReset()
+	}
 	return nil
+}
+
+func TestResetPasswordSucceedsWhenRedisCleanupFailsAfterDatabaseWrite(t *testing.T) {
+	mini := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mini.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	repo := &stubResetRepo{afterReset: func() { _ = client.Close() }}
+	svc := NewResetPasswordService(repo, repository.NewPasswordResetStore(client))
+	message, err := svc.ResetPassword(context.Background(), uuid.New(), "traveler@example.com", "NewPassword1!", "NewPassword1!", 1)
+	if err != nil || repo.calls != 1 || message != repository.PasswordResetSuccessMessage {
+		t.Fatalf("message = %q, writes = %d, error = %v", message, repo.calls, err)
+	}
 }
 
 func TestResetPasswordClearsForgetKeyAndBlocksReuse(t *testing.T) {
@@ -89,7 +105,7 @@ func TestResetPasswordClearsForgetKeyAndBlocksReuse(t *testing.T) {
 	repo := &stubResetRepo{}
 	svc := NewResetPasswordService(repo, store)
 
-	if _, err := svc.ResetPassword(context.Background(), userID, email, "Newpass1!", "Newpass1!"); err != nil {
+	if _, err := svc.ResetPassword(context.Background(), userID, email, "Newpass1!", "Newpass1!", 1); err != nil {
 		t.Fatal(err)
 	}
 	if repo.calls != 1 {
@@ -103,7 +119,7 @@ func TestResetPasswordClearsForgetKeyAndBlocksReuse(t *testing.T) {
 		t.Fatal("forget-pass key should be removed after successful reset")
 	}
 
-	_, err = svc.ResetPassword(context.Background(), userID, email, "Otherpass1!", "Otherpass1!")
+	_, err = svc.ResetPassword(context.Background(), userID, email, "Otherpass1!", "Otherpass1!", 1)
 	var cooldown *repository.PasswordResetCooldownError
 	if !errors.As(err, &cooldown) {
 		t.Fatalf("got %v, want cooldown", err)
