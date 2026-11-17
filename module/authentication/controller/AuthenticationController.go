@@ -66,11 +66,11 @@ func (ctrl AuthenticationController) RegisterRoutes(router *gin.RouterGroup) {
 		nodeGroup.POST("/user/avatar/confirm", auth.RequireAuth(), ctrl.HandleConfirmAvatar())
 		nodeGroup.DELETE("/user/avatar", auth.RequireAuth(), ctrl.HandleDeleteAvatar())
 		nodeGroup.GET("/user/:id", auth.RequireAuth(), ctrl.HandleGetUserProfile())
-		nodeGroup.POST("/user/refresh", ctrl.HandleRefreshToken())
-		nodeGroup.POST("/user/logout", ctrl.HandleLogout())
-		nodeGroup.POST("/user/forget-password", ctrl.HandleForgetPassword())
-		nodeGroup.GET("/user/reset-password/:resetToken", ctrl.HandleResetPasswordPage())
-		nodeGroup.POST("/user/reset-password/:resetToken", ctrl.HandleResetPassword())
+		nodeGroup.POST("/user/refresh", ctrl.rateLimiter.RequireIPLimiter(), ctrl.HandleRefreshToken())
+		nodeGroup.POST("/user/logout", ctrl.rateLimiter.RequireIPLimiter(), ctrl.HandleLogout())
+		nodeGroup.POST("/user/forget-password", ctrl.rateLimiter.RequireIPLimiter(), ctrl.HandleForgetPassword())
+		nodeGroup.GET("/user/reset-password/:resetToken", ctrl.rateLimiter.RequireIPLimiter(), ctrl.HandleResetPasswordPage())
+		nodeGroup.POST("/user/reset-password/:resetToken", ctrl.rateLimiter.RequireIPLimiter(), ctrl.HandleResetPassword())
 	}
 }
 
@@ -94,6 +94,9 @@ func (ctrl AuthenticationController) HandleRegister() gin.HandlerFunc {
 		err := ctrl.validator.Struct(registerRequest)
 		if err != nil {
 			jsonBindError(c, err)
+			return
+		}
+		if !ctrl.allowAuthAccount(c, "register", registerRequest.Username) {
 			return
 		}
 		repo := repository.NewUserRepository(ctrl.db)
@@ -125,6 +128,9 @@ func (ctrl AuthenticationController) HandleLogin() gin.HandlerFunc {
 		var loginRequest request.LoginRequest
 		if err := c.ShouldBind(&loginRequest); err != nil {
 			jsonBindError(c, err)
+			return
+		}
+		if !ctrl.allowAuthAccount(c, "login", loginRequest.Username) {
 			return
 		}
 		repo := repository.NewCacheUserRepository(ctrl.db, ctrl.redisClient)
@@ -210,6 +216,9 @@ func (ctrl AuthenticationController) HandleRefreshToken() gin.HandlerFunc {
 			jsonError(c, status, err.Error())
 			return
 		}
+		if !ctrl.allowAuthAccount(c, "refresh", user.ID.String()) {
+			return
+		}
 		accessToken, err := service.CreateToken(user)
 		if err != nil {
 			jsonError(c, http.StatusBadRequest, err.Error())
@@ -271,6 +280,9 @@ func (ctrl AuthenticationController) HandleForgetPassword() gin.HandlerFunc {
 			jsonBindError(c, err)
 			return
 		}
+		if !ctrl.allowAuthAccount(c, "forget-password", passwordRequest.Email) {
+			return
+		}
 		userRepo := repository.NewUserRepository(ctrl.db)
 		forgetPasswordService := service.NewForgetPasswordService(userRepo, mail.NewFromEnv(), repository.NewPasswordResetStore(ctrl.redisClient))
 		message, err := forgetPasswordService.ForgetPassword(c.Request.Context(), passwordRequest)
@@ -313,6 +325,9 @@ func (ctrl AuthenticationController) HandleResetPassword() gin.HandlerFunc {
 		userId, _ := uuid.Parse(claims["sub"].(string))
 		email, _ := claims["email"].(string)
 		version, _ := service.ClaimsSessionVersion(claims)
+		if !ctrl.allowAuthAccount(c, "reset-password", userId.String()) {
+			return
+		}
 		var resetPasswordRequest request.ResetPasswordRequest
 		if err := c.ShouldBind(&resetPasswordRequest); err != nil {
 			jsonBindError(c, err)

@@ -50,7 +50,7 @@ func Run() error {
 
 	router := gin.New()
 	//lift access token to avoid sensitive log message
-	router.Use(middleware.LiftAccessToken(), gin.Logger(), gin.Recovery())
+	router.Use(middleware.LiftAccessToken(), middleware.RequestLogger(), gin.Recovery())
 	registerHealth(router, dbConfig.GetDatabase(), redisConfig.Client())
 	router.GET("/docs/public/*any", openapiui.WrapHandler(openapiui.Config{
 		SpecURL:      "/docs/public/openapi.json",
