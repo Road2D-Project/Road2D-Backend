@@ -50,6 +50,39 @@ func TestLoginLimitsAccountAcrossIPsBeforeCredentialLookup(t *testing.T) {
 	}
 }
 
+func TestForgetPasswordLimitsEmailAcrossIPsBeforeLookup(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	limiter := &deniedAccountLimiter{}
+	router := gin.New()
+	NewAuthenticationController(nil, nil, nil, limiter).RegisterRoutes(router.Group("/v1"))
+	for _, test := range []struct {
+		email string
+		ip    string
+	}{
+		{"traveler@example.com", "192.0.2.1"},
+		{"traveler@example.com", "192.0.2.2"},
+		{"another@example.com", "192.0.2.3"},
+	} {
+		body := `{"mail":"` + test.email + `"}`
+		request := httptest.NewRequest(http.MethodPost, "/v1/auth/user/forget-password", strings.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		request.RemoteAddr = test.ip + ":1234"
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusTooManyRequests {
+			t.Fatalf("email %s from IP %s returned %d", test.email, test.ip, recorder.Code)
+		}
+	}
+	if len(limiter.keys) != 3 || limiter.keys[0] != limiter.keys[1] || limiter.keys[0] == limiter.keys[2] {
+		t.Fatalf("limiter did not group requests by email: %v", limiter.keys)
+	}
+	for _, key := range limiter.keys {
+		if strings.Contains(key, "@") {
+			t.Fatalf("email was exposed in limiter key %q", key)
+		}
+	}
+}
+
 func TestAuthRoutesApplyIPLimitsIncludingResetTokenPaths(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("SECRET_MAIL_JWT", "mail-test-secret-01234567890123456789")

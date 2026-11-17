@@ -10,6 +10,7 @@ import (
 )
 
 // Account limits apply across IP addresses without exposing identifiers in keys.
+// The digest identifies a bucket by username, email, or user ID.
 func (ctrl AuthenticationController) allowAuthAccount(c *gin.Context, action, identity string) bool {
 	hash := sha256.Sum256([]byte(strings.TrimSpace(identity)))
 	key := "rl:auth:account:" + action + ":" + hex.EncodeToString(hash[:])

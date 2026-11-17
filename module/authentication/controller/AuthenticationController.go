@@ -275,17 +275,17 @@ func (ctrl AuthenticationController) logoutService() *service.LogoutService {
 // @Router       /auth/user/forget-password [post]
 func (ctrl AuthenticationController) HandleForgetPassword() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var passwordRequest request.ForgetPasswordRequest
-		if err := c.ShouldBind(&passwordRequest); err != nil {
+		var emailRequest request.ForgetPasswordRequest
+		if err := c.ShouldBind(&emailRequest); err != nil {
 			jsonBindError(c, err)
 			return
 		}
-		if !ctrl.allowAuthAccount(c, "forget-password", passwordRequest.Email) {
+		if !ctrl.allowAuthAccount(c, "forget-password", emailRequest.Email) {
 			return
 		}
 		userRepo := repository.NewUserRepository(ctrl.db)
 		forgetPasswordService := service.NewForgetPasswordService(userRepo, mail.NewFromEnv(), repository.NewPasswordResetStore(ctrl.redisClient))
-		message, err := forgetPasswordService.ForgetPassword(c.Request.Context(), passwordRequest)
+		message, err := forgetPasswordService.ForgetPassword(c.Request.Context(), emailRequest)
 		if err != nil {
 			jsonError(c, http.StatusBadRequest, err.Error())
 			return
