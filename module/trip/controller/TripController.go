@@ -60,6 +60,7 @@ type TripController struct {
 	auth          *middleware.AuthenticationMiddleware
 	goong         *mapsclient.GoongClient
 	cacheResponse *middleware.ResponseCache
+	rateLimiter   middleware.RateLimiter
 }
 
 func (ctrl *TripController) CachedKeys(names ...string) gin.HandlerFunc {
@@ -78,14 +79,15 @@ func (ctrl *TripController) CachedKeys(names ...string) gin.HandlerFunc {
 	}
 }
 
-func NewTripController(db *gorm.DB, redisClient *redis.Client, validator *validator.Validate, auth *middleware.AuthenticationMiddleware, cacheResponse *middleware.ResponseCache) *TripController {
+func NewTripController(db *gorm.DB, redisClient *redis.Client, validator *validator.Validate, auth *middleware.AuthenticationMiddleware, cacheResponse *middleware.ResponseCache, goong *mapsclient.GoongClient, limiter middleware.RateLimiter) *TripController {
 	return &TripController{
 		db:            db,
 		redisClient:   redisClient,
 		validator:     validator,
 		auth:          auth,
-		goong:         mapsclient.NewDefaultGoongClient(),
+		goong:         goong,
 		cacheResponse: cacheResponse,
+		rateLimiter:   limiter,
 	}
 }
 
@@ -133,18 +135,18 @@ func (ctrl *TripController) registerGraphRoutes(trips *gin.RouterGroup) {
 	trips.PUT("/:tripId/graph", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleSetTripGraph())
 	trips.GET("/:tripId/draft", ctrl.handleActiveTripRole(), ctrl.CachedKeys("draft"), ctrl.cacheResponse.CacheAround(), ctrl.HandleListDraftDestinations())
 	trips.POST("/:tripId/draft", ctrl.handleActiveTripRole(), ctrl.CachedKeys("draft"), ctrl.cacheResponse.MarkChanged(), ctrl.HandleAddDraftDestination())
-	trips.POST("/:tripId/compute", ctrl.handleActiveTripRole(), ctrl.HandleComputeTrip())
+	trips.POST("/:tripId/compute", ctrl.handleActiveTripRole(), ctrl.rateLimiter.RequireLimiter(), ctrl.HandleComputeTrip())
 	trips.GET("/:tripId/travels", ctrl.handleActiveTripRole(), ctrl.CachedKeys("travels"), ctrl.cacheResponse.CacheAround(), ctrl.HandleGetStoredTravels())
-	trips.POST("/:tripId/travels", ctrl.handleActiveTripRole(), ctrl.CachedKeys("travels"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleComputeStoredTrip())
-	trips.POST("/:tripId/travels/graph", ctrl.handleActiveTripRole(), ctrl.CachedKeys("travels", "graph"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleComputeTravelGraph())
+	trips.POST("/:tripId/travels", ctrl.handleActiveTripRole(), ctrl.CachedKeys("travels"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.rateLimiter.RequireLimiter(), ctrl.HandleComputeStoredTrip())
+	trips.POST("/:tripId/travels/graph", ctrl.handleActiveTripRole(), ctrl.CachedKeys("travels", "graph"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.rateLimiter.RequireLimiter(), ctrl.HandleComputeTravelGraph())
 	trips.PATCH("/:tripId/branches/:branchId", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph", "draft"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader, enum.TripRoleAdmin), ctrl.HandleUpdateBranch())
 	trips.PATCH("/:tripId/branches/:branchId/stops/:destinationId", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph", "travels"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleUpdateBranchStop())
 	trips.DELETE("/:tripId/branches/:branchId/stops/:destinationId", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph", "travels"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleDeleteBranchStop())
 }
 
 func (ctrl *TripController) registerPlanningRoutes(planning *gin.RouterGroup) {
-	planning.POST("/preview", ctrl.HandlePreviewLocations())
-	planning.POST("/location", ctrl.HandleEnsureLocation())
+	planning.POST("/preview", ctrl.rateLimiter.RequireLimiter(), ctrl.HandlePreviewLocations())
+	planning.POST("/location", ctrl.rateLimiter.RequireLimiter(), ctrl.HandleEnsureLocation())
 	planning.POST("/fork/:locationId", ctrl.HandleForkLocation())
 	planning.GET("/location/:locationId", ctrl.HandleGetLocation())
 	planning.GET("/destination/:destinationId", ctrl.HandleGetDestination())

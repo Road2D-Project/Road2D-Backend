@@ -56,11 +56,29 @@ func Run() error {
 	}))
 
 	v1 := router.Group("/v1")
-	mapsClient.NewSerpClient().RegisterRoutes(v1)
+
 	playground := v1.Group("")
 	playground.Use(middleware.RequireHeaderPlaygroundKey())
+	bucketLimiter, bucketError := middleware.NewTokenBucket(middleware.DefaultTokenBucketConfig(), redisConfig.Client())
+	if bucketError != nil {
+		return bucketError
+	}
+	goongQuota, err := mapsClient.NewProviderQuota("goong", redisConfig.Client())
+	if err != nil {
+		return err
+	}
+	serpQuota, err := mapsClient.NewProviderQuota("serp", redisConfig.Client())
+	if err != nil {
+		return err
+	}
+	serpClient, err := mapsClient.NewSerpClient(bucketLimiter, serpQuota)
+	if err != nil {
+		return err
+	}
+	serpClient.RegisterRoutes(playground)
+	goongClient := mapsClient.NewGoongClient(goongQuota)
 	sandboxes := []share.PlaygroundRegistrar{
-		mapsController.NewMapController(dbConfig.GetDatabase(), redisConfig.Client()),
+		mapsController.NewMapController(dbConfig.GetDatabase(), redisConfig.Client(), goongClient, bucketLimiter),
 	}
 	for _, r := range sandboxes {
 		r.RegisterPlayground(playground)
@@ -71,23 +89,18 @@ func Run() error {
 	)
 	responseCacheMw := middleware.NewResponseCache(redisConfig.Client())
 	// Mount domain modules on this hub before the listener accepts sockets.
-	// Tracking gets its own Goong client: the redirect route starts at a raw
-	// GPS fix and must not go through the leg cache.
+	// Redirect bypasses the leg cache while sharing provider quota with planning.
 	hub := realtime.NewHub()
-	redirectRouter := mapsService.NewRedirectService(mapsClient.NewDefaultGoongClient())
-	err := hub.Mount("tracking", tracking.NewTrackingModule(dbConfig.GetDatabase(), redirectRouter))
+	redirectRouter := mapsService.NewRedirectService(goongClient)
+	err = hub.Mount("tracking", tracking.NewTrackingModule(dbConfig.GetDatabase(), redirectRouter))
 	if err != nil {
 		log.Fatal(err)
-	}
-	bucketLimiter, bucketError := middleware.NewTokenBucket(middleware.DefaultTokenBucketConfig(), redisConfig.Client())
-	if bucketError != nil {
-		return bucketError
 	}
 	routerRegistrars := []share.RouterRegistrar{
 		authenController.NewAuthenticationController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, bucketLimiter),
 		friendController.NewFriendController(dbConfig.GetDatabase(), authMw),
 		groupController.NewGroupController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw),
-		tripController.NewTripController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw, responseCacheMw),
+		tripController.NewTripController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw, responseCacheMw, goongClient, bucketLimiter),
 		realtimeController.NewLobbyController(authMw, hub, activeTripMemberAuthorizer{db: dbConfig.GetDatabase()}),
 	}
 	for _, r := range routerRegistrars {

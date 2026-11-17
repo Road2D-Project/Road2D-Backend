@@ -202,8 +202,10 @@ func mapTripError(c *gin.Context, err error) {
 	case errors.Is(err, repository.ErrInternalServerError),
 		errors.Is(err, mapsclient.ErrMissingAPIKey):
 		jsonError(c, http.StatusInternalServerError, err.Error())
-	case errors.Is(err, mapsclient.ErrRateLimited):
+	case errors.Is(err, mapsclient.ErrRateLimited), errors.Is(err, mapsclient.ErrProviderQuotaExceeded):
 		jsonError(c, http.StatusTooManyRequests, err.Error())
+	case errors.Is(err, mapsclient.ErrQuotaUnavailable):
+		jsonError(c, http.StatusServiceUnavailable, err.Error())
 	case errors.Is(err, mapsclient.ErrEmptyRoute),
 		errors.Is(err, mapsclient.ErrEmptyTrip),
 		errors.Is(err, mapsclient.ErrGoongStatus),

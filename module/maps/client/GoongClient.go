@@ -26,11 +26,16 @@ const (
 type GoongClient struct {
 	client  *http.Client
 	limiter *rate.Limiter
+	quota   *ProviderQuota
 }
 
 var _ IMapClient = (*GoongClient)(nil)
 
 func NewDefaultGoongClient() *GoongClient {
+	return NewGoongClient(nil)
+}
+
+func NewGoongClient(quota *ProviderQuota) *GoongClient {
 	transport := &http.Transport{
 		MaxIdleConns:       MaxIdleConnections,
 		IdleConnTimeout:    IdleConnectionTimeout,
@@ -39,6 +44,7 @@ func NewDefaultGoongClient() *GoongClient {
 	return &GoongClient{
 		client:  &http.Client{Transport: transport, Timeout: RequestTimeout},
 		limiter: rate.NewLimiter(rate.Limit(freeRateLimit), freeRateLimit),
+		quota:   quota,
 	}
 }
 
@@ -73,6 +79,11 @@ func (g *GoongClient) getJSON(ctx context.Context, path string, query url.Values
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return err
+	}
+	if g.quota != nil {
+		if err := g.quota.Allow(ctx); err != nil {
+			return err
+		}
 	}
 
 	resp, err := g.client.Do(req)

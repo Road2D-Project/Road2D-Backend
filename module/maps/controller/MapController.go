@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"Road-To-Destination-BE/middleware"
 	"Road-To-Destination-BE/utils/enum"
 	"errors"
 	"net/http"
@@ -35,23 +36,25 @@ var (
 // MapController holds process-scoped infra only (HTTP client, leg cache).
 // Use-case services are constructed inside each handler — not in main.
 type MapController struct {
-	goong *client.GoongClient
-	legs  repository.LegStore
+	goong       *client.GoongClient
+	legs        repository.LegStore
+	rateLimiter middleware.RateLimiter
 }
 
-func NewMapController(db *gorm.DB, redisClient *redis.Client) *MapController {
+func NewMapController(db *gorm.DB, redisClient *redis.Client, goong *client.GoongClient, limiter middleware.RateLimiter) *MapController {
 	var memory repository.LegStore
 	if redisClient != nil {
 		memory = repository.NewLocationLegMemoryStore(redisClient)
 	}
 	return &MapController{
-		goong: client.NewDefaultGoongClient(),
-		legs:  repository.NewCachedLegStore(memory, repository.NewLegRepository(db)),
+		goong:       goong,
+		legs:        repository.NewCachedLegStore(memory, repository.NewLegRepository(db)),
+		rateLimiter: limiter,
 	}
 }
 
 func (ctrl *MapController) RegisterPlayground(router *gin.RouterGroup) {
-	goong := router.Group("/goong")
+	goong := router.Group("/goong", ctrl.rateLimiter.RequireIPLimiter())
 	places := goong.Group("/places")
 	{
 		places.GET("/autocomplete", ctrl.HandleAutocomplete)
@@ -227,8 +230,10 @@ func respondMapError(c *gin.Context, err error) {
 		status = http.StatusBadRequest
 	case errors.Is(err, client.ErrMissingAPIKey):
 		status = http.StatusInternalServerError
-	case errors.Is(err, client.ErrRateLimited):
+	case errors.Is(err, client.ErrRateLimited), errors.Is(err, client.ErrProviderQuotaExceeded):
 		status = http.StatusTooManyRequests
+	case errors.Is(err, client.ErrQuotaUnavailable):
+		status = http.StatusServiceUnavailable
 	case errors.Is(err, client.ErrEmptyRoute), errors.Is(err, client.ErrEmptyTrip), errors.Is(err, client.ErrGoongStatus):
 		status = http.StatusBadGateway
 	}
