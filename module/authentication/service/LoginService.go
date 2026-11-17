@@ -1,12 +1,18 @@
 package service
 
 import (
+	"context"
+	"errors"
+	"fmt"
+
 	"Road-To-Destination-BE/module/authentication/model"
 	"Road-To-Destination-BE/module/authentication/model/request"
 	"Road-To-Destination-BE/utils"
-	"context"
-	"errors"
+
+	"gorm.io/gorm"
 )
+
+var ErrInvalidCredentials = errors.New("invalid username or password")
 
 type LoginRepository interface {
 	FindUserByUsername(ctx context.Context, username string) (*model.User, error)
@@ -16,28 +22,28 @@ type LoginService struct {
 	loginRepository LoginRepository
 }
 
-func NewLoginService(loginRepository LoginRepository) *LoginService {
-	return &LoginService{loginRepository: loginRepository}
+func NewLoginService(repo LoginRepository) *LoginService {
+	return &LoginService{loginRepository: repo}
 }
-func (service *LoginService) Login(ctx context.Context, request request.LoginRequest) (string, string, error) {
-	user, err := service.loginRepository.FindUserByUsername(ctx, utils.Santize(request.Username))
-	if err != nil {
-		return "", "", errors.New("user not found")
-	}
-	if ok, errCheck := user.CheckPassword(request.Password); errCheck == nil && ok == true {
-		accessToken, err := CreateToken(request.Username)
-		refreshToken, err := CreateRefreshToken(request.Username)
-		if err == nil {
-			if err != nil {
-				return "", "", err
-			}
-			return accessToken, refreshToken, err
-		}
 
-	} else if errCheck != nil {
-		return "", "", errCheck
-	} else if ok == false {
-		return "", "", errors.New("invalid password")
+func (s *LoginService) Login(ctx context.Context, req request.LoginRequest) (string, string, error) {
+	user, err := s.loginRepository.FindUserByUsername(ctx, utils.Santize(req.Username))
+	if errors.Is(err, gorm.ErrRecordNotFound) || (err == nil && user == nil) {
+		return "", "", ErrInvalidCredentials
 	}
-	return "", "", err
+	if err != nil {
+		return "", "", fmt.Errorf("%w: %v", ErrAuthUnavailable, err)
+	}
+	if valid, err := user.CheckPassword(req.Password); err != nil || !valid {
+		return "", "", ErrInvalidCredentials
+	}
+	access, err := CreateToken(user)
+	if err != nil {
+		return "", "", err
+	}
+	refresh, err := CreateRefreshToken(user)
+	if err != nil {
+		return "", "", err
+	}
+	return access, refresh, nil
 }

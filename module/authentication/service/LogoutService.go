@@ -6,9 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"Road-To-Destination-BE/module/authentication/model"
 	"Road-To-Destination-BE/module/authentication/repository"
 
-	"github.com/dgrijalva/jwt-go"
+	"gorm.io/gorm"
 )
 
 type refreshRevokeStore interface {
@@ -18,10 +19,11 @@ type refreshRevokeStore interface {
 
 type LogoutService struct {
 	store refreshRevokeStore
+	users LoginRepository
 }
 
-func NewLogoutService(store refreshRevokeStore) *LogoutService {
-	return &LogoutService{store: store}
+func NewLogoutService(store refreshRevokeStore, users LoginRepository) *LogoutService {
+	return &LogoutService{store: store, users: users}
 }
 
 func (s *LogoutService) Logout(ctx context.Context, refreshToken string) error {
@@ -47,20 +49,31 @@ func (s *LogoutService) Logout(ctx context.Context, refreshToken string) error {
 	return s.store.Revoke(ctx, refreshToken, username, exp)
 }
 
-func (s *LogoutService) AssertRefreshUsable(ctx context.Context, refreshToken string) (jwt.MapClaims, error) {
+func (s *LogoutService) AssertRefreshUsable(ctx context.Context, refreshToken string) (*model.User, error) {
 	claims, err := VerifyRefreshToken(refreshToken)
 	if err != nil {
 		return nil, err
 	}
-	if s == nil || s.store == nil {
-		return claims, nil
+	if s == nil || s.store == nil || s.users == nil {
+		return nil, ErrAuthUnavailable
 	}
 	revoked, err := s.store.IsRevoked(ctx, refreshToken)
 	if err != nil {
-		return nil, err
+		return nil, ErrAuthUnavailable
 	}
 	if revoked {
 		return nil, ErrRefreshRevoked
 	}
-	return claims, nil
+	username, _ := claims["username"].(string)
+	user, err := s.users.FindUserByUsername(ctx, username)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrSessionRevoked
+	}
+	if err != nil {
+		return nil, ErrAuthUnavailable
+	}
+	if err := ValidateUserSession(claims, user); err != nil {
+		return nil, err
+	}
+	return user, nil
 }

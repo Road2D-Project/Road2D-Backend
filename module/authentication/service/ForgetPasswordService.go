@@ -53,9 +53,10 @@ func (u *ForgetPasswordService) ForgetPassword(ctx context.Context, request requ
 		return &response.ForgetPasswordResponse{Message: repository.AlreadySentMailMessage}, nil
 	}
 	if err := u.SendMail(ctx, ForgetPasswordForm{
-		Email:    user.Email,
-		Username: user.Username,
-		UserId:   user.ID,
+		Email:          user.Email,
+		Username:       user.Username,
+		UserId:         user.ID,
+		SessionVersion: user.SessionVersion,
 	}); err != nil {
 		return nil, err
 	}
@@ -83,7 +84,8 @@ func (u *ForgetPasswordService) SendMail(ctx context.Context, form ForgetPasswor
 }
 
 type ForgetPasswordForm struct {
-	Username string
-	UserId   uuid.UUID
-	Email    string
+	Username       string
+	UserId         uuid.UUID
+	SessionVersion int64
+	Email          string
 }

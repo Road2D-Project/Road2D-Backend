@@ -53,6 +53,14 @@ redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
 return 1
 `)
 
+// invalidateBody changes the generation and body marker in one Redis operation,
+// so an in-flight GET cannot save an old body between those changes.
+var invalidateBody = redis.NewScript(`
+redis.call('INCR', KEYS[2])
+redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])
+return 1
+`)
+
 // ResponseCache caches the JSON body of GET responses and lets write
 // requests (POST/PUT) invalidate them. If Redis is unavailable, every
 // method becomes a no-op and requests just fall through to their handlers.
@@ -140,14 +148,7 @@ func (cache *ResponseCache) tryServeFromCache(ctx context.Context, c *gin.Contex
 // (c.Next() first), so it only marks the cache as stale once the write has
 // actually succeeded (2xx).
 //
-// For every affected key it does two things, in this exact order:
-//  1. SET the body key to "changed"
-//  2. INCR the generation counter
-//
-// Order matters: setting "changed" first means that if a GET is mid-flight
-// and finishes right after, saveBody's generation check will already see
-// the bumped counter and refuse to overwrite the "changed" marker with a
-// stale body.
+// Each affected key is invalidated atomically with its generation counter.
 func (cache *ResponseCache) MarkChanged() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()
@@ -167,10 +168,13 @@ func (cache *ResponseCache) MarkChanged() gin.HandlerFunc {
 
 		ctx := c.Request.Context()
 		for _, bodyKey := range keys {
-			if err := cache.client.Set(ctx, bodyKey, cacheChanged, cache.ttl).Err(); err != nil {
-				return
-			}
-			if err := cache.client.Incr(ctx, generationKey(bodyKey)).Err(); err != nil {
+			if err := invalidateBody.Run(
+				ctx,
+				cache.client,
+				[]string{bodyKey, generationKey(bodyKey)},
+				cacheChanged,
+				cache.ttl.Milliseconds(),
+			).Err(); err != nil {
 				return
 			}
 		}

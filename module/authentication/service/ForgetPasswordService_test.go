@@ -34,10 +34,10 @@ func (s *stubMailClient) Send(_ context.Context, kind mail.Kind, to string, form
 }
 
 func TestForgetPasswordSendsTypedMail(t *testing.T) {
-	t.Setenv("SECRET_MAIL_JWT", "test-mail-secret")
+	setTestJWTSecrets(t)
 	t.Setenv("APP_PUBLIC_URL", "http://localhost:8080")
 
-	user := &model.User{Username: "traveler", Email: "traveler@example.com"}
+	user := &model.User{Username: "traveler", Email: "traveler@example.com", SessionVersion: 1}
 	user.ID = uuid.New()
 	mailer := &stubMailClient{}
 	svc := NewForgetPasswordService(stubMailRepo{user: user}, mailer, nil)

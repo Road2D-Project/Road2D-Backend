@@ -1,68 +1,36 @@
 package repository
 
 import (
-	"Road-To-Destination-BE/module/authentication/model"
 	"context"
-	"encoding/json"
-	"time"
+	"log"
+
+	"Road-To-Destination-BE/module/authentication/model"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
-// cachedUser keeps the password hash in Redis. model.User omits Password from JSON.
-type cachedUser struct {
-	ID        uuid.UUID `json:"id"`
-	Username  string    `json:"username"`
-	Email     string    `json:"email"`
-	Password  string    `json:"password"`
-	AvatarURL *string   `json:"avatarUrl,omitempty"`
-	CreatedAt time.Time `json:"createdTime"`
-	UpdatedAt time.Time `json:"updatedTime"`
-}
+// Only retire a legacy user record belonging to this account. Old keys used
+// usernames directly, so an arbitrary username can overlap another Redis key.
+var deleteLegacyCredential = redis.NewScript(`
+if redis.call('TYPE', KEYS[1]).ok ~= 'string' then
+    return 0
+end
+local raw = redis.call('GET', KEYS[1])
+local ok, record = pcall(cjson.decode, raw)
+if ok and type(record) == 'table' and record.id == ARGV[1]
+   and record.username == ARGV[2] and type(record.password) == 'string' then
+    return redis.call('DEL', KEYS[1])
+end
+return 0
+`)
 
-func cachedUserFromModel(user *model.User) cachedUser {
-	return cachedUser{
-		ID:        user.ID,
-		Username:  user.Username,
-		Email:     user.Email,
-		Password:  user.Password,
-		AvatarURL: user.AvatarURL,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-	}
-}
-
-func (record cachedUser) toModel() *model.User {
-	user := &model.User{
-		Username:  record.Username,
-		Email:     record.Email,
-		Password:  record.Password,
-		AvatarURL: record.AvatarURL,
-	}
-	user.ID = record.ID
-	user.CreatedAt = record.CreatedAt
-	user.UpdatedAt = record.UpdatedAt
-	return user
-}
-
+// CacheUserRepository retains the existing adapter API while retiring the old
+// username-keyed credential cache. Credentials always come from the database.
 type CacheUserRepository struct {
 	db     *gorm.DB
 	client *redis.Client
-}
-
-func (cache *CacheUserRepository) ResetPassword(ctx context.Context, userId uuid.UUID, newPassword string) error {
-	userRepo := NewUserRepository(cache.db)
-	user, err := userRepo.FindUserByID(ctx, userId)
-	if err != nil {
-		return err
-	}
-	if err := userRepo.ResetPassword(ctx, userId, newPassword); err != nil {
-		return err
-	}
-	_ = cache.client.Del(ctx, user.Username).Err()
-	return nil
 }
 
 func NewCacheUserRepository(db *gorm.DB, client *redis.Client) *CacheUserRepository {
@@ -70,46 +38,33 @@ func NewCacheUserRepository(db *gorm.DB, client *redis.Client) *CacheUserReposit
 }
 
 func (cache *CacheUserRepository) FindUserByUsername(ctx context.Context, username string) (*model.User, error) {
-	if cache.client != nil {
-		if user, ok := cache.freshCachedUser(ctx, username); ok {
-			return user, nil
-		}
-	}
-	var user model.User
-	if err := cache.db.WithContext(ctx).Where("username = ?", username).First(&user).Error; err != nil {
-		return nil, err
-	}
-	if cache.client == nil {
-		return &user, nil
-	}
-	payload, err := json.Marshal(cachedUserFromModel(&user))
+	user, err := NewUserRepository(cache.db).FindUserByUsername(ctx, username)
 	if err != nil {
 		return nil, err
 	}
-	if err := cache.client.Set(ctx, username, payload, 0).Err(); err != nil {
-		return nil, err
-	}
-	return &user, nil
+	cache.clearLegacyCredential(ctx, user)
+	return user, nil
 }
 
-// freshCachedUser accepts the Redis row only when its id is still the users row.
-// Recreating an account keeps the username and replaces the id. The old cache
-// would then list trips for a person who no longer holds those seats.
-func (cache *CacheUserRepository) freshCachedUser(ctx context.Context, username string) (*model.User, bool) {
-	bytes, err := cache.client.Get(ctx, username).Bytes()
+func (cache *CacheUserRepository) ResetPassword(ctx context.Context, userID uuid.UUID, password string, expectedVersion int64) error {
+	repo := NewUserRepository(cache.db)
+	user, err := repo.FindUserByID(ctx, userID)
 	if err != nil {
-		return nil, false
+		return err
 	}
-	var record cachedUser
-	if json.Unmarshal(bytes, &record) != nil || record.ID == uuid.Nil {
-		_ = cache.client.Del(ctx, username).Err()
-		return nil, false
+	if err := repo.ResetPassword(ctx, userID, password, expectedVersion); err != nil {
+		return err
 	}
-	var current model.User
-	err = cache.db.WithContext(ctx).Select("id").Where("username = ?", username).Take(&current).Error
-	if err != nil || current.ID != record.ID {
-		_ = cache.client.Del(ctx, username).Err()
-		return nil, false
+	cache.clearLegacyCredential(ctx, user)
+	return nil
+}
+
+func (cache *CacheUserRepository) clearLegacyCredential(ctx context.Context, user *model.User) {
+	if cache.client == nil {
+		return
 	}
-	return record.toModel(), true
+	// A subsequent login retries cleanup and still reads fresh credentials.
+	if err := deleteLegacyCredential.Run(ctx, cache.client, []string{user.Username}, user.ID.String(), user.Username).Err(); err != nil {
+		log.Printf("auth: legacy credential cache cleanup failed: %v", err)
+	}
 }

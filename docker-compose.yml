@@ -56,6 +56,8 @@ services:
       GOONG_DOMAIN: ${GOONG_DOMAIN:-https://rsapi.goong.io}
       GOONG_PLAYGROUND_KEY: ${GOONG_PLAYGROUND_KEY:-}
       SERP_MAP_API: ${SERP_MAP_API:-}
+      GOONG_DAILY_REQUEST_LIMIT: ${GOONG_DAILY_REQUEST_LIMIT:-10000}
+      SERP_DAILY_REQUEST_LIMIT: ${SERP_DAILY_REQUEST_LIMIT:-100}
       HTTP_ADDR: ${HTTP_ADDR:-:8080}
       # ghi đề để map đúng vào trong container
       DB_HOST: postgres

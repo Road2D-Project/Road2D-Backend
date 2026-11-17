@@ -48,28 +48,29 @@ type AuthenticationController struct {
 	db          *gorm.DB
 	redisClient *redis.Client
 	validator   *validator.Validate
+	rateLimiter middleware.RateLimiter
 }
 
-func NewAuthenticationController(db *gorm.DB, client *redis.Client, validator *validator.Validate) *AuthenticationController {
-	return &AuthenticationController{db: db, redisClient: client, validator: validator}
+func NewAuthenticationController(db *gorm.DB, client *redis.Client, validator *validator.Validate, rateLimiter middleware.RateLimiter) *AuthenticationController {
+	return &AuthenticationController{db: db, redisClient: client, validator: validator, rateLimiter: rateLimiter}
 }
 
 func (ctrl AuthenticationController) RegisterRoutes(router *gin.RouterGroup) {
 	nodeGroup := router.Group("/auth")
 	{
-		auth := middleware.NewAuthenticationMiddleware(repository.NewCacheUserRepository(ctrl.db, ctrl.redisClient))
-		nodeGroup.POST("/user/register", ctrl.HandleRegister())
-		nodeGroup.POST("/user/login", ctrl.HandleLogin())
+		auth := middleware.NewAuthenticationMiddleware(repository.NewUserRepository(ctrl.db))
+		nodeGroup.POST("/user/register", ctrl.rateLimiter.RequireIPLimiter(), ctrl.HandleRegister())
+		nodeGroup.POST("/user/login", ctrl.rateLimiter.RequireIPLimiter(), ctrl.HandleLogin())
 		nodeGroup.GET("/user/me", auth.RequireAuth(), ctrl.HandleMyProfile())
 		nodeGroup.POST("/user/avatar", auth.RequireAuth(), ctrl.HandleRequestAvatar())
 		nodeGroup.POST("/user/avatar/confirm", auth.RequireAuth(), ctrl.HandleConfirmAvatar())
 		nodeGroup.DELETE("/user/avatar", auth.RequireAuth(), ctrl.HandleDeleteAvatar())
-		nodeGroup.GET("/user/:id", ctrl.HandleGetUserProfile())
-		nodeGroup.POST("/user/refresh", ctrl.HandleRefreshToken())
-		nodeGroup.POST("/user/logout", ctrl.HandleLogout())
-		nodeGroup.POST("/user/forget-password", ctrl.HandleForgetPassword())
-		nodeGroup.GET("/user/reset-password/:resetToken", ctrl.HandleResetPasswordPage())
-		nodeGroup.POST("/user/reset-password/:resetToken", ctrl.HandleResetPassword())
+		nodeGroup.GET("/user/:id", auth.RequireAuth(), ctrl.HandleGetUserProfile())
+		nodeGroup.POST("/user/refresh", ctrl.rateLimiter.RequireIPLimiter(), ctrl.HandleRefreshToken())
+		nodeGroup.POST("/user/logout", ctrl.rateLimiter.RequireIPLimiter(), ctrl.HandleLogout())
+		nodeGroup.POST("/user/forget-password", ctrl.rateLimiter.RequireIPLimiter(), ctrl.HandleForgetPassword())
+		nodeGroup.GET("/user/reset-password/:resetToken", ctrl.rateLimiter.RequireIPLimiter(), ctrl.HandleResetPasswordPage())
+		nodeGroup.POST("/user/reset-password/:resetToken", ctrl.rateLimiter.RequireIPLimiter(), ctrl.HandleResetPassword())
 	}
 }
 
@@ -95,6 +96,9 @@ func (ctrl AuthenticationController) HandleRegister() gin.HandlerFunc {
 			jsonBindError(c, err)
 			return
 		}
+		if !ctrl.allowAuthAccount(c, "register", registerRequest.Username) {
+			return
+		}
 		repo := repository.NewUserRepository(ctrl.db)
 		registerService := service.NewRegisterService(repo)
 		userID, err := registerService.Register(registerRequest, c.Request.Context())
@@ -115,6 +119,9 @@ func (ctrl AuthenticationController) HandleRegister() gin.HandlerFunc {
 // @Param        body  body      request.LoginRequest  true  "Login payload"
 // @Success      200   {object}  response.LoginEnvelope
 // @Failure      400   {object}  share.ErrorResponse
+// @Failure      401   {object}  share.ErrorResponse
+// @Failure      429   {object}  share.ErrorResponse
+// @Failure      503   {object}  share.ErrorResponse
 // @Router       /auth/user/login [post]
 func (ctrl AuthenticationController) HandleLogin() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -123,11 +130,18 @@ func (ctrl AuthenticationController) HandleLogin() gin.HandlerFunc {
 			jsonBindError(c, err)
 			return
 		}
+		if !ctrl.allowAuthAccount(c, "login", loginRequest.Username) {
+			return
+		}
 		repo := repository.NewCacheUserRepository(ctrl.db, ctrl.redisClient)
 		loginService := service.NewLoginService(repo)
 		accessToken, refreshToken, err := loginService.Login(c.Request.Context(), loginRequest)
 		if err != nil {
-			jsonError(c, http.StatusBadRequest, err.Error())
+			status := http.StatusUnauthorized
+			if errors.Is(err, service.ErrAuthUnavailable) || errors.Is(err, service.ErrJWTConfiguration) {
+				status = http.StatusServiceUnavailable
+			}
+			jsonError(c, status, http.StatusText(status))
 			return
 		}
 		c.JSON(http.StatusOK, response.LoginEnvelope{
@@ -163,13 +177,14 @@ func (ctrl AuthenticationController) HandleGetUserProfile() gin.HandlerFunc {
 			jsonError(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		c.JSON(http.StatusOK, user)
+		isOwner := user.Username == middleware.GetCurrentUsername(c)
+		c.JSON(http.StatusOK, response.UserToUserProfileResponse(user, isOwner))
 	}
 }
 
 // HandleRefreshToken godoc
 // @Summary      Refresh access token
-// @Description  Issue a new access token from a valid refresh token. Returns 401 if the refresh JWT is expired or was revoked by logout.
+// @Description  Issue a new access token after checking the refresh token, logout revocation and current database session version. Password resets invalidate older sessions.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
@@ -177,6 +192,8 @@ func (ctrl AuthenticationController) HandleGetUserProfile() gin.HandlerFunc {
 // @Success      200   {object}  response.RefreshResponse
 // @Failure      400   {object}  share.ErrorResponse
 // @Failure      401   {object}  share.ErrorResponse
+// @Failure      429   {object}  share.ErrorResponse
+// @Failure      503   {object}  share.ErrorResponse
 // @Router       /auth/user/refresh [post]
 func (ctrl AuthenticationController) HandleRefreshToken() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -186,21 +203,23 @@ func (ctrl AuthenticationController) HandleRefreshToken() gin.HandlerFunc {
 			return
 		}
 		logoutService := ctrl.logoutService()
-		claims, err := logoutService.AssertRefreshUsable(c.Request.Context(), request.RefreshToken)
+		user, err := logoutService.AssertRefreshUsable(c.Request.Context(), request.RefreshToken)
 		if err != nil {
 			status := http.StatusBadRequest
-			if errors.Is(err, service.ErrRefreshRevoked) || errors.Is(err, service.ErrTokenExpired) {
+			if errors.Is(err, service.ErrRefreshRevoked) || errors.Is(err, service.ErrTokenExpired) ||
+				errors.Is(err, service.ErrTokenInvalid) || errors.Is(err, service.ErrSessionRevoked) {
 				status = http.StatusUnauthorized
+			}
+			if errors.Is(err, service.ErrAuthUnavailable) || errors.Is(err, service.ErrJWTConfiguration) {
+				status = http.StatusServiceUnavailable
 			}
 			jsonError(c, status, err.Error())
 			return
 		}
-		username, ok := claims["username"].(string)
-		if !ok || username == "" {
-			jsonError(c, http.StatusBadRequest, "invalid token payload")
+		if !ctrl.allowAuthAccount(c, "refresh", user.ID.String()) {
 			return
 		}
-		accessToken, err := service.CreateToken(username)
+		accessToken, err := service.CreateToken(user)
 		if err != nil {
 			jsonError(c, http.StatusBadRequest, err.Error())
 			return
@@ -229,7 +248,7 @@ func (ctrl AuthenticationController) HandleLogout() gin.HandlerFunc {
 		}
 		logoutService := ctrl.logoutService()
 		if err := logoutService.Logout(c.Request.Context(), body.RefreshToken); err != nil {
-			if errors.Is(err, repository.ErrRevokeStoreUnavailable) {
+			if errors.Is(err, repository.ErrRevokeStoreUnavailable) || errors.Is(err, service.ErrJWTConfiguration) {
 				jsonError(c, http.StatusServiceUnavailable, err.Error())
 				return
 			}
@@ -241,7 +260,7 @@ func (ctrl AuthenticationController) HandleLogout() gin.HandlerFunc {
 }
 
 func (ctrl AuthenticationController) logoutService() *service.LogoutService {
-	return service.NewLogoutService(repository.NewRefreshRevokeStore(ctrl.redisClient, ctrl.db))
+	return service.NewLogoutService(repository.NewRefreshRevokeStore(ctrl.redisClient, ctrl.db), repository.NewUserRepository(ctrl.db))
 }
 
 // HandleForgetPassword godoc
@@ -256,14 +275,17 @@ func (ctrl AuthenticationController) logoutService() *service.LogoutService {
 // @Router       /auth/user/forget-password [post]
 func (ctrl AuthenticationController) HandleForgetPassword() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var passwordRequest request.ForgetPasswordRequest
-		if err := c.ShouldBind(&passwordRequest); err != nil {
+		var emailRequest request.ForgetPasswordRequest
+		if err := c.ShouldBind(&emailRequest); err != nil {
 			jsonBindError(c, err)
+			return
+		}
+		if !ctrl.allowAuthAccount(c, "forget-password", emailRequest.Email) {
 			return
 		}
 		userRepo := repository.NewUserRepository(ctrl.db)
 		forgetPasswordService := service.NewForgetPasswordService(userRepo, mail.NewFromEnv(), repository.NewPasswordResetStore(ctrl.redisClient))
-		message, err := forgetPasswordService.ForgetPassword(c.Request.Context(), passwordRequest)
+		message, err := forgetPasswordService.ForgetPassword(c.Request.Context(), emailRequest)
 		if err != nil {
 			jsonError(c, http.StatusBadRequest, err.Error())
 			return
@@ -283,7 +305,7 @@ func (ctrl AuthenticationController) HandleResetPasswordPage() gin.HandlerFunc {
 
 // HandleResetPassword godoc
 // @Summary      Reset password
-// @Description  Set a new password using the reset token from the forget-password mail.
+// @Description  Set a new password and revoke older access, refresh and reset tokens by atomically advancing the user's session version.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
@@ -295,9 +317,15 @@ func (ctrl AuthenticationController) HandleResetPasswordPage() gin.HandlerFunc {
 func (ctrl AuthenticationController) HandleResetPassword() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		resetToken := c.Param("resetToken")
-		userId, email, err := resetTokenIdentity(resetToken)
+		claims, err := service.VerifyResetPasswordToken(resetToken)
 		if err != nil {
 			jsonError(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		userId, _ := uuid.Parse(claims["sub"].(string))
+		email, _ := claims["email"].(string)
+		version, _ := service.ClaimsSessionVersion(claims)
+		if !ctrl.allowAuthAccount(c, "reset-password", userId.String()) {
 			return
 		}
 		var resetPasswordRequest request.ResetPasswordRequest
@@ -312,7 +340,7 @@ func (ctrl AuthenticationController) HandleResetPassword() gin.HandlerFunc {
 		}
 		resetPasswordRepo := repository.NewCacheUserRepository(ctrl.db, ctrl.redisClient)
 		resetPasswordService := service.NewResetPasswordService(resetPasswordRepo, repository.NewPasswordResetStore(ctrl.redisClient))
-		msg, err := resetPasswordService.ResetPassword(c.Request.Context(), userId, email, resetPasswordRequest.Password, resetPasswordRequest.ConfirmPassword)
+		msg, err := resetPasswordService.ResetPassword(c.Request.Context(), userId, email, resetPasswordRequest.Password, resetPasswordRequest.ConfirmPassword, version)
 		if err != nil {
 			jsonError(c, http.StatusBadRequest, err.Error())
 			return
@@ -372,11 +400,6 @@ func invalidResetPage(message string) (string, int) {
 		return renderErr.Error(), http.StatusInternalServerError
 	}
 	return html, http.StatusBadRequest
-}
-
-func resetTokenIdentity(resetToken string) (uuid.UUID, string, error) {
-	userId, email, _, err := parseResetToken(resetToken)
-	return userId, email, err
 }
 
 func parseResetToken(resetToken string) (uuid.UUID, string, string, error) {

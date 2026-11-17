@@ -7,8 +7,12 @@ package client
 // Goong place_id ≠ Google place_id. SerpApi wants Google ids (ChIJ...).
 
 import (
+	"Road-To-Destination-BE/middleware"
+	"errors"
 	"fmt"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"Road-To-Destination-BE/module/share"
@@ -27,19 +31,25 @@ const (
 )
 
 type SerpClient struct {
-	api serpapi.SerpApiClient
-	key string
+	api         serpapi.SerpApiClient
+	key         string
+	rateLimiter middleware.RateLimiter
+	quota       *ProviderQuota
 }
 
-func NewSerpClient() *SerpClient {
+func NewSerpClient(limiter middleware.RateLimiter, quota *ProviderQuota) (*SerpClient, error) {
+	if limiter == nil || quota == nil {
+		return nil, errors.New("SerpAPI rate limiter and provider quota are required")
+	}
 	key := share.GetEnvStringDefault("SERP_MAP_API", "")
 	setting := serpapi.NewSerpApiClientSetting(key)
 	setting.Engine = "google_maps"
-	return &SerpClient{api: serpapi.NewClient(setting), key: key}
+	setting.Timeout = RequestTimeout
+	return &SerpClient{api: serpapi.NewClient(setting), key: key, rateLimiter: limiter, quota: quota}, nil
 }
 
 func (s *SerpClient) RegisterRoutes(router *gin.RouterGroup) {
-	g := router.Group("/serp-api")
+	g := router.Group("/serp-api", s.rateLimiter.RequireIPLimiter())
 	g.GET("/search", s.handleSearch)
 	g.GET("/ll", s.handleByCoord)
 	g.GET("/place", s.handleByPlaceQuery)
@@ -48,21 +58,30 @@ func (s *SerpClient) RegisterRoutes(router *gin.RouterGroup) {
 
 func (s *SerpClient) handleSearch(c *gin.Context) {
 	q := strings.TrimSpace(c.Query("q"))
-	if q == "" {
-		c.JSON(http.StatusBadRequest, share.NewError(http.StatusBadRequest, "q is required"))
+	if q == "" || len(q) > 512 {
+		c.JSON(http.StatusBadRequest, share.NewError(http.StatusBadRequest, "q must contain 1 to 512 bytes"))
 		return
 	}
 	params := s.mapsSearchParams()
 	params["type"] = "search"
 	params["q"] = q
-	if ll := llFromQuery(c); ll != "" {
+	ll, err := llFromQuery(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, share.NewError(http.StatusBadRequest, err.Error()))
+		return
+	}
+	if ll != "" {
 		params["ll"] = ll
 	}
 	s.respond(c, params)
 }
 
 func (s *SerpClient) handleByCoord(c *gin.Context) {
-	ll := llFromQuery(c)
+	ll, err := llFromQuery(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, share.NewError(http.StatusBadRequest, err.Error()))
+		return
+	}
 	if ll == "" {
 		c.JSON(http.StatusBadRequest, share.NewError(http.StatusBadRequest, "lat and lng are required"))
 		return
@@ -70,6 +89,10 @@ func (s *SerpClient) handleByCoord(c *gin.Context) {
 	q := strings.TrimSpace(c.Query("q"))
 	if q == "" {
 		q = "place"
+	}
+	if len(q) > 512 {
+		c.JSON(http.StatusBadRequest, share.NewError(http.StatusBadRequest, "q must contain at most 512 bytes"))
+		return
 	}
 	params := s.mapsSearchParams()
 	params["type"] = "search"
@@ -91,8 +114,8 @@ func (s *SerpClient) handleByPlacePath(c *gin.Context) {
 }
 
 func (s *SerpClient) place(c *gin.Context, placeID string) {
-	if placeID == "" {
-		c.JSON(http.StatusBadRequest, share.NewError(http.StatusBadRequest, "place_id is required"))
+	if placeID == "" || len(placeID) > 512 {
+		c.JSON(http.StatusBadRequest, share.NewError(http.StatusBadRequest, "place_id must contain 1 to 512 bytes"))
 		return
 	}
 	params := s.mapsSearchParams()
@@ -113,6 +136,14 @@ func (s *SerpClient) respond(c *gin.Context, params map[string]string) {
 		c.JSON(http.StatusServiceUnavailable, share.NewError(http.StatusServiceUnavailable, "SERP_MAP_API is not set"))
 		return
 	}
+	if err := s.quota.Allow(c.Request.Context()); err != nil {
+		status := http.StatusTooManyRequests
+		if errors.Is(err, ErrQuotaUnavailable) {
+			status = http.StatusServiceUnavailable
+		}
+		c.JSON(status, share.NewError(status, err.Error()))
+		return
+	}
 	out, err := s.api.Search(params)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, share.NewError(http.StatusBadGateway, err.Error()))
@@ -121,24 +152,38 @@ func (s *SerpClient) respond(c *gin.Context, params map[string]string) {
 	c.JSON(http.StatusOK, out)
 }
 
-func llFromQuery(c *gin.Context) string {
+func llFromQuery(c *gin.Context) (string, error) {
 	lat := strings.TrimSpace(c.Query("lat"))
 	lng := strings.TrimSpace(c.Query("lng"))
-	if lat == "" || lng == "" {
-		if raw := strings.TrimSpace(c.Query("ll")); raw != "" {
-			if strings.HasPrefix(raw, "@") {
-				return raw
-			}
-			return "@" + raw
-		}
-		return ""
-	}
 	zoom := strings.TrimSpace(c.Query("zoom"))
+	if lat == "" && lng == "" {
+		raw := strings.TrimSpace(c.Query("ll"))
+		if raw == "" {
+			return "", nil
+		}
+		parts := strings.Split(strings.TrimPrefix(raw, "@"), ",")
+		if len(parts) < 2 || len(parts) > 3 {
+			return "", errors.New("ll must contain latitude, longitude and an optional zoom")
+		}
+		lat, lng = parts[0], parts[1]
+		if len(parts) == 3 {
+			zoom = parts[2]
+		}
+	}
+	latitude, latErr := strconv.ParseFloat(lat, 64)
+	longitude, lngErr := strconv.ParseFloat(lng, 64)
+	if latErr != nil || lngErr != nil || !(math.Abs(latitude) <= 90 && math.Abs(longitude) <= 180) {
+		return "", errors.New("lat and lng must be valid geographic coordinates")
+	}
 	if zoom == "" {
 		zoom = serpDefaultZoom
 	}
 	if !strings.HasSuffix(zoom, "z") && !strings.HasSuffix(zoom, "m") {
 		zoom += "z"
 	}
-	return fmt.Sprintf("@%s,%s,%s", lat, lng, zoom)
+	value, err := strconv.ParseFloat(zoom[:len(zoom)-1], 64)
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
+		return "", errors.New("zoom must be a finite non-negative number with a z or m suffix")
+	}
+	return fmt.Sprintf("@%s,%s,%s", lat, lng, zoom), nil
 }

@@ -34,13 +34,13 @@ func (s *stubRevokeStore) IsRevoked(_ context.Context, rawToken string) (bool, e
 }
 
 func TestLogoutRevokesValidRefresh(t *testing.T) {
-	t.Setenv("SECRET_REFRESH_JWT", "test-refresh-secret")
-	token, err := CreateRefreshToken("traveler")
+	setTestJWTSecrets(t)
+	token, err := CreateRefreshToken(testSessionUser())
 	if err != nil {
 		t.Fatal(err)
 	}
 	store := &stubRevokeStore{}
-	svc := NewLogoutService(store)
+	svc := NewLogoutService(store, &stubSessionUsers{user: testSessionUser()})
 	if err := svc.Logout(context.Background(), token); err != nil {
 		t.Fatal(err)
 	}
@@ -50,10 +50,10 @@ func TestLogoutRevokesValidRefresh(t *testing.T) {
 }
 
 func TestLogoutExpiredRefreshIsNoop(t *testing.T) {
-	t.Setenv("SECRET_REFRESH_JWT", "test-refresh-secret")
+	setTestJWTSecrets(t)
 	token := mustRefreshJWT(t, "traveler", time.Now().Add(-time.Hour))
 	store := &stubRevokeStore{}
-	svc := NewLogoutService(store)
+	svc := NewLogoutService(store, &stubSessionUsers{user: testSessionUser()})
 	if err := svc.Logout(context.Background(), token); err != nil {
 		t.Fatal(err)
 	}
@@ -63,14 +63,13 @@ func TestLogoutExpiredRefreshIsNoop(t *testing.T) {
 }
 
 func TestAssertRefreshUsableRejectsRevoked(t *testing.T) {
-	t.Setenv("SECRET_REFRESH_JWT", "test-refresh-secret")
-	t.Setenv("SECRET_JWT", "test-access-secret")
-	token, err := CreateRefreshToken("traveler")
+	setTestJWTSecrets(t)
+	token, err := CreateRefreshToken(testSessionUser())
 	if err != nil {
 		t.Fatal(err)
 	}
 	store := &stubRevokeStore{}
-	svc := NewLogoutService(store)
+	svc := NewLogoutService(store, &stubSessionUsers{user: testSessionUser()})
 	if err := svc.Logout(context.Background(), token); err != nil {
 		t.Fatal(err)
 	}
@@ -81,18 +80,18 @@ func TestAssertRefreshUsableRejectsRevoked(t *testing.T) {
 }
 
 func TestAssertRefreshUsableAllowsFreshToken(t *testing.T) {
-	t.Setenv("SECRET_REFRESH_JWT", "test-refresh-secret")
-	token, err := CreateRefreshToken("traveler")
+	setTestJWTSecrets(t)
+	token, err := CreateRefreshToken(testSessionUser())
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := NewLogoutService(&stubRevokeStore{})
+	svc := NewLogoutService(&stubRevokeStore{}, &stubSessionUsers{user: testSessionUser()})
 	claims, err := svc.AssertRefreshUsable(context.Background(), token)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if claims["username"] != "traveler" {
-		t.Fatalf("username = %v", claims["username"])
+	if claims.Username != "traveler" {
+		t.Fatalf("username = %v", claims.Username)
 	}
 }
 
@@ -104,7 +103,7 @@ func mustRefreshJWT(t *testing.T, username string, exp time.Time) string {
 		"exp":        exp.Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString([]byte("test-refresh-secret"))
+	signed, err := token.SignedString([]byte(testRefreshSecret))
 	if err != nil {
 		t.Fatal(err)
 	}
