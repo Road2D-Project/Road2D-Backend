@@ -10,6 +10,7 @@ persistence/
 .idea
 .git
 .cursor/
+.agents/
 *.exe
 module/maps/test
 module/realtime/test
