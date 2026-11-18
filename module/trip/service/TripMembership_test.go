@@ -67,6 +67,10 @@ func (s *stubMembership) ListPendingMembers(context.Context, uuid.UUID) ([]model
 	return s.pending, nil
 }
 
+func (s *stubMembership) ListInvitedMembers(context.Context, uuid.UUID) ([]model.TripMember, error) {
+	return nil, nil
+}
+
 func (s *stubMembership) ListActiveMembers(context.Context, uuid.UUID) ([]model.TripMember, error) {
 	if s.member == nil {
 		return nil, nil
@@ -148,16 +152,16 @@ func TestAcceptJoinRequestStopsAtTheCap(t *testing.T) {
 }
 
 func TestKickRefusesTheLeader(t *testing.T) {
-	store := &stubMembership{member: &model.TripMember{Status: enum.MembershipActive, Role: enum.TripRoleLeader}}
-	err := NewKickTripMemberService(store, &stubRoleCache{}).Kick(context.Background(), uuid.New(), uuid.New(), uuid.New(), enum.TripRoleLeader)
+	store := &stubMembership{trip: &model.Trip{}, member: &model.TripMember{Status: enum.MembershipActive, Role: enum.TripRoleLeader}}
+	err := NewKickTripMemberService(store, store, &stubRoleCache{}).Kick(context.Background(), uuid.New(), uuid.New(), uuid.New(), enum.TripRoleLeader)
 	if !errors.Is(err, repository.ErrCannotKickLeader) {
 		t.Fatalf("got %v", err)
 	}
 }
 
 func TestKickAdminCannotRemoveAnotherAdmin(t *testing.T) {
-	store := &stubMembership{member: &model.TripMember{Status: enum.MembershipActive, Role: enum.TripRoleAdmin}}
-	err := NewKickTripMemberService(store, nil).Kick(context.Background(), uuid.New(), uuid.New(), uuid.New(), enum.TripRoleAdmin)
+	store := &stubMembership{trip: &model.Trip{}, member: &model.TripMember{Status: enum.MembershipActive, Role: enum.TripRoleAdmin}}
+	err := NewKickTripMemberService(store, store, nil).Kick(context.Background(), uuid.New(), uuid.New(), uuid.New(), enum.TripRoleAdmin)
 	if !errors.Is(err, repository.ErrInsufficientKickRole) {
 		t.Fatalf("got %v", err)
 	}
@@ -165,8 +169,8 @@ func TestKickAdminCannotRemoveAnotherAdmin(t *testing.T) {
 
 func TestUpdateNicknameIsOnlyForYourself(t *testing.T) {
 	nickname := "scout"
-	store := &stubMembership{member: &model.TripMember{Status: enum.MembershipActive, Role: enum.TripRoleMember}}
-	_, err := NewTripMemberService(store, nil).Update(context.Background(), uuid.New(), uuid.New(), uuid.New(), enum.TripRoleLeader, request.UpdateTripMemberRequest{
+	store := &stubMembership{trip: &model.Trip{}, member: &model.TripMember{Status: enum.MembershipActive, Role: enum.TripRoleMember}}
+	_, err := NewTripMemberService(store, store, nil).Update(context.Background(), uuid.New(), uuid.New(), uuid.New(), enum.TripRoleLeader, request.UpdateTripMemberRequest{
 		Nickname: &nickname,
 	})
 	if !errors.Is(err, repository.ErrCannotUpdateOtherNickname) {
@@ -177,9 +181,9 @@ func TestUpdateNicknameIsOnlyForYourself(t *testing.T) {
 func TestLeaderCanAppointAdmin(t *testing.T) {
 	actor, target, tripID := uuid.New(), uuid.New(), uuid.New()
 	role := enum.TripRoleAdmin
-	store := &stubMembership{member: &model.TripMember{UserID: target, Status: enum.MembershipActive, Role: enum.TripRoleMember}}
+	store := &stubMembership{trip: &model.Trip{}, member: &model.TripMember{UserID: target, Status: enum.MembershipActive, Role: enum.TripRoleMember}}
 	cache := &stubRoleCache{}
-	got, err := NewTripMemberService(store, cache).Update(context.Background(), actor, target, tripID, enum.TripRoleLeader, request.UpdateTripMemberRequest{
+	got, err := NewTripMemberService(store, store, cache).Update(context.Background(), actor, target, tripID, enum.TripRoleLeader, request.UpdateTripMemberRequest{
 		Role: &role,
 	})
 	if err != nil {
@@ -187,5 +191,78 @@ func TestLeaderCanAppointAdmin(t *testing.T) {
 	}
 	if got.Role != enum.TripRoleAdmin || cache.setRole != enum.TripRoleAdmin {
 		t.Fatalf("got %+v cache %s", got, cache.setRole)
+	}
+}
+
+func TestActiveTripBlocksMemberMutations(t *testing.T) {
+	tripID, actorID, targetID := uuid.New(), uuid.New(), uuid.New()
+	activeTrip := &model.Trip{Status: enum.TripActive, MemberLimit: 15}
+	activeTrip.ID = tripID
+	newStore := func(status enum.MembershipStatus) *stubMembership {
+		return &stubMembership{
+			trip: activeTrip,
+			member: &model.TripMember{
+				TripID: tripID, UserID: targetID, Status: status, Role: enum.TripRoleMember,
+			},
+		}
+	}
+
+	t.Run("invite", func(t *testing.T) {
+		store := newStore(enum.MembershipLeft)
+		_, err := NewInviteTripMemberService(store, store).Invite(context.Background(), targetID, tripID, actorID, "leader", enum.TripRoleLeader)
+		assertTripRosterLocked(t, err)
+		if store.added != nil || store.updated != nil {
+			t.Fatal("active trip invite mutated the roster")
+		}
+	})
+
+	t.Run("join request response", func(t *testing.T) {
+		store := newStore(enum.MembershipPending)
+		_, err := NewTripJoinRequestService(store, store, nil).Accept(context.Background(), targetID, tripID)
+		assertTripRosterLocked(t, err)
+		if store.updated != nil {
+			t.Fatal("active trip join request mutated the roster")
+		}
+	})
+
+	t.Run("invitation response", func(t *testing.T) {
+		store := newStore(enum.MembershipInvited)
+		_, err := NewTripInvitationService(store, store, nil).Accept(context.Background(), targetID, tripID)
+		assertTripRosterLocked(t, err)
+		if store.updated != nil {
+			t.Fatal("active trip invitation mutated the roster")
+		}
+	})
+
+	t.Run("kick", func(t *testing.T) {
+		store := newStore(enum.MembershipActive)
+		err := NewKickTripMemberService(store, store, nil).Kick(context.Background(), actorID, targetID, tripID, enum.TripRoleLeader)
+		assertTripRosterLocked(t, err)
+		if store.kicked != nil {
+			t.Fatal("active trip kick mutated the roster")
+		}
+	})
+
+	t.Run("member update", func(t *testing.T) {
+		store := newStore(enum.MembershipActive)
+		nickname := "new-name"
+		_, err := NewTripMemberService(store, store, nil).Update(context.Background(), targetID, targetID, tripID, enum.TripRoleMember, request.UpdateTripMemberRequest{Nickname: &nickname})
+		assertTripRosterLocked(t, err)
+		if store.updated != nil {
+			t.Fatal("active trip member update mutated the roster")
+		}
+	})
+
+	t.Run("branch assignment", func(t *testing.T) {
+		store := newStore(enum.MembershipActive)
+		err := NewTripMemberService(store, store, nil).AssignBranch(context.Background(), tripID, targetID, uuid.New())
+		assertTripRosterLocked(t, err)
+	})
+}
+
+func assertTripRosterLocked(t *testing.T, err error) {
+	t.Helper()
+	if !errors.Is(err, repository.ErrTripRosterLocked) {
+		t.Fatalf("got %v, want %v", err, repository.ErrTripRosterLocked)
 	}
 }

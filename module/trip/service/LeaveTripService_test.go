@@ -13,12 +13,21 @@ import (
 )
 
 type stubLeaveTripMembers struct {
+	trip      *model.Trip
 	member    *model.TripMember
 	roster    []model.TripMember
 	findErr   error
 	leaveErr  error
 	leaver    *model.TripMember
 	successor *model.TripMember
+}
+
+func (s *stubLeaveTripMembers) FindTripByID(context.Context, uuid.UUID) (*model.Trip, error) {
+	if s.trip == nil {
+		return &model.Trip{}, nil
+	}
+	copied := *s.trip
+	return &copied, nil
 }
 
 func (s *stubLeaveTripMembers) FindMemberById(context.Context, uuid.UUID, uuid.UUID) (*model.TripMember, error) {
@@ -79,7 +88,7 @@ func TestLeaveMarksActiveMemberLeft(t *testing.T) {
 		UserID: userID, TripID: tripID, Role: enum.TripRoleMember, Status: enum.MembershipActive,
 	}}
 	cache := &stubLeaveTripCache{}
-	svc := NewLeaveTripService(members, cache)
+	svc := NewLeaveTripService(members, members, cache)
 
 	if err := svc.Leave(context.Background(), userID, tripID); err != nil {
 		t.Fatal(err)
@@ -104,7 +113,7 @@ func TestLeaveLeaderTransfersToEarliestMember(t *testing.T) {
 		},
 	}
 	cache := &stubLeaveTripCache{}
-	svc := NewLeaveTripService(members, cache)
+	svc := NewLeaveTripService(members, members, cache)
 
 	if err := svc.Leave(context.Background(), leaderID, tripID); err != nil {
 		t.Fatal(err)
@@ -127,7 +136,7 @@ func TestLeaveLeaderPrefersEarliestAdmin(t *testing.T) {
 			{UserID: adminID, Role: enum.TripRoleAdmin, Status: enum.MembershipActive, JoinedAt: atHour(8)},
 		},
 	}
-	svc := NewLeaveTripService(members, nil)
+	svc := NewLeaveTripService(members, members, nil)
 	if err := svc.Leave(context.Background(), leaderID, tripID); err != nil {
 		t.Fatal(err)
 	}
@@ -138,12 +147,13 @@ func TestLeaveLeaderPrefersEarliestAdmin(t *testing.T) {
 
 func TestLeaveLeaderAloneHasNoSuccessor(t *testing.T) {
 	leaderID, tripID := uuid.New(), uuid.New()
-	svc := NewLeaveTripService(&stubLeaveTripMembers{
+	members := &stubLeaveTripMembers{
 		member: &model.TripMember{UserID: leaderID, TripID: tripID, Role: enum.TripRoleLeader, Status: enum.MembershipActive},
 		roster: []model.TripMember{
 			{UserID: leaderID, Role: enum.TripRoleLeader, Status: enum.MembershipActive, JoinedAt: atHour(1)},
 		},
-	}, nil)
+	}
+	svc := NewLeaveTripService(members, members, nil)
 	err := svc.Leave(context.Background(), leaderID, tripID)
 	if !errors.Is(err, repository.ErrNoSuccessorToTransfer) {
 		t.Fatalf("got %v", err)
@@ -151,11 +161,27 @@ func TestLeaveLeaderAloneHasNoSuccessor(t *testing.T) {
 }
 
 func TestLeaveInactiveMemberIsForbidden(t *testing.T) {
-	svc := NewLeaveTripService(&stubLeaveTripMembers{member: &model.TripMember{
+	members := &stubLeaveTripMembers{member: &model.TripMember{
 		Status: enum.MembershipLeft, Role: enum.TripRoleMember,
-	}}, nil)
+	}}
+	svc := NewLeaveTripService(members, members, nil)
 	err := svc.Leave(context.Background(), uuid.New(), uuid.New())
 	if !errors.Is(err, repository.ErrUserNotTripMember) {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestLeaveTripRefusesWhileTripIsActive(t *testing.T) {
+	userID, tripID := uuid.New(), uuid.New()
+	members := &stubLeaveTripMembers{
+		trip:   &model.Trip{Status: enum.TripActive},
+		member: &model.TripMember{UserID: userID, TripID: tripID, Role: enum.TripRoleMember, Status: enum.MembershipActive},
+	}
+	err := NewLeaveTripService(members, members, nil).Leave(context.Background(), userID, tripID)
+	if !errors.Is(err, repository.ErrTripRosterLocked) {
+		t.Fatalf("got %v, want %v", err, repository.ErrTripRosterLocked)
+	}
+	if members.leaver != nil {
+		t.Fatal("active trip leave mutated the roster")
 	}
 }

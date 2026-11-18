@@ -22,17 +22,25 @@ type LeaveTripRoleCache interface {
 }
 
 type LeaveTripService struct {
+	trips     TripRosterFinder
 	members   LeaveTripMemberRepository
 	roleCache LeaveTripRoleCache
 }
 
-func NewLeaveTripService(members LeaveTripMemberRepository, roleCache LeaveTripRoleCache) *LeaveTripService {
-	return &LeaveTripService{members: members, roleCache: roleCache}
+func NewLeaveTripService(trips TripRosterFinder, members LeaveTripMemberRepository, roleCache LeaveTripRoleCache) *LeaveTripService {
+	return &LeaveTripService{trips: trips, members: members, roleCache: roleCache}
 }
 
 // Leave marks the caller left. If they are the leader, leadership moves to the
 // earliest-joined remaining member; the last leader must delete the trip instead.
 func (s *LeaveTripService) Leave(ctx context.Context, userId, tripId uuid.UUID) error {
+	trip, err := s.trips.FindTripByID(ctx, tripId)
+	if err != nil {
+		return err
+	}
+	if err := requireMutableTripRoster(trip); err != nil {
+		return err
+	}
 	leaver, err := s.members.FindMemberById(ctx, userId, tripId)
 	if err != nil {
 		return err

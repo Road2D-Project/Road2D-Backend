@@ -43,6 +43,9 @@ func (s *InviteTripMemberService) Invite(ctx context.Context, invitedUserID, tri
 	if err != nil {
 		return nil, err
 	}
+	if err := requireMutableTripRoster(trip); err != nil {
+		return nil, err
+	}
 	active, err := s.members.CountActiveMembers(ctx, tripID)
 	if err != nil {
 		return nil, err

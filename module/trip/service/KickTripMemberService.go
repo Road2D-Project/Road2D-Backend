@@ -19,15 +19,23 @@ type KickTripRoleCache interface {
 }
 
 type KickTripMemberService struct {
+	trips     TripRosterFinder
 	members   KickTripStore
 	roleCache KickTripRoleCache
 }
 
-func NewKickTripMemberService(members KickTripStore, roleCache KickTripRoleCache) *KickTripMemberService {
-	return &KickTripMemberService{members: members, roleCache: roleCache}
+func NewKickTripMemberService(trips TripRosterFinder, members KickTripStore, roleCache KickTripRoleCache) *KickTripMemberService {
+	return &KickTripMemberService{trips: trips, members: members, roleCache: roleCache}
 }
 
 func (s *KickTripMemberService) Kick(ctx context.Context, actorID, targetID, tripID uuid.UUID, actorRole enum.TripRole) error {
+	trip, err := s.trips.FindTripByID(ctx, tripID)
+	if err != nil {
+		return err
+	}
+	if err := requireMutableTripRoster(trip); err != nil {
+		return err
+	}
 	if !actorRole.CanManageMembers() {
 		return repository.ErrInsufficientKickRole
 	}

@@ -39,6 +39,7 @@ func (ctrl *TripController) tripService() *service.TripService {
 
 func (ctrl *TripController) tripMemberService() *service.TripMemberService {
 	return service.NewTripMemberService(
+		repository.NewTripRepository(ctrl.db),
 		repository.NewTripMemberRepository(ctrl.db),
 		repository.NewTripMemberStore(ctrl.redisClient),
 	)
@@ -69,6 +70,7 @@ func (ctrl *TripController) tripJoinRequestService() *service.TripJoinRequestSer
 
 func (ctrl *TripController) kickTripMemberService() *service.KickTripMemberService {
 	return service.NewKickTripMemberService(
+		repository.NewTripRepository(ctrl.db),
 		repository.NewTripMemberRepository(ctrl.db),
 		repository.NewTripMemberStore(ctrl.redisClient),
 	)
@@ -81,6 +83,7 @@ func (ctrl *TripController) tripBranch() *service.TripBranchService {
 }
 func (ctrl *TripController) leaveTripService() *service.LeaveTripService {
 	return service.NewLeaveTripService(
+		repository.NewTripRepository(ctrl.db),
 		repository.NewTripMemberRepository(ctrl.db),
 		repository.NewTripMemberStore(ctrl.redisClient),
 	)
@@ -175,6 +178,7 @@ func mapTripError(c *gin.Context, err error) {
 		errors.Is(err, repository.ErrTripAlreadyCompleted),
 		errors.Is(err, repository.ErrTripNotActive),
 		errors.Is(err, repository.ErrTripCannotActivate),
+		errors.Is(err, repository.ErrTripRosterLocked),
 		errors.Is(err, repository.ErrIdempotencyConflict),
 		errors.Is(err, repository.ErrIdempotencyKeyTaken):
 		jsonError(c, http.StatusConflict, err.Error())

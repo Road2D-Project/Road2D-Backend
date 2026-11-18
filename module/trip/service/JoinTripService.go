@@ -42,6 +42,9 @@ func (s *JoinTripService) Join(ctx context.Context, user *authModel.User, token 
 	if err != nil {
 		return nil, err
 	}
+	if err := requireMutableTripRoster(trip); err != nil {
+		return nil, err
+	}
 	active, err := s.members.CountActiveMembers(ctx, trip.ID)
 	if err != nil {
 		return nil, err

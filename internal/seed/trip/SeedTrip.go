@@ -89,6 +89,7 @@ func Seed(ctx context.Context, db *gorm.DB, redisClient *redis.Client, opts Opti
 		return nil, err
 	}
 	roster, err := tripService.NewTripMemberService(
+		tripRepo.NewTripRepository(db),
 		tripRepo.NewTripMemberRepository(db),
 		tripRepo.NewTripMemberStore(redisClient),
 	).ListActiveMembers(ctx, createdTrip.ID)

@@ -25,12 +25,13 @@ type TripMemberRoleWriter interface {
 	SetCachedTripMemberRole(ctx context.Context, tripId uuid.UUID, userId uuid.UUID, role enum.TripRole) error
 }
 type TripMemberService struct {
+	trips     TripRosterFinder
 	members   TripMemberRecords
 	roleCache TripMemberRoleWriter
 }
 
-func NewTripMemberService(members TripMemberRecords, roleCache TripMemberRoleWriter) *TripMemberService {
-	return &TripMemberService{members: members, roleCache: roleCache}
+func NewTripMemberService(trips TripRosterFinder, members TripMemberRecords, roleCache TripMemberRoleWriter) *TripMemberService {
+	return &TripMemberService{trips: trips, members: members, roleCache: roleCache}
 }
 
 func (s *TripMemberService) ListActiveMembers(ctx context.Context, tripID uuid.UUID) (*response.TripMemberListResponse, error) {
@@ -51,6 +52,13 @@ func (s *TripMemberService) ListActiveMembers(ctx context.Context, tripID uuid.U
 func (s *TripMemberService) Update(ctx context.Context, actorID, targetID, tripID uuid.UUID, actorRole enum.TripRole, req request.UpdateTripMemberRequest) (*response.TripMemberResponse, error) {
 	if req.Nickname == nil && req.Role == nil {
 		return nil, repository.ErrNoTripMemberUpdate
+	}
+	trip, err := s.trips.FindTripByID(ctx, tripID)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireMutableTripRoster(trip); err != nil {
+		return nil, err
 	}
 	member, err := s.members.FindMemberById(ctx, targetID, tripID)
 	if err != nil {
@@ -91,6 +99,13 @@ func (s *TripMemberService) Update(ctx context.Context, actorID, targetID, tripI
 	return &out, nil
 }
 func (s *TripMemberService) AssignBranch(ctx context.Context, tripID uuid.UUID, userID uuid.UUID, branchId uuid.UUID) error {
+	trip, err := s.trips.FindTripByID(ctx, tripID)
+	if err != nil {
+		return err
+	}
+	if err := requireMutableTripRoster(trip); err != nil {
+		return err
+	}
 	user, err := s.members.FindMemberById(ctx, userID, tripID)
 	if err != nil {
 		return err
