@@ -26,12 +26,17 @@ import (
 // @Failure      401     {object}  share.ErrorResponse
 // @Failure      403     {object}  share.ErrorResponse
 // @Failure      404     {object}  share.ErrorResponse
+// @Failure      409     {object}  share.ErrorResponse
 // @Failure      429     {object}  share.ErrorResponse
 // @Failure      500     {object}  share.ErrorResponse
 // @Failure      502     {object}  share.ErrorResponse
 // @Router       /trips/{tripId}/travels/graph [post]
 func (ctrl *TripController) HandleComputeTravelGraph() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		user := currentUserOrAbort(c)
+		if user == nil {
+			return
+		}
 		tripID, ok := parseTripID(c)
 		if !ok {
 			return
@@ -47,7 +52,7 @@ func (ctrl *TripController) HandleComputeTravelGraph() gin.HandlerFunc {
 				return
 			}
 		}
-		graph, err := ctrl.computeStoredTrip().ComputeTravelGraph(c.Request.Context(), tripID, req.Branches)
+		graph, err := ctrl.planningService().ComputeTravels(c.Request.Context(), user.ID, tripID, req.Branches)
 		if err != nil {
 			mapTripError(c, err)
 			return

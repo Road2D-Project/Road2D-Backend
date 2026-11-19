@@ -25,6 +25,7 @@ var Steps = []Step{
 	{Name: "V8_AddTripIdempotencyKey", Run: V8_AddTripIdempotencyKey},
 	{Name: "V9_AddTripBranchMetadata", Run: V9_AddTripBranchMetadata},
 	{Name: "V10_AddUserSessionVersion", Run: V10_AddUserSessionVersion},
+	{Name: "V11_AddDestinationCreator", Run: V11_AddDestinationCreator},
 }
 
 // Apply runs Steps in order. AutoMigrate follows, and it will not undo these repairs.

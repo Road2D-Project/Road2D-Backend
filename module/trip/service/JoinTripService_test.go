@@ -129,3 +129,22 @@ func TestJoinTripRefusesWhenFull(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestJoinTripRefusesWhileTripIsActive(t *testing.T) {
+	token := uuid.New().String()
+	tripID := uuid.New()
+	trip := &model.Trip{Status: enum.TripActive, InviteToken: token, MemberLimit: 15}
+	trip.ID = tripID
+	trips := &stubTripRecords{byToken: map[string]*model.Trip{token: trip}}
+	members := &stubJoinMembers{}
+	user := &authModel.User{Username: "scout"}
+	user.ID = uuid.New()
+
+	_, err := NewJoinTripService(trips, members).Join(context.Background(), user, token)
+	if !errors.Is(err, repository.ErrTripRosterLocked) {
+		t.Fatalf("got %v, want %v", err, repository.ErrTripRosterLocked)
+	}
+	if members.added != nil || members.updated != nil {
+		t.Fatal("active trip join mutated the roster")
+	}
+}

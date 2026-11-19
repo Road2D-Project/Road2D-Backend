@@ -30,6 +30,10 @@ import (
 // @Router       /trips/{tripId}/branches/{branchId}/stops/{destinationId} [patch]
 func (ctrl *TripController) HandleUpdateBranchStop() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		user := currentUserOrAbort(c)
+		if user == nil {
+			return
+		}
 		tripID, ok := parseTripID(c)
 		if !ok {
 			return
@@ -40,11 +44,6 @@ func (ctrl *TripController) HandleUpdateBranchStop() gin.HandlerFunc {
 		}
 		destinationID, ok := parseDestinationID(c)
 		if !ok {
-			return
-		}
-		role, ok := currentTripRole(c)
-		if !ok {
-			jsonError(c, http.StatusForbidden, "trip role is missing")
 			return
 		}
 		var req request.UpdateBranchStopRequest
@@ -58,7 +57,7 @@ func (ctrl *TripController) HandleUpdateBranchStop() gin.HandlerFunc {
 				return
 			}
 		}
-		detail, err := ctrl.tripBranch().UpdateBranchStop(c.Request.Context(), tripID, branchID, destinationID, req, role)
+		detail, err := ctrl.planningService().UpdateBranchStop(c.Request.Context(), user.ID, tripID, branchID, destinationID, req)
 		if err != nil {
 			mapTripError(c, err)
 			return

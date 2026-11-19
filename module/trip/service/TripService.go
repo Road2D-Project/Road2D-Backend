@@ -164,6 +164,12 @@ func (s *TripService) CreateTrip(ctx context.Context, owner *authModel.User, req
 	if err != nil {
 		return nil, false, err
 	}
+	if main != nil {
+		for i := range main.Destinations {
+			creatorID := owner.ID
+			main.Destinations[i].CreatedByUserID = &creatorID
+		}
+	}
 	trip := &model.Trip{
 		OwnerID:         owner.ID,
 		Name:            name,

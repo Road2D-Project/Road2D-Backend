@@ -27,6 +27,10 @@ import (
 // @Router       /trips/{tripId}/draft [post]
 func (ctrl *TripController) HandleAddDraftDestination() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		user := currentUserOrAbort(c)
+		if user == nil {
+			return
+		}
 		tripID, ok := parseTripID(c)
 		if !ok {
 			return
@@ -42,7 +46,7 @@ func (ctrl *TripController) HandleAddDraftDestination() gin.HandlerFunc {
 				return
 			}
 		}
-		listed, err := ctrl.tripBranch().AddDraftDestination(c.Request.Context(), tripID, req.DestinationID)
+		listed, err := ctrl.planningService().AddDraftDestination(c.Request.Context(), user.ID, tripID, req.DestinationID)
 		if err != nil {
 			mapTripError(c, err)
 			return

@@ -3,6 +3,8 @@ package repository
 import "errors"
 
 var (
+	ErrDestinationForbidden      = errors.New("destination access denied")
+	ErrPlanningConflict          = errors.New("planning data changed, retry the request")
 	ErrMemberRoleNotInCache      = errors.New("member role not found in cache")
 	ErrUserNotTripMember         = errors.New("user is not an active trip member")
 	ErrTripNotFound              = errors.New("trip not found")
@@ -15,6 +17,7 @@ var (
 	ErrIdempotencyKeyTaken       = errors.New("idempotency key is already in use")
 	ErrMemberNotFriend           = errors.New("every member besides the leader must be an accepted friend")
 	ErrTripMemberLimit           = errors.New("trip member limit reached")
+	ErrTripRosterLocked          = errors.New("trip roster is locked while the trip is active")
 	ErrTripTypePolicyUnset       = errors.New("member limit policy is not set for this trip type")
 	ErrAlreadyTripMember         = errors.New("user is already a trip member")
 	ErrAlreadyInvited            = errors.New("user is already invited to this trip")

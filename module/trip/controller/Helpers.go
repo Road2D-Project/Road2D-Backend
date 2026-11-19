@@ -12,6 +12,7 @@ import (
 	"Road-To-Destination-BE/module/trip/repository"
 	"Road-To-Destination-BE/module/trip/service"
 	"Road-To-Destination-BE/utils/customValidator"
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -24,6 +25,30 @@ const (
 	membershipActionAccept = "accept"
 	membershipActionReject = "reject"
 )
+
+func (ctrl *TripController) planningService() *service.PlanningService {
+	records := repository.NewPlanningRepository(ctrl.db)
+	transaction := func(ctx context.Context, run func(service.PlanningStore) error) error {
+		return records.Transaction(ctx, func(tx *repository.PlanningRepository) error {
+			return run(tx)
+		})
+	}
+	return service.NewPlanningService(transaction,
+		mapsservice.NewDirectionService(ctrl.goong, ctrl.durableLegs()),
+		mapsservice.NewDirectionService(ctrl.goong, ctrl.previewLegs()),
+		repository.NewLocationRepository(ctrl.db))
+}
+
+func destinationCacheKeys(c *gin.Context, tripIDs []uuid.UUID) {
+	keys := make([]string, 0, len(tripIDs)*3)
+	for _, tripID := range tripIDs {
+		id := tripID.String()
+		keys = append(keys, "resp:graph:"+id, "resp:travels:"+id, "resp:draft:"+id)
+	}
+	if len(keys) > 0 {
+		c.Set(middleware.MainKeyController, keys)
+	}
+}
 
 func (ctrl *TripController) tripService() *service.TripService {
 	return service.NewTripService(
@@ -39,6 +64,7 @@ func (ctrl *TripController) tripService() *service.TripService {
 
 func (ctrl *TripController) tripMemberService() *service.TripMemberService {
 	return service.NewTripMemberService(
+		repository.NewTripRepository(ctrl.db),
 		repository.NewTripMemberRepository(ctrl.db),
 		repository.NewTripMemberStore(ctrl.redisClient),
 	)
@@ -69,6 +95,7 @@ func (ctrl *TripController) tripJoinRequestService() *service.TripJoinRequestSer
 
 func (ctrl *TripController) kickTripMemberService() *service.KickTripMemberService {
 	return service.NewKickTripMemberService(
+		repository.NewTripRepository(ctrl.db),
 		repository.NewTripMemberRepository(ctrl.db),
 		repository.NewTripMemberStore(ctrl.redisClient),
 	)
@@ -81,6 +108,7 @@ func (ctrl *TripController) tripBranch() *service.TripBranchService {
 }
 func (ctrl *TripController) leaveTripService() *service.LeaveTripService {
 	return service.NewLeaveTripService(
+		repository.NewTripRepository(ctrl.db),
 		repository.NewTripMemberRepository(ctrl.db),
 		repository.NewTripMemberStore(ctrl.redisClient),
 	)
@@ -103,22 +131,10 @@ func (ctrl *TripController) computeTrip() *service.ComputeTripService {
 	)
 }
 
-// computeStoredTrip routes the saved graph. Legs go through Redis and Postgres,
-// unlike the preview helper, which keeps a 15 minute Redis entry and nothing else.
 // readStoredTrip loads travels already written for the saved graph. It does not route.
 func (ctrl *TripController) readStoredTrip() *service.ComputeTripService {
 	return service.NewComputeTripService(
 		nil,
-		repository.NewTravelRepository(ctrl.db),
-		nil,
-		nil,
-		repository.NewTripBranchRepository(ctrl.db),
-	)
-}
-
-func (ctrl *TripController) computeStoredTrip() *service.ComputeTripService {
-	return service.NewComputeTripService(
-		mapsservice.NewDirectionService(ctrl.goong, ctrl.durableLegs()),
 		repository.NewTravelRepository(ctrl.db),
 		nil,
 		nil,
@@ -163,7 +179,8 @@ func mapTripError(c *gin.Context, err error) {
 		errors.Is(err, repository.ErrBranchNotFound),
 		errors.Is(err, repository.ErrBranchStopNotFound):
 		jsonError(c, http.StatusNotFound, err.Error())
-	case errors.Is(err, repository.ErrAlreadyTripMember),
+	case errors.Is(err, repository.ErrPlanningConflict),
+		errors.Is(err, repository.ErrAlreadyTripMember),
 		errors.Is(err, repository.ErrAlreadyInvited),
 		errors.Is(err, repository.ErrJoinRequestPending),
 		errors.Is(err, repository.ErrInvitationNotPending),
@@ -175,10 +192,12 @@ func mapTripError(c *gin.Context, err error) {
 		errors.Is(err, repository.ErrTripAlreadyCompleted),
 		errors.Is(err, repository.ErrTripNotActive),
 		errors.Is(err, repository.ErrTripCannotActivate),
+		errors.Is(err, repository.ErrTripRosterLocked),
 		errors.Is(err, repository.ErrIdempotencyConflict),
 		errors.Is(err, repository.ErrIdempotencyKeyTaken):
 		jsonError(c, http.StatusConflict, err.Error())
-	case errors.Is(err, repository.ErrMemberNotFriend),
+	case errors.Is(err, repository.ErrDestinationForbidden),
+		errors.Is(err, repository.ErrMemberNotFriend),
 		errors.Is(err, repository.ErrUserNotTripMember),
 		errors.Is(err, repository.ErrCannotKickLeader),
 		errors.Is(err, repository.ErrCannotKickSelf),

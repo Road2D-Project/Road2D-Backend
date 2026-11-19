@@ -29,6 +29,10 @@ import (
 // @Router       /trips/{tripId}/branches/{branchId} [patch]
 func (ctrl *TripController) HandleUpdateBranch() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		user := currentUserOrAbort(c)
+		if user == nil {
+			return
+		}
 		tripID, ok := parseTripID(c)
 		if !ok {
 			return
@@ -48,7 +52,7 @@ func (ctrl *TripController) HandleUpdateBranch() gin.HandlerFunc {
 				return
 			}
 		}
-		updated, err := ctrl.tripBranch().UpdateBranch(c.Request.Context(), tripID, branchID, req)
+		updated, err := ctrl.planningService().UpdateBranch(c.Request.Context(), user.ID, tripID, branchID, req)
 		if err != nil {
 			mapTripError(c, err)
 			return

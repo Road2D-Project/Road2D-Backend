@@ -58,6 +58,13 @@ func (s *TripJoinRequestService) Reject(ctx context.Context, userID, tripID uuid
 }
 
 func (s *TripJoinRequestService) respond(ctx context.Context, userID, tripID uuid.UUID, status enum.MembershipStatus) (*response.TripMemberResponse, error) {
+	trip, err := s.trips.FindTripByID(ctx, tripID)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireMutableTripRoster(trip); err != nil {
+		return nil, err
+	}
 	member, err := s.members.FindMemberById(ctx, userID, tripID)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotTripMember) {
@@ -69,10 +76,6 @@ func (s *TripJoinRequestService) respond(ctx context.Context, userID, tripID uui
 		return nil, repository.ErrJoinRequestNotPending
 	}
 	if status.IsActive() {
-		trip, err := s.trips.FindTripByID(ctx, tripID)
-		if err != nil {
-			return nil, err
-		}
 		active, err := s.members.CountActiveMembers(ctx, tripID)
 		if err != nil {
 			return nil, err

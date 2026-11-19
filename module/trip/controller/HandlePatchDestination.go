@@ -24,12 +24,14 @@ var _ = request.PatchDestinationRequest{}
 // @Success      200            {object}  model.Destination
 // @Failure      400            {object}  share.ErrorResponse
 // @Failure      401            {object}  share.ErrorResponse
+// @Failure      403            {object}  share.ErrorResponse
 // @Failure      404            {object}  share.ErrorResponse
 // @Failure      409            {object}  share.ErrorResponse
 // @Router       /planning/destination/{destinationId} [patch]
 func (ctrl *TripController) HandlePatchDestination() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if currentUserOrAbort(c) == nil {
+		user := currentUserOrAbort(c)
+		if user == nil {
 			return
 		}
 		destinationID, ok := parseDestinationID(c)
@@ -47,11 +49,12 @@ func (ctrl *TripController) HandlePatchDestination() gin.HandlerFunc {
 				return
 			}
 		}
-		updated, err := ctrl.placeService().PatchDestination(c.Request.Context(), destinationID, req)
+		updated, affected, err := ctrl.planningService().PatchDestination(c.Request.Context(), user.ID, destinationID, req)
 		if err != nil {
 			mapTripError(c, err)
 			return
 		}
+		destinationCacheKeys(c, affected)
 		c.JSON(http.StatusOK, updated)
 	}
 }
