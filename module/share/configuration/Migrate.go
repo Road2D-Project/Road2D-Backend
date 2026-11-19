@@ -5,6 +5,7 @@ import (
 	friendModel "Road-To-Destination-BE/module/friend/model"
 	groupModel "Road-To-Destination-BE/module/group/model"
 	"Road-To-Destination-BE/module/share/configuration/version"
+	trackingModel "Road-To-Destination-BE/module/tracking/model"
 	"Road-To-Destination-BE/module/trip/model"
 
 	"gorm.io/gorm"
@@ -31,5 +32,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.BranchDestination{},
 		&model.Leg{},
 		&model.Travel{},
+		&trackingModel.CheckpointRecord{},
+		&trackingModel.RedirectResultRecord{},
 	)
 }

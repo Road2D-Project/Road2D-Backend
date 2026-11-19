@@ -33,7 +33,7 @@ const home = [
   { lat: 10.7809, lng: 106.7076 },
   { lat: 10.7832, lng: 106.7092 },
 ];
-const sc = loadScenario(fileURLToPath(new URL("../../scenario.home.json", import.meta.url)));
+const sc = loadScenario(fileURLToPath(new URL("../../scenario_user_1.home.json", import.meta.url)));
 normalize(sc);
 if (sc.path.polyline !== encode(home)) {
   throw new Error(`home polyline ${sc.path.polyline}`);

@@ -7,7 +7,7 @@
   },
   "scripts": {
     "start": "tsx src/main.ts",
-    "dry": "tsx src/main.ts --dry-run --file ../scenario.home.json",
+    "dry": "tsx src/main.ts --dry-run --file ../scenario_user_1.home.json",
     "check": "tsx src/selfcheck.ts"
   },
   "dependencies": {

@@ -125,14 +125,16 @@ func (p *TravelProgress) StopSnap() {
 }
 
 // ApplySnap copies every update the worker has already published.
-func (p *TravelProgress) ApplySnap() {
+func (p *TravelProgress) ApplySnap() bool {
+	changed := false
 	if p.updates == nil {
-		return
+		return false
 	}
 
 	for {
 		select {
 		case update := <-p.updates:
+			changed = true
 			p.HopIndex = update.HopIndex
 			p.LastSegIndex = update.LastSegIndex
 			p.Progress = update.Progress
@@ -150,7 +152,7 @@ func (p *TravelProgress) ApplySnap() {
 				p.DriveStatus = enum.COMPLETED
 			}
 		default:
-			return
+			return changed
 		}
 	}
 }

@@ -7,7 +7,7 @@ Thư mục này nằm trong repo để mở cùng backend. Server không import 
 ```
 internal/test-realtime/
   README.md
-  scenario.home.json    kịch bản cho client dòng lệnh
+  scenario_user_1.home.json    kịch bản cho client dòng lệnh
   index.html            trang bản đồ có sẵn, bấm để chạy tay
   go/                   client Go
   ts/                   client TypeScript
@@ -25,7 +25,7 @@ App thật gửi GPS của điện thoại. Ở nhà không có quãng đường
 
 Server ghi đúng `lat`, `lng`, pin và sóng client gửi. Khoảng mỗi 500ms phòng nhận `tracking.positions`. Phần snap trên server chỉ để biết rider đã tới đâu trên branch của trip. Tọa độ phát ra phòng là tọa độ client gửi.
 
-Polyline trong `scenario.home.json` là đoạn khoảng 1729 m quanh quận 1, chỉ để có đường mà chạy. Muốn pin nằm trên đường của trip thì dán polyline của branch đó vào `path.polyline`.
+Polyline trong `scenario_user_1.home.json` là đoạn khoảng 1729 m quanh quận 1, chỉ để có đường mà chạy. Muốn pin nằm trên đường của trip thì dán polyline của branch đó vào `path.polyline`.
 
 Nếu điền `path.points` từ 2 điểm trở lên, client dùng points và bỏ qua polyline. Dưới 2 điểm thì decode polyline.
 
@@ -181,9 +181,9 @@ Cần Go 1.22 trở lên.
 
 ```powershell
 cd internal\test-realtime\go
-go run . -file ..\scenario.home.json -dry-run
-go run . -file ..\scenario.home.json -room <trip-uuid> -token <jwt>
-go run . -file ..\scenario.home.json -room <trip-uuid> -username demo -password secret12
+go run . -file ..\scenario_user_1.home.json -dry-run
+go run . -file ..\scenario_user_1.home.json -room <trip-uuid> -token <jwt>
+go run . -file ..\scenario_user_1.home.json -room <trip-uuid> -username demo -password secret12
 ```
 
 `go test .` trong thư mục `go` kiểm tra polyline, khoảng đứng yên, và dry-run của file mẫu.
@@ -198,8 +198,8 @@ Cần Node 18 trở lên.
 cd internal\test-realtime\ts
 npm install
 npm run check
-npx tsx src/main.ts --file ..\scenario.home.json --dry-run
-npx tsx src/main.ts --file ..\scenario.home.json --room <trip-uuid> --token <jwt>
+npx tsx src/main.ts --file ..\scenario_user_1.home.json --dry-run
+npx tsx src/main.ts --file ..\scenario_user_1.home.json --room <trip-uuid> --token <jwt>
 ```
 
 `npm run dry` là dry-run của file mẫu. `npm run check` kiểm tra polyline mẫu, không mở socket.

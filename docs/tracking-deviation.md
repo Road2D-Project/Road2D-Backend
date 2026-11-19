@@ -246,3 +246,39 @@ Either rule must say what happens to stop B (visited, skipped, or still required
 | Goong adapter (no leg cache) | `module/maps/service/RedirectService.go` |
 | Outbound types | `module/tracking/model/message/Outbound.go` |
 | Tick + stay overlay | `module/tracking/OnTick.go`, `module/tracking/OnMessage.go` |
+
+## Checkpoint recovery and redirect workers
+
+The server keeps one coordinator per trip. `CheckpointWriter` coalesces immutable
+snapshots and saves them to PostgreSQL asynchronously. The default interval is
+5 seconds, configured by `TRACKING_CHECKPOINT_INTERVAL_SECONDS`. Stay changes,
+completion, disconnect, and room shutdown request an earlier save. Each snapshot
+includes the original observation times. A checkpoint can lag behind the live room.
+
+Reconnect sends `tracking.snapshot`. Clients can request another snapshot with
+`{"type":"tracking.resync","payload":{}}`. Private resting positions are visible
+only to their owner. After recovery all riders start disconnected and wait for a
+fresh GPS sample before snapping, deviation counting, or redirect recovery resumes.
+
+The server's `RedirectPublisher` sends jobs to Redis Streams. Run a separate worker
+process to call Goong. A worker saves the result in PostgreSQL before publishing it
+to the requesting server's result stream and acknowledging the job. Pending jobs
+are reclaimed after consumer failure. Redelivered completed jobs reuse their stored
+result. A crash during a provider call can still cause that call to be repeated.
+Malformed jobs go to `road2d:tracking:dead`. Results are applied only while their
+job ID and generation match the coordinator's pending request.
+
+Apply the new tracking tables, then run the two processes in separate terminals.
+
+```sh
+go run . migrate
+go run . server
+go run . worker
+```
+
+Docker Compose includes the `worker` service and a persistent Redis data volume.
+Multiple redirect workers can share the job stream. The first version assumes one
+tracking server owns the live trips. Running multiple tracking servers requires
+trip ownership and routing coordination. A pending redirect that exceeds 30 seconds
+follows the existing provider-failure retry policy. After a server restart, pending
+redirects are recreated from a fresh GPS fix rather than replayed to a dead owner.

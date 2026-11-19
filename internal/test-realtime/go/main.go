@@ -23,9 +23,9 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `Giả lập một rider trên websocket tracking.
 
-  go run . -file ..\scenario.home.json -dry-run
-  go run . -file ..\scenario.home.json -room <trip-uuid> -token <jwt>
-  go run . -file ..\scenario.home.json -room <trip-uuid> -username demo -password secret
+  go run . -file ..\scenario_user_1.home.json -dry-run
+  go run . -file ..\scenario_user_1.home.json -room <trip-uuid> -token <jwt>
+  go run . -file ..\scenario_user_1.home.json -room <trip-uuid> -username demo -password secret
 
 Cờ ghi đè file. Biến môi trường (khi cờ bỏ trống): MOCK_SERVER, MOCK_ROOM_ID,
 MOCK_ACCESS_TOKEN, MOCK_USERNAME, MOCK_PASSWORD.

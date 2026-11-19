@@ -1,6 +1,7 @@
 package realtime
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -35,6 +36,7 @@ type Room struct {
 	register   chan *Client
 	unregister chan *Client
 	done       chan struct{} // closed when the room dies, so pumps do not block
+	shutdown   chan struct{}
 }
 
 func NewRoom(id string, modules map[string]Module, onClose func()) *Room {
@@ -49,12 +51,14 @@ func NewRoom(id string, modules map[string]Module, onClose func()) *Room {
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		done:       make(chan struct{}),
+		shutdown:   make(chan struct{}, 1),
 	}
 	r.session = &roomSession{room: r}
 	return r
 }
 
 func (r *Room) Run() {
+	defer r.finish()
 	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
 	// A room nobody joins still has to close itself.
@@ -62,6 +66,8 @@ func (r *Room) Run() {
 
 	for {
 		select {
+		case <-r.shutdown:
+			return
 		case c := <-r.register:
 			r.onJoin(c)
 			idleSince = time.Time{}
@@ -78,11 +84,40 @@ func (r *Room) Run() {
 		case now := <-ticker.C:
 			r.tick(now)
 			if len(r.byUser) == 0 && !idleSince.IsZero() && now.Sub(idleSince) > roomIdleTTL {
-				r.onClose()
-				close(r.done)
 				return
 			}
 		}
+	}
+}
+
+func (r *Room) finish() {
+	for _, module := range r.modules {
+		if closer, ok := module.(interface{ Close() }); ok {
+			closer.Close()
+		}
+	}
+	for client := range r.clients {
+		r.drop(client)
+	}
+	if r.onClose != nil {
+		r.onClose()
+	}
+	close(r.done)
+}
+
+func (r *Room) close(ctx context.Context) error {
+	select {
+	case r.shutdown <- struct{}{}:
+	case <-r.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	select {
+	case <-r.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 

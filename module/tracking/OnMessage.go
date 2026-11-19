@@ -7,6 +7,7 @@ import (
 	"Road-To-Destination-BE/utils/enum"
 	"encoding/json"
 	"log"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,10 +15,19 @@ import (
 
 func (t *TrackingCoordinator) OnMessage(s realtime.Session, userID uuid.UUID, msgType string, payload json.RawMessage) {
 	switch message.TrackingMsgType(msgType) {
+	case "resync":
+		if t.tripInformation.Riders[userID] != nil {
+			t.sendSnapshot(s, userID)
+		}
+		return
 	case message.Position:
 		var positionMsg message.PositionMessage
 		err := json.Unmarshal(payload, &positionMsg)
 		if err != nil {
+			return
+		}
+		if math.IsNaN(positionMsg.Lat) || math.IsNaN(positionMsg.Lng) ||
+			positionMsg.Lat < -90 || positionMsg.Lat > 90 || positionMsg.Lng < -180 || positionMsg.Lng > 180 {
 			return
 		}
 		progress := t.progresses[userID]
@@ -27,7 +37,7 @@ func (t *TrackingCoordinator) OnMessage(s realtime.Session, userID uuid.UUID, ms
 		now := time.Now()
 		// A fix sooner than SampleMinInterval after the previous one is noise
 		// for the deviation counter, so the whole sample is dropped.
-		if !progress.ObservedAt.IsZero() && now.Sub(progress.ObservedAt) < engine.SampleMinInterval {
+		if !progress.AwaitingFreshPosition && !progress.ObservedAt.IsZero() && now.Sub(progress.ObservedAt) < engine.SampleMinInterval {
 			return
 		}
 		progress.Lat = positionMsg.Lat
@@ -35,6 +45,8 @@ func (t *TrackingCoordinator) OnMessage(s realtime.Session, userID uuid.UUID, ms
 		progress.BatteryPercent = positionMsg.Battery()
 		progress.SignalBars = positionMsg.SignalBars()
 		progress.ObservedAt = now
+		progress.AwaitingFreshPosition = false
+		t.markCheckpointDirty()
 	case message.StayMode:
 		rider := t.tripInformation.Riders[userID]
 		if rider == nil || rider.Role != enum.TripRoleLeader {
@@ -77,9 +89,11 @@ func (t *TrackingCoordinator) OnMessage(s realtime.Session, userID uuid.UUID, ms
 		}
 		if bool(stayVisibility) {
 			progress.DriveStatus = enum.StayPublic
+			t.markCheckpointDirty()
 			return
 		}
 		progress.DriveStatus = enum.StayPrivate
+		t.markCheckpointDirty()
 		return
 
 	default:
@@ -91,6 +105,7 @@ func (t *TrackingCoordinator) OnMessage(s realtime.Session, userID uuid.UUID, ms
 // beginStay hides every rider who has not finished. A rider appears again only after choosing public.
 // The drive status under the stay overlay is kept so a deviated rider resumes deviated.
 func (t *TrackingCoordinator) beginStay() {
+	t.markCheckpointDirty()
 	t.tripInformation.Status = enum.TripStay
 	for _, progress := range t.progresses {
 		if progress.DriveStatus == enum.COMPLETED {
@@ -104,10 +119,12 @@ func (t *TrackingCoordinator) beginStay() {
 		progress.OnRouteSamples = 0
 		progress.DriveStatus = enum.StayPrivate
 	}
+	t.offerCheckpoint(time.Now(), true)
 }
 
 // endStay resumes the riders who were resting. A finished rider stays finished.
 func (t *TrackingCoordinator) endStay() {
+	t.markCheckpointDirty()
 	t.tripInformation.Status = enum.TripActive
 	for _, progress := range t.progresses {
 		if progress.DriveStatus != enum.StayPublic && progress.DriveStatus != enum.StayPrivate {
@@ -119,4 +136,5 @@ func (t *TrackingCoordinator) endStay() {
 			progress.HasResume = false
 		}
 	}
+	t.offerCheckpoint(time.Now(), true)
 }
