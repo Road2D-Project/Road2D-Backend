@@ -1,6 +1,6 @@
 # Off-route (`DEVIATED`) and redirect
 
-How the tracking room decides that a rider left the saved hop, what it does next, and which websocket frames the room emits. Graph planning stays in [trip route](trip-route.md). The socket runtime stays in [realtime rooms](realtime.md). This page is the live state machine only.
+How the tracking room decides that a rider left the saved hop, what it does next, and which websocket frames the room emits. Graph planning stays in [trip route](trip-route.md). The socket runtime stays in [realtime rooms](realtime.md). Checkpoint persistence, Redis Streams delivery, and operations are in [tracking streams](tracking-streams.md).
 
 The client sends raw GPS. It never sends "I am off the route". The room is the authority.
 
@@ -15,6 +15,7 @@ The client sends raw GPS. It never sends "I am off the route". The room is the a
 - [Redirect target is the end of the current hop](#redirect-target-is-the-end-of-the-current-hop)
 - [Trade-off: the room does not jump to C](#trade-off-the-room-does-not-jump-to-c)
 - [Code map](#code-map)
+- [Checkpoint recovery and redirect workers](#checkpoint-recovery-and-redirect-workers)
 
 ## What the room measures
 
@@ -24,7 +25,7 @@ The snap worker compares each accepted GPS sample to **that hop polyline only**.
 
 The room counts one sample per new snap (not per 500 ms tick). `OnROUTE` plus three consecutive off-route samples becomes `DEVIATED`. `DEVIATED` plus two consecutive on-route samples (again vs the **locked** hop) returns to `OnROUTE`.
 
-While `DEVIATED`, the room asks Goong for a **temporary** bike route from the current GPS fix to `Stops[HopIndex+1]`. That polyline lives in room memory. It is not a `Leg` or `Travel` row.
+While `DEVIATED`, the room requests a **temporary** bike route from the current GPS fix to `Stops[HopIndex+1]`. In the server wiring, a separate Redis worker calls Goong. The applied polyline lives in room state and can be saved in its checkpoint; the worker also persists its job result. It is not a `Leg` or `Travel` row.
 
 ```mermaid
 flowchart TD
@@ -104,8 +105,9 @@ There is **no HTTP** for this polyline. `POST /trips/{tripId}/travels` is the sa
 Sequence after the third off-route snap:
 
 1. Room goroutine broadcasts `tracking.redirect` with `status: "pending"` and `target` (stop B). `polyline` is absent. Goong has not answered yet.
-2. A worker calls `RedirectRouter` (Goong Directions, bike, origin = current GPS, destination = B). Timeout 10 s.
-3. The next `OnTick` (≤ 500 ms after the result) drains the buffer and broadcasts `tracking.redirect` with `status: "ready"` **and** the encoded polyline.
+2. `RedirectPublisher` publishes a job to `road2d:tracking:redirect:jobs`. A separate worker calls `RedirectRouter` (Goong Directions, bike, origin = current GPS, destination = B). Provider timeout is 10 s, bounded by job expiry.
+3. The worker saves its result to PostgreSQL, publishes it to the requesting server's result stream, then acknowledges and deletes the job. The server's result consumer delivers it to the room inbox.
+4. On the next `OnTick`, the coordinator accepts the result only if the job ID and generation still match the pending redirect, then broadcasts `tracking.redirect` with `status: "ready"` **and** the encoded polyline. Network and queue delays precede this tick.
 
 `Broadcast` sends that frame to **every** socket in the room, not only the lost rider. Filter on `userId`.
 
@@ -156,7 +158,7 @@ Client job: decode `polyline`, draw it as the detour to `target`, keep it until 
 
 A late `failed` has no polyline. Keep the previous `ready` line if a refresh is in flight. The room still holds that old route until the new generation answers.
 
-**Gap:** `OnJoin` does not replay the current redirect. A socket that connects while the rider is already `DEVIATED` gets `tracking.success` and later `tracking.positions` with `driveStatus: "DEVIATED"`, but not the polyline again. The line is in room memory only. Treat a join snapshot of redirect as future work.
+On join or reconnect, the server sends `tracking.snapshot` after `tracking.success`. Each visible rider's current redirect is included when available, so clients can restore the line without waiting for a new `ready` event. A client can request it again with `tracking.resync`. Snapshot redirect fields follow `RedirectCheckpoint` (`pending`, `failed`, `polyline`, and route metrics); they do not carry the lifecycle event's `status` field. Private resting riders' coordinates and redirects are hidden from other users. See [snapshot handling](realtime.md#join-reconnect-and-resync-snapshots).
 
 ## Situations
 
@@ -182,7 +184,8 @@ Each row is one case the room handles. "Result" is what the client must render.
 | --- | --- | --- |
 | Router returns a polyline | Decode, build `geo.Route`, snap with a **separate** redirect cursor. | `tracking.redirect` `ready` with `polyline`, `distanceM`, `durationS`, `target`. |
 | Router error or empty polyline | Mark failed. Schedule **one** retry after 10 s if `Retries == 0`. | `status: failed`, `reason: providerError`. A second failure does not retry. |
-| No router mounted | Fail immediately. No retry. | `providerError`. |
+| No local router or Redis submitter configured | Fail immediately. No retry. | `providerError`. |
+| Worker absent, Redis unavailable, or request remains pending for 30 s | Coordinator times out the request and follows the provider-failure retry policy. | `providerError`; delayed results for the old job are ignored. |
 | Current hop not `Ready` or no `Stops[hop+1]` | Fail immediately. No retry. | `hopNotReady`. |
 | Still `DEVIATED`, moved ≥ 40 m from redirect origin, and ≥ 20 s since the last request | New generation. Keep the old route on screen until the new answer arrives. Target stays the **same stop**. | `pending` / `ready` with `reason: refresh`. |
 | Stale Goong answer (generation mismatch) | Drop it. | No extra broadcast. |
@@ -249,36 +252,17 @@ Either rule must say what happens to stop B (visited, skipped, or still required
 
 ## Checkpoint recovery and redirect workers
 
-The server keeps one coordinator per trip. `CheckpointWriter` coalesces immutable
-snapshots and saves them to PostgreSQL asynchronously. The default interval is
-5 seconds, configured by `TRACKING_CHECKPOINT_INTERVAL_SECONDS`. Stay changes,
-completion, disconnect, and room shutdown request an earlier save. Each snapshot
-includes the original observation times. A checkpoint can lag behind the live room.
+`CheckpointWriter` saves dirty room snapshots asynchronously, normally every
+5 seconds. Recovery restores progress and lives from the last successful save,
+then waits for fresh GPS before counting deviation samples or resuming redirects.
+An interval is not a guarantee that all live state has reached PostgreSQL.
 
-Reconnect sends `tracking.snapshot`. Clients can request another snapshot with
-`{"type":"tracking.resync","payload":{}}`. Private resting positions are visible
-only to their owner. After recovery all riders start disconnected and wait for a
-fresh GPS sample before snapping, deviation counting, or redirect recovery resumes.
+Run `go run . server` and `go run . worker` continuously in separate terminals
+after applying required migrations. The deployment supports one tracking server
+and multiple redirect workers. Old-owner jobs are not rerouted to a restarted
+server; fresh GPS triggers a new redirect job when needed.
 
-The server's `RedirectPublisher` sends jobs to Redis Streams. Run a separate worker
-process to call Goong. A worker saves the result in PostgreSQL before publishing it
-to the requesting server's result stream and acknowledging the job. Pending jobs
-are reclaimed after consumer failure. Redelivered completed jobs reuse their stored
-result. A crash during a provider call can still cause that call to be repeated.
-Malformed jobs go to `road2d:tracking:dead`. Results are applied only while their
-job ID and generation match the coordinator's pending request.
-
-Apply the new tracking tables, then run the two processes in separate terminals.
-
-```sh
-go run . migrate
-go run . server
-go run . worker
-```
-
-Docker Compose includes the `worker` service and a persistent Redis data volume.
-Multiple redirect workers can share the job stream. The first version assumes one
-tracking server owns the live trips. Running multiple tracking servers requires
-trip ownership and routing coordination. A pending redirect that exceeds 30 seconds
-follows the existing provider-failure retry policy. After a server restart, pending
-redirects are recreated from a fresh GPS fix rather than replayed to a dead owner.
+See [tracking streams](tracking-streams.md) for the pipeline, checkpoint sequence
+semantics, stream/group names, redelivery boundaries, cloud setup, inspection
+commands, and test cleanup. Checkpoints are snapshots; this version has no
+transactional outbox or exactly-once provider execution.

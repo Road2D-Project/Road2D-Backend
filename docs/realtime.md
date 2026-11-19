@@ -1,6 +1,6 @@
 # Realtime rooms
 
-The websocket runtime for a live trip. This page is the map for the next modules (tracking first, chat later). Off-route detection, lives, and the temporary redirect route are in [tracking deviation](tracking-deviation.md). The annotated walkthrough of the original single-file sketch stays in [docs/research/realtime](research/realtime/road2d_websocket_main_explanation.md).
+The WebSocket runtime for a live trip. Tracking is mounted today; other domains can be added as modules. Off-route detection, lives, and redirect rules are in [tracking deviation](tracking-deviation.md). Checkpoint recovery and worker operations are in [tracking streams](tracking-streams.md). The original sketch walkthrough is [research material](research/road2d_websocket_main_explanation.md), not the current protocol specification.
 
 ## What this package owns
 
@@ -28,7 +28,7 @@ flowchart TD
   send --> write[Client writePump]
 ```
 
-`cmd/server/run` builds one `Hub`, mounts modules, and passes it to `LobbyController`. Today nothing is mounted, so a joined room only emits presence.
+`cmd/server/run` builds one `Hub`, mounts `tracking.NewTrackingModuleWithRecovery`, and passes the hub to `LobbyController`. Each room gets its own `TrackingCoordinator`; checkpoint writing, redirect publication, and result consumption are shared background workers inside the server. A separate `worker` process consumes Redis redirect jobs and calls Goong.
 
 A room id is an opaque string. The lobby authorizer treats it as a trip UUID and allows an active member. A future chat room needs its own authorizer; do not teach `Hub` about trips.
 
@@ -54,7 +54,7 @@ A full send buffer means a slow client. The room drops that socket and does not 
 Client to server:
 
 ```json
-{"type":"tracking.location","payload":{"lat":10.1,"lng":106.2}}
+{"type":"tracking.position","payload":{"lat":10.1,"lng":106.2,"batteryPercent":84,"signalDbm":-74}}
 ```
 
 `type` is `namespace.command`. The room strips the namespace and delivers `command` plus the raw payload to that module. A type with no dot is `system.error` / `invalid_type`. An unknown namespace is `unknown_namespace`.
@@ -62,7 +62,7 @@ Client to server:
 Server to client:
 
 ```json
-{"type":"tracking.pong","payload":{}}
+{"type":"tracking.success","payload":"Welcome back"}
 ```
 
 | type | when | payload |
@@ -72,9 +72,9 @@ Server to client:
 | any type passed to `Broadcast` or `Send` | immediately, in order | module-defined |
 | `<type>.batch` | once per 500ms tick | `[{key, value}]`, newest value per key |
 
-Presence is edge-triggered. A reconnect does not emit `online` again, and the replaced socket does not emit `offline`. The module snapshot, sent from `OnJoin`, is how the new socket catches up.
+Presence is edge-triggered. Replacing a still-registered socket does not emit another `online`, and the replaced socket does not emit `offline`. Reconnecting after a real disconnect emits `online` again. The tracking snapshot sent from `OnJoin` lets the new socket catch up in either case.
 
-`BroadcastLatest` is the lossy path. Use it for positions. Use `Broadcast` for anything the client must not skip (a life change, an arrival, a branch switch).
+`BroadcastLatest` is an available lossy path. Current tracking uses ordered `Broadcast` for its `tracking.positions` array on each tick and for life, off-route, and redirect changes. Delivery is bounded by the socket send buffer; broadcasts are not a durable replay log.
 
 JSON fields on this socket are camelCase (`userId`), matching the rest of the API.
 
@@ -82,7 +82,7 @@ JSON fields on this socket are camelCase (`userId`), matching the rest of the AP
 
 `GET /v1/realtime/rooms/:roomId`
 
-1. If `Authorization` is missing and `access_token` is present, the query value is copied into `Authorization: Bearer`. Browser sockets cannot set that header. Prefer the header from native clients; the query ends up in access logs.
+1. If `Authorization` is missing and `access_token` is present, middleware moves the query value into `Authorization: Bearer` and strips it from the request URL before application request logging. Browser sockets cannot set that header. Prefer the header from native clients; upstream proxies may still log the original URL.
 2. The existing JWT middleware runs, still before the upgrade.
 3. `activeTripMemberAuthorizer` requires an active trip member. Anyone else gets 403 and the socket is not upgraded.
 4. The connection is upgraded and `Hub.Join` starts the pumps.
@@ -90,6 +90,8 @@ JSON fields on this socket are camelCase (`userId`), matching the rest of the AP
 `CheckOrigin` currently allows every browser origin. Restrict it to the app origin before this route is exposed beyond local development.
 
 Mount every module before the process accepts connections. A room created earlier does not see a factory registered later.
+
+JWT validation runs at the handshake only. Expiry does not currently close an established socket. Reconnecting with an expired access token returns HTTP 401 before upgrade. Automatic expiry close and token refresh are not implemented in the socket runtime or simulation clients.
 
 ## How to add a module
 
@@ -99,54 +101,78 @@ Mount every module before the process accepts connections. A room created earlie
 4. `OnLeave` runs only for a real disconnect.
 5. `OnMessage` receives the command with the namespace already removed.
 6. `OnTick` is every 500ms, including while the room is empty (the room stays up for 5 minutes after the last user leaves).
-7. In `cmd/server/run`, before `router.Run`:
+7. In `cmd/server/run`, before the HTTP listener starts:
 
 ```go
-if err := hub.Mount("tracking", tracking.NewFactory(...)); err != nil {
+if err := hub.Mount("yourNamespace", yourModuleFactory); err != nil {
     return err
 }
 ```
 
-The namespace is the prefix on the wire (`tracking.location`). Do not mount `system`, an empty name, or a name that contains a dot.
+The namespace is the prefix on the wire (`tracking.position`). Do not mount `system`, an empty name, or a name that contains a dot.
 
 Outbound type strings are whatever the module passes to `Send` / `Broadcast`. Pass the full name (`tracking.offRoute`), not the short command.
 
-## Tracking, the first module to build
+## Current tracking module
 
-The sketch in `docs/research/realtime/main.go` is the tracking behavior. It does not belong in `Room`. Mount it as namespace `tracking`.
+The client sends observations and intents. `TrackingCoordinator` owns the computed
+state. Its factory loads the trip's assigned branches, stored travels, and latest
+PostgreSQL checkpoint before the room starts. Network calls for ongoing checkpoint
+writes and redirect calculations run outside module callbacks.
 
-The client sends raw observations and intents. It never sends a computed result ("I am off the route"). The server is the authority.
+Inbound commands currently handled by `OnMessage`:
 
-| wire type | was | direction | behavior |
-| --- | --- | --- | --- |
-| `tracking.position` | `loc` / `tracking.location` in the sketch | client to server | GPS sample (`Lat`, `Lng`). Frames sooner than 900 ms are dropped. See [tracking deviation](tracking-deviation.md) |
-| `tracking.resync` | `resync` | client to server | `Send` the full snapshot to that user |
-| `tracking.switchBranch` | `intent` / `switch_branch` | client to server | accept only when the client's version matches the room; otherwise `Send` `tracking.error` with `stale_version` |
-| `tracking.offRoute` | `offroute` | server to room | `Broadcast` when the off-route flag changes |
-| `tracking.life` | `life` | server to room | `Broadcast` the new life count |
-| `tracking.arrived` | `arrived` | server to room | `Broadcast` once per user per destination |
-| `tracking.branch` | `branch` | server to room | `Broadcast` after a branch switch |
-| `tracking.snapshot` | `snapshot` | server to one user | version, branch, and each member's position, lives, off-route flag |
+- `tracking.position`: GPS, battery, and signal. Samples sooner than 900 ms after
+  the last accepted observation are dropped, except the first fresh fix after recovery.
+- `tracking.resync`: send the current `tracking.snapshot` to that user.
+- `tracking.stayMode`: leader toggles trip stay mode with a boolean payload.
+- `tracking.userStayPublic`: rider chooses visibility while the trip is in stay mode.
 
-Starting rules from the sketch, kept here so they are not copied back into the infra package:
+Outbound tracking includes `tracking.success`, `tracking.connection`,
+`tracking.onLeave`, `tracking.snapshot`, `tracking.positions`, `tracking.offRoute`,
+`tracking.life`, `tracking.redirect`, and the stay transition type `stayMode`.
+Branch-switch commands and events described in the original research sketch are
+not implemented by the current `OnMessage` handler.
 
-- ignore a location sooner than 900ms after that user's previous one
-- off route: farther than 50m from the branch polyline, for 3 samples in a row
-- arrived: within 30m of the current target, for 2 samples in a row, once per destination
-- lives start at 3; going off route spends one life, then that user is immune for 30s
-- a branch switch clears off-route state, because "off the old line" no longer means anything
-- position batches use the server clock
+### Join, reconnect, and resync snapshots
 
-`OnTick` is already 500ms, which is the old flush interval. Do not add a second ticker inside the module.
+Join sends `tracking.success`, then `tracking.snapshot` to that user. A snapshot
+contains `tripId`, `revision`, `status`, and a `riders` map keyed by user UUID.
+Each rider includes `trackingStatus`, `branchId`, `hopIndex`, `lives`,
+`immuneUntil`, `connectionStatus`, `observedAt`, and `awaitingFreshPosition`.
+Observed coordinates and any current redirect are included when visible to the
+requesting user. Another rider's private resting coordinates and redirect are omitted.
 
-What is still open in the sketch, and should be decided in the tracking package rather than the room:
+```json
+{"type":"tracking.resync","payload":{}}
+```
 
-- where the polyline and the current target are loaded (maps / trip). The factory may read a cache. It must not call `Hub`.
-- who may `switchBranch` (trip role, and any vote the product adds)
-- what happens at 0 lives
+A new socket can rebuild its state from the snapshot, including redirect geometry
+when available, then apply later room broadcasts. The snapshot's `redirect` is
+checkpoint-shaped: it has `pending`/`failed` flags and route fields, rather than
+the `status` field used by a `tracking.redirect` lifecycle event.
 
-Geometry helpers from the sketch (`haversine`, distance to a polyline) move with the tracking package. Chat must not see them.
+After process recovery, stored coordinates retain their old `observedAt` and
+`awaitingFreshPosition` is true. They must not be treated as live GPS. The
+coordinator waits for a new accepted position before resuming tracking calculations.
+See [checkpoint timing and recovery](tracking-streams.md#checkpoint-timing-and-recovery).
+
+`OnTick` remains every 500 ms. It drains worker results, advances redirect jobs,
+applies snap results, broadcasts positions, and offers dirty checkpoints when due.
+Redis is the route-work transport; it does not own the room's authoritative state.
 
 ## Idle rooms and shutdown
 
-A room with no live user closes after 5 minutes and drops itself from the hub only if it is still the room stored under that id. A join that loses the race with that close retries once. There is no process-wide shutdown drain yet: stopping the server closes sockets because the process exits.
+A room with no live user closes after 5 minutes and drops itself from the hub only if it is still the room stored under that id. A join that loses the race with that close retries once.
+
+On graceful shutdown, the HTTP listener stops accepting requests. `Hub.Close`
+rejects new rooms and waits for room cleanup. Each room invokes an optional module
+`Close()` on its goroutine, drops clients, removes itself, and closes its done channel.
+Tracking offers a final dirty checkpoint, stops snap workers, and unsubscribes from
+redirect results. The server then stops its background workers and attempts a final
+checkpoint flush within the shutdown deadline.
+
+An abrupt process kill cannot perform that drain. The next authorized connection
+reconstructs its room from the last successfully persisted checkpoint. See
+[delivery and acknowledgement](tracking-streams.md#delivery-retries-and-acknowledgement)
+for the independent worker/result recovery boundaries.

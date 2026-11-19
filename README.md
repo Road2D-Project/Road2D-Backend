@@ -24,6 +24,7 @@ Travel (one trip's snapshot of a leg; frozen rows are history)
 
 - **authentication** — register, login, refresh, profile, forget / reset password
 - **maps** — Goong v2 playground: autocomplete, place detail, geocode, directions, trip TSP
+- **realtime / tracking** — WebSocket rooms, GPS tracking, checkpoint recovery, and Redis Streams redirect workers. See [realtime](docs/realtime.md), [off-route rules](docs/tracking-deviation.md), and [stream operations](docs/tracking-streams.md).
 - **trip** — trip CRUD, membership, and invite links. Membership: [docs/trip-members.md](docs/trip-members.md). Planning and routing: [docs/trip-route.md](docs/trip-route.md)
   - [How a ride is planned](docs/trip-route.md#how-a-ride-is-planned)
   - [Location and destination](docs/trip-route.md#location-and-destination)
@@ -69,15 +70,18 @@ Validation is deliberately loose: the backend only checks that endpoints connect
 
 ## Process layout
 
-`main.go` is the unified binary. It calls `cmd.Execute()`, which dispatches `server`, `seeder`, and `migrate`. Each of those can also be started from its own `main` under `cmd/`. `internal/` is seeder domain logic: no HTTP, no cobra.
+`main.go` is the unified binary. It calls `cmd.Execute()`, which dispatches `server`, `worker`, `seeder`, and `migrate`. Each can also be started from its own `main` under `cmd/`. `internal/seed` holds seeder domain logic; `internal/test-realtime` holds standalone simulation clients.
 
 ```text
-main.go                      # cobra root: server | seeder | migrate
+main.go                      # cobra root: server | worker | seeder | migrate
 cmd/
 ├── root.go                  # load .env, repair PowerShell args, dispatch
 ├── server/
 │   ├── main.go              # standalone API; swag comments live here
 │   └── run/run.go           # Postgres, Redis, Gin, /v1, /docs/public
+├── worker/
+│   ├── main.go              # standalone redirect worker
+│   └── run/run.go           # Redis consumer, Goong, durable redirect results
 ├── cli/
 │   ├── main.go              # standalone seeder; args start at the entity
 │   └── seed/
@@ -98,6 +102,8 @@ internal/
 **server** listens on `HTTP_ADDR` (default `:8080`). `PORT` is accepted the same way when `HTTP_ADDR` is empty. Without `DB_HOST`, `DB_USER`, `DB_NAME`, and `DB_PORT` the process still serves, and auth has no database. Redis is the cache and password-reset store. `GET /health` pings Postgres and Redis and returns 200 only when both answer. OpenAPI UI is `/docs/public`. Swagger comments are on `cmd/server/main.go` (`go generate` in the root `main.go`).
 
 **migrate** connects to Postgres and runs `AutoMigrate`. It does not start HTTP or call Goong. Schema rules are in [Migrations](#migrations).
+
+**worker** stays running to consume redirect jobs from Redis Streams. It saves Goong results to PostgreSQL before publishing them back to the owning server. Run at least one worker alongside the API for redirects; starting it once is not a setup-only step. The API owns checkpoint writing and room state. See [tracking streams](docs/tracking-streams.md) for delivery semantics, cloud configuration, and cleanup.
 
 **seeder** is the parent for reference data. It requires Postgres, migrates, opens Redis as the place cache, then runs one entity. Entities today are **location**, **user**, and **trip**.
 
@@ -137,7 +143,7 @@ Rules for a new step:
 Go 1.26+, PostgreSQL, Redis.
 
 Full file environment variable.
-Default `HTTP_ADDR=:8080`. Auth needs Postgres (`DB_HOST`, `DB_USER`, `DB_NAME`, `DB_PORT`). Redis is used for cache and password-reset tokens. See `.env.example` for the rest. Do not commit `.env`.
+Default `HTTP_ADDR=:8080`. Configure PostgreSQL using `DB_URL` or `DB_HOST`, `DB_USER`, `DB_NAME`, and `DB_PORT`. Configure Redis using `REDIS_URL` (use `rediss://` for TLS) or `REDIS_ADDR`, `REDIS_PASSWORD`, and `REDIS_DB`. URL values take precedence. Redis supports caches, auth/rate-limit state, and tracking job/result streams. See `.env.example` for the rest. Do not commit `.env`.
 
 ```bash
 cp .env.example .env
@@ -148,6 +154,7 @@ Unified binary (`go run .` or `go build`, which writes `Road-To-Destination-BE.e
 
 ```bash
 go run . server
+go run . worker
 go run . migrate
 go run . seeder location --lat 10.7486 --lng 106.6601
 go run . seeder location --coords "10.7486,106.6601;10.7725,106.6980"
@@ -160,9 +167,12 @@ Standalone mains. The CLI entry starts at the entity, so it does not take the wo
 
 ```bash
 go run ./cmd/server
+go run ./cmd/worker
 go run ./cmd/migrate
 go run ./cmd/cli location --lat 10.7486 --lng 106.6601
 ```
+
+For tracking, run `migrate` first when schema changes are needed, then keep `server` and `worker` in separate terminals. Both can connect directly to cloud services without local database containers. Follow [the cloud setup and inspection guide](docs/tracking-streams.md#run-against-cloud-postgresql-and-redis) and [the simulation guide](internal/test-realtime/README.md#kiểm-tra-checkpoint-và-redis-worker).
 
 ## Run with Docker
 
@@ -172,7 +182,7 @@ Copy `.env.example` to `.env` and set `DB_USER`, `DB_PASSWORD`, `DB_NAME`, and t
 docker compose up --build
 ```
 
-The API is [http://localhost:8080](http://localhost:8080). `GET /health` is the process check; Compose marks `r2d-backend` healthy only when that body has `"status":"ok"`. Docs stay at [http://localhost:8080/docs/public](http://localhost:8080/docs/public).
+Compose also starts the redirect worker and retains Redis data in `redis_data`. The API is [http://localhost:8080](http://localhost:8080). `GET /health` checks PostgreSQL and Redis connectivity; it does not verify worker liveness or stream progress. Compose marks `r2d-backend` healthy only when that body has `"status":"ok"`. Docs stay at [http://localhost:8080/docs/public](http://localhost:8080/docs/public).
 
 The app image is Alpine, so the shell is `sh`. `seeder` is a subcommand of the same binary that runs the server:
 
