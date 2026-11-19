@@ -31,7 +31,12 @@ import (
 // @Router       /trips/{tripId}/compute [post]
 func (ctrl *TripController) HandleComputeTrip() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if _, ok := parseTripID(c); !ok {
+		user := currentUserOrAbort(c)
+		if user == nil {
+			return
+		}
+		tripID, ok := parseTripID(c)
+		if !ok {
 			return
 		}
 		var req request.ComputeBranchRequest
@@ -45,7 +50,7 @@ func (ctrl *TripController) HandleComputeTrip() gin.HandlerFunc {
 				return
 			}
 		}
-		out, err := ctrl.computeTrip().PreviewBranch(c.Request.Context(), req.Points)
+		out, err := ctrl.planningService().PreviewBranch(c.Request.Context(), user.ID, tripID, req.Points)
 		if err != nil {
 			mapTripError(c, err)
 			return

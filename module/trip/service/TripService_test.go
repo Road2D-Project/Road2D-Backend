@@ -644,6 +644,11 @@ func TestCreateTripStoresReviewedMainBranch(t *testing.T) {
 	if trips.main == nil || len(trips.main.Destinations) != 2 || len(trips.main.Travels) != 1 {
 		t.Fatalf("main = %+v", trips.main)
 	}
+	for _, pin := range trips.main.Destinations {
+		if pin.CreatedByUserID == nil || *pin.CreatedByUserID != owner.ID {
+			t.Fatalf("initial pin creator = %v, want %s", pin.CreatedByUserID, owner.ID)
+		}
+	}
 	if trips.main.Destinations[0].Name != "cafe" || trips.main.Destinations[0].Lat != 10.5 || trips.main.Destinations[0].LocationID == nil || *trips.main.Destinations[0].LocationID != from.ID {
 		t.Fatalf("first pin = %+v", trips.main.Destinations[0])
 	}

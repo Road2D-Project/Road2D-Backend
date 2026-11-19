@@ -3,6 +3,8 @@ package repository
 import "errors"
 
 var (
+	ErrDestinationForbidden      = errors.New("destination access denied")
+	ErrPlanningConflict          = errors.New("planning data changed, retry the request")
 	ErrMemberRoleNotInCache      = errors.New("member role not found in cache")
 	ErrUserNotTripMember         = errors.New("user is not an active trip member")
 	ErrTripNotFound              = errors.New("trip not found")

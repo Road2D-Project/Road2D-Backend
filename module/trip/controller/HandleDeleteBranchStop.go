@@ -26,6 +26,10 @@ import (
 // @Router       /trips/{tripId}/branches/{branchId}/stops/{destinationId} [delete]
 func (ctrl *TripController) HandleDeleteBranchStop() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		user := currentUserOrAbort(c)
+		if user == nil {
+			return
+		}
 		tripID, ok := parseTripID(c)
 		if !ok {
 			return
@@ -38,12 +42,7 @@ func (ctrl *TripController) HandleDeleteBranchStop() gin.HandlerFunc {
 		if !ok {
 			return
 		}
-		role, ok := currentTripRole(c)
-		if !ok {
-			jsonError(c, http.StatusForbidden, "trip role is missing")
-			return
-		}
-		detail, err := ctrl.tripBranch().DeleteBranchStop(c.Request.Context(), tripID, branchID, destinationID, role)
+		detail, err := ctrl.planningService().DeleteBranchStop(c.Request.Context(), user.ID, tripID, branchID, destinationID)
 		if err != nil {
 			mapTripError(c, err)
 			return

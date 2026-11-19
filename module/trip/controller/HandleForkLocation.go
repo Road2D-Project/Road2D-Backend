@@ -24,11 +24,13 @@ var _ = response.CreateDestinationResponse{}
 // @Success      201         {object}  response.CreateDestinationResponse
 // @Failure      400         {object}  share.ErrorResponse
 // @Failure      401         {object}  share.ErrorResponse
+// @Failure      403            {object}  share.ErrorResponse
 // @Failure      404         {object}  share.ErrorResponse
 // @Router       /planning/fork/{locationId} [post]
 func (ctrl *TripController) HandleForkLocation() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if currentUserOrAbort(c) == nil {
+		user := currentUserOrAbort(c)
+		if user == nil {
 			return
 		}
 		locationID, ok := parseLocationID(c)
@@ -40,7 +42,7 @@ func (ctrl *TripController) HandleForkLocation() gin.HandlerFunc {
 			jsonBindError(c, err)
 			return
 		}
-		created, err := ctrl.placeService().ForkLocation(c.Request.Context(), locationID, req)
+		created, err := ctrl.planningService().ForkLocation(c.Request.Context(), user.ID, locationID, req)
 		if err != nil {
 			mapTripError(c, err)
 			return

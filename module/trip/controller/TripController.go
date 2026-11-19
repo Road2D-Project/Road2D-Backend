@@ -132,7 +132,7 @@ func (ctrl *TripController) registerMemberRoutes(trips *gin.RouterGroup) {
 
 func (ctrl *TripController) registerGraphRoutes(trips *gin.RouterGroup) {
 	trips.GET("/:tripId/graph", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph"), ctrl.cacheResponse.CacheAround(), ctrl.HandleGetTripGraph())
-	trips.PUT("/:tripId/graph", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleSetTripGraph())
+	trips.PUT("/:tripId/graph", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph", "travels"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleSetTripGraph())
 	trips.GET("/:tripId/draft", ctrl.handleActiveTripRole(), ctrl.CachedKeys("draft"), ctrl.cacheResponse.CacheAround(), ctrl.HandleListDraftDestinations())
 	trips.POST("/:tripId/draft", ctrl.handleActiveTripRole(), ctrl.CachedKeys("draft"), ctrl.cacheResponse.MarkChanged(), ctrl.HandleAddDraftDestination())
 	trips.POST("/:tripId/compute", ctrl.handleActiveTripRole(), ctrl.rateLimiter.RequireLimiter(), ctrl.HandleComputeTrip())
@@ -150,7 +150,7 @@ func (ctrl *TripController) registerPlanningRoutes(planning *gin.RouterGroup) {
 	planning.POST("/fork/:locationId", ctrl.HandleForkLocation())
 	planning.GET("/location/:locationId", ctrl.HandleGetLocation())
 	planning.GET("/destination/:destinationId", ctrl.HandleGetDestination())
-	planning.PUT("/destination/:destinationId", ctrl.HandleUpdateDestination())
-	planning.PATCH("/destination/:destinationId", ctrl.HandlePatchDestination())
+	planning.PUT("/destination/:destinationId", ctrl.cacheResponse.MarkChanged(), ctrl.HandleUpdateDestination())
+	planning.PATCH("/destination/:destinationId", ctrl.cacheResponse.MarkChanged(), ctrl.HandlePatchDestination())
 	planning.DELETE("/destination/:destinationId", ctrl.cacheResponse.MarkChanged(), ctrl.HandleDeleteDestination())
 }

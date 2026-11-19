@@ -3,8 +3,6 @@ package controller
 import (
 	"net/http"
 
-	"Road-To-Destination-BE/middleware"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -22,33 +20,26 @@ import (
 // @Success      204            "Destination deleted"
 // @Failure      400            {object}  share.ErrorResponse
 // @Failure      401            {object}  share.ErrorResponse
+// @Failure      403            {object}  share.ErrorResponse
 // @Failure      404            {object}  share.ErrorResponse
 // @Failure      409            {object}  share.ErrorResponse
 // @Router       /planning/destination/{destinationId} [delete]
 func (ctrl *TripController) HandleDeleteDestination() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if currentUserOrAbort(c) == nil {
+		user := currentUserOrAbort(c)
+		if user == nil {
 			return
 		}
 		destinationID, ok := parseDestinationID(c)
 		if !ok {
 			return
 		}
-		affected, err := ctrl.tripBranch().DeleteDestination(c.Request.Context(), destinationID)
+		affected, err := ctrl.planningService().DeleteDestination(c.Request.Context(), user.ID, destinationID)
 		if err != nil {
 			mapTripError(c, err)
 			return
 		}
-		// MarkChanged reads the cache keys after the handler returns. This route has no
-		// tripId on the path, so the keys come from the trips that just lost the pin.
-		if len(affected) > 0 {
-			keys := make([]string, 0, len(affected)*2)
-			for _, tripID := range affected {
-				id := tripID.String()
-				keys = append(keys, "resp:graph:"+id, "resp:travels:"+id, "resp:draft:"+id)
-			}
-			c.Set(middleware.MainKeyController, keys)
-		}
+		destinationCacheKeys(c, affected)
 		c.Status(http.StatusNoContent)
 	}
 }

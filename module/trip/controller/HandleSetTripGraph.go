@@ -27,13 +27,12 @@ import (
 // @Router       /trips/{tripId}/graph [put]
 func (ctrl *TripController) HandleSetTripGraph() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tripID, ok := parseTripID(c)
-		if !ok {
+		user := currentUserOrAbort(c)
+		if user == nil {
 			return
 		}
-		role, ok := currentTripRole(c)
+		tripID, ok := parseTripID(c)
 		if !ok {
-			jsonError(c, http.StatusForbidden, "trip role is missing")
 			return
 		}
 		var req request.SetTripGraphRequest
@@ -47,7 +46,7 @@ func (ctrl *TripController) HandleSetTripGraph() gin.HandlerFunc {
 				return
 			}
 		}
-		detail, err := ctrl.tripBranch().SetTripGraph(c.Request.Context(), tripID, req, role)
+		detail, err := ctrl.planningService().SetTripGraph(c.Request.Context(), user.ID, tripID, req)
 		if err != nil {
 			mapTripError(c, err)
 			return
