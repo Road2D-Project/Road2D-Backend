@@ -27,8 +27,10 @@ type Trip struct {
 	EndTime       *time.Time      `json:"endTime,omitempty" gorm:"column:end_time"`
 	TotalDistance float64         `json:"totalDistance" gorm:"column:total_distance;not null;default:0"`
 	Note          string          `json:"note" gorm:"column:note;type:text"`
-	ImageURL      *string         `json:"imageUrl,omitempty" gorm:"column:image_url;type:text"`
-	InviteToken   string          `json:"-" gorm:"column:invite_token;type:varchar(64);uniqueIndex;not null" swaggerignore:"true"`
+	// Reuse the existing nullable column for a permanent R2 key.
+	ImagePath   *string `json:"-" gorm:"column:image_url;type:text"`
+	ImageURL    *string `json:"imageUrl,omitempty" gorm:"-"`
+	InviteToken string  `json:"-" gorm:"column:invite_token;type:varchar(64);uniqueIndex;not null" swaggerignore:"true"`
 	// IdempotencyKey is the wizard's create attempt. Unique with OwnerID.
 	// IdempotencyHash is the normalized body of that attempt. Neither is returned on the trip payload.
 	IdempotencyKey  string       `json:"-" gorm:"column:idempotency_key;type:varchar(64);uniqueIndex:idx_trip_owner_idempotency,priority:2;not null" swaggerignore:"true"`

@@ -1,240 +1,199 @@
 package objectStorage
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
+	"errors"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
-	"Road-To-Destination-BE/module/share"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 )
 
-const signTimeout = 10 * time.Second
+const (
+	AvatarNamespace  = "avatar"
+	TripNamespace    = "trip"
+	uploadLifetime   = 15 * time.Minute
+	downloadLifetime = time.Hour
+)
 
-// Client asks Supabase Storage for a signed upload URL.
-// It does not read or write the database. The caller picks the bucket and
-// object key, then stores whatever it needs after the client finishes uploading.
+// Client stores all media in one private R2 bucket. Namespaces become key prefixes.
 type Client struct {
-	httpClient *http.Client
+	s3        *s3.Client
+	bucket    string
+	policy    MediaPolicy
+	configErr error
 }
 
-// SignOptions controls the signed upload token.
-// Upsert has to be set here. Sending it on the later file PUT has no effect.
 type SignOptions struct {
-	Upsert bool
+	ContentType string
+	SizeBytes   int64
 }
 
-// SignedUpload is what the caller hands to the uploader.
-// Path is the object key inside the bucket, without a leading slash.
+// Headers must be sent with the raw file PUT. Browsers set Content-Length themselves.
 type SignedUpload struct {
-	URL  string
-	Path string
+	URL       string            `json:"url"`
+	Path      string            `json:"path"`
+	Method    string            `json:"method"`
+	Headers   map[string]string `json:"headers"`
+	ExpiresAt time.Time         `json:"expiresAt"`
+}
+
+type ObjectInfo struct {
+	ContentType string
+	SizeBytes   int64
 }
 
 func NewClient() *Client {
-	return &Client{
-		httpClient: &http.Client{Timeout: signTimeout},
+	policy, err := LoadMediaPolicy()
+	c := &Client{bucket: strings.TrimSpace(os.Getenv("R2_BUCKET_NAME")), policy: policy, configErr: err}
+	accountID := strings.TrimSpace(os.Getenv("R2_ACCOUNT_ID"))
+	accessKey := envCredential("R2_ACCESS_KEY_ID", "R2_ACCESS_TOKEN")
+	secretKey := envCredential("R2_SECRET_ACCESS_KEY", "R2_SECRET_ACCESS_TOKEN")
+	if c.configErr != nil {
+		return c
 	}
+	if c.bucket == "" || accountID == "" || accessKey == "" || secretKey == "" {
+		c.configErr = ErrNotConfigured
+		return c
+	}
+	endpoint := strings.TrimSpace(os.Getenv("R2_ENDPOINT"))
+	if endpoint == "" {
+		endpoint = "https://" + accountID + ".r2.cloudflarestorage.com"
+	}
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+		c.configErr = ErrNotConfigured
+		return c
+	}
+	c.s3 = s3.New(s3.Options{
+		Region: "auto", BaseEndpoint: aws.String(strings.TrimRight(endpoint, "/")),
+		Credentials:                credentials.NewStaticCredentialsProvider(accessKey, secretKey, ""),
+		HTTPClient:                 &http.Client{Timeout: 10 * time.Second},
+		UsePathStyle:               true,
+		RequestChecksumCalculation: aws.RequestChecksumCalculationWhenRequired,
+		ResponseChecksumValidation: aws.ResponseChecksumValidationWhenRequired,
+	})
+	return c
 }
 
-// SignUpload returns a URL the holder can PUT a file to.
-// objectPath is a key such as "avatar/<userID>/<userID>.png", not a content type.
-func (c *Client) SignUpload(ctx context.Context, bucket, objectPath string, opts SignOptions) (SignedUpload, error) {
-	baseURL, key, err := supabaseConfig()
-	if err != nil {
-		return SignedUpload{}, err
+func envCredential(name, legacy string) string {
+	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+		return value
 	}
-	bucket, err = cleanBucket(bucket)
-	if err != nil {
-		return SignedUpload{}, err
-	}
-	objectPath, requestPath, err := cleanObjectPath(objectPath)
-	if err != nil {
-		return SignedUpload{}, err
-	}
-
-	endpoint := baseURL + "/storage/v1/object/upload/sign/" + bucket + "/" + requestPath
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
-	if err != nil {
-		return SignedUpload{}, err
-	}
-	req.Header.Set("Authorization", "Bearer "+key)
-	req.Header.Set("apikey", key)
-	if opts.Upsert {
-		req.Header.Set("x-upsert", "true")
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return SignedUpload{}, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		return SignedUpload{}, fmt.Errorf("%w: status %d", ErrSignFailed, resp.StatusCode)
-	}
-
-	var out struct {
-		URL string `json:"url"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return SignedUpload{}, fmt.Errorf("%w: %v", ErrSignFailed, err)
-	}
-	signedURL, err := absoluteSignedURL(baseURL, out.URL)
-	if err != nil {
-		return SignedUpload{}, err
-	}
-	return SignedUpload{URL: signedURL, Path: objectPath}, nil
+	return strings.TrimSpace(os.Getenv(legacy))
 }
 
-// PublicObjectURL is the URL a browser can put in an img tag when the bucket is public.
-func (c *Client) PublicObjectURL(bucket, objectPath string) (string, error) {
-	baseURL, _, err := supabaseConfig()
+func (c *Client) SignUpload(ctx context.Context, namespace, objectPath string, opts SignOptions) (SignedUpload, error) {
+	key, err := c.objectKey(namespace, objectPath)
+	if err != nil {
+		return SignedUpload{}, err
+	}
+	if err := c.policy.Validate(opts.ContentType, opts.SizeBytes); err != nil {
+		return SignedUpload{}, err
+	}
+	if !matchesContentType(objectPath, opts.ContentType) {
+		return SignedUpload{}, ErrUnsupportedType
+	}
+	signed, err := s3.NewPresignClient(c.s3).PresignPutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(c.bucket), Key: aws.String(key),
+		ContentType: aws.String(opts.ContentType), ContentLength: aws.Int64(opts.SizeBytes),
+		CacheControl: aws.String("private, no-store"),
+	}, func(o *s3.PresignOptions) { o.Expires = uploadLifetime })
+	if err != nil {
+		return SignedUpload{}, ErrSignFailed
+	}
+	headers := make(map[string]string)
+	for name, values := range signed.SignedHeader {
+		if !strings.EqualFold(name, "Host") {
+			headers[name] = strings.Join(values, ",")
+		}
+	}
+	return SignedUpload{URL: signed.URL, Path: strings.Trim(objectPath, "/"), Method: http.MethodPut, Headers: headers, ExpiresAt: time.Now().UTC().Add(uploadLifetime)}, nil
+}
+
+func (c *Client) DownloadURL(ctx context.Context, namespace, objectPath string) (string, error) {
+	key, err := c.objectKey(namespace, objectPath)
 	if err != nil {
 		return "", err
 	}
-	bucket, err = cleanBucket(bucket)
+	signed, err := s3.NewPresignClient(c.s3).PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(c.bucket), Key: aws.String(key),
+	}, func(o *s3.PresignOptions) { o.Expires = downloadLifetime })
 	if err != nil {
-		return "", err
+		return "", ErrSignFailed
 	}
-	_, requestPath, err := cleanObjectPath(objectPath)
-	if err != nil {
-		return "", err
-	}
-	return baseURL + "/storage/v1/object/public/" + bucket + "/" + requestPath, nil
+	return signed.URL, nil
 }
 
-// PublicObjectPath reads the object key back out of a URL from PublicObjectURL.
-func PublicObjectPath(publicURL, bucket string) (string, bool) {
-	marker := "/storage/v1/object/public/" + url.PathEscape(strings.Trim(bucket, "/")) + "/"
-	i := strings.Index(publicURL, marker)
-	if i < 0 {
-		return "", false
+func (c *Client) HeadObject(ctx context.Context, namespace, objectPath string) (ObjectInfo, error) {
+	key, err := c.objectKey(namespace, objectPath)
+	if err != nil {
+		return ObjectInfo{}, err
 	}
-	key := publicURL[i+len(marker):]
-	if cut := strings.Index(key, "?"); cut >= 0 {
-		key = key[:cut]
+	out, err := c.s3.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(c.bucket), Key: aws.String(key)})
+	if err != nil {
+		var status interface{ HTTPStatusCode() int }
+		var apiErr smithy.APIError
+		if (errors.As(err, &status) && status.HTTPStatusCode() == http.StatusNotFound) ||
+			(errors.As(err, &apiErr) && (apiErr.ErrorCode() == "NotFound" || apiErr.ErrorCode() == "NoSuchKey")) {
+			return ObjectInfo{}, ErrNotUploaded
+		}
+		return ObjectInfo{}, ErrInspectFailed
 	}
-	key, err := url.PathUnescape(key)
-	if err != nil || key == "" || strings.Contains(key, "..") {
-		return "", false
-	}
-	return key, true
+	return ObjectInfo{ContentType: aws.ToString(out.ContentType), SizeBytes: aws.ToInt64(out.ContentLength)}, nil
 }
 
-// Exists reports whether the object key is already in the bucket.
-// The info route returns metadata only, so the image bytes are not downloaded.
-func (c *Client) Exists(ctx context.Context, bucket, objectPath string) (bool, error) {
-	baseURL, key, err := supabaseConfig()
-	if err != nil {
-		return false, err
-	}
-	bucket, err = cleanBucket(bucket)
-	if err != nil {
-		return false, err
-	}
-	_, requestPath, err := cleanObjectPath(objectPath)
-	if err != nil {
-		return false, err
-	}
-	endpoint := baseURL + "/storage/v1/object/info/" + bucket + "/" + requestPath
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return false, err
-	}
-	req.Header.Set("Authorization", "Bearer "+key)
-	req.Header.Set("apikey", key)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return false, err
-	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-	switch resp.StatusCode {
-	case http.StatusOK:
-		return true, nil
-	case http.StatusNotFound, http.StatusBadRequest:
-		return false, nil
-	default:
-		return false, fmt.Errorf("status %d", resp.StatusCode)
-	}
-}
-
-// Delete removes object keys from a bucket. The caller decides which keys, then updates its own database.
-func (c *Client) Delete(ctx context.Context, bucket string, objectPaths []string) error {
+func (c *Client) Delete(ctx context.Context, namespace string, objectPaths []string) error {
 	if len(objectPaths) == 0 {
 		return ErrInvalidObjectPath
 	}
-	baseURL, key, err := supabaseConfig()
-	if err != nil {
-		return err
-	}
-	bucket, err = cleanBucket(bucket)
-	if err != nil {
-		return err
-	}
-	prefixes := make([]string, len(objectPaths))
-	for i, objectPath := range objectPaths {
-		logical, _, err := cleanObjectPath(objectPath)
+	// Validate the whole request before mutating storage.
+	keys := make([]string, len(objectPaths))
+	for i, path := range objectPaths {
+		key, err := c.objectKey(namespace, path)
 		if err != nil {
 			return err
 		}
-		prefixes[i] = logical
+		keys[i] = key
 	}
-	body, err := json.Marshal(struct {
-		Prefixes []string `json:"prefixes"`
-	}{Prefixes: prefixes})
-	if err != nil {
-		return err
+	for _, key := range keys {
+		_, err := c.s3.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(c.bucket), Key: aws.String(key)})
+		if err != nil {
+			return ErrDeleteFailed
+		}
 	}
-
-	endpoint := baseURL + "/storage/v1/object/" + bucket
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+key)
-	req.Header.Set("apikey", key)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("%w: status %d", ErrDeleteFailed, resp.StatusCode)
-	}
-	_, _ = io.Copy(io.Discard, resp.Body)
 	return nil
 }
 
-func supabaseConfig() (string, string, error) {
-	baseURL := strings.TrimRight(share.GetEnvStringDefault("SUPABASE_URL", ""), "/")
-	key := share.GetEnvStringDefault("SUPABASE_SECRET_KEY", "")
-	if baseURL == "" || key == "" {
-		return "", "", ErrNotConfigured
+func (c *Client) objectKey(namespace, objectPath string) (string, error) {
+	if c == nil {
+		return "", ErrNotConfigured
 	}
-	return baseURL, key, nil
-}
-
-func cleanBucket(bucket string) (string, error) {
-	bucket = strings.Trim(bucket, "/")
-	if bucket == "" || strings.Contains(bucket, "/") || bucket == "." || bucket == ".." {
+	if c.configErr != nil {
+		return "", c.configErr
+	}
+	if c.s3 == nil || c.bucket == "" {
+		return "", ErrNotConfigured
+	}
+	if strings.Trim(objectPath, "/") == "" {
 		return "", ErrInvalidObjectPath
 	}
-	return url.PathEscape(bucket), nil
+	if namespace == "" || strings.ContainsAny(namespace, "/\\") || namespace == "." || namespace == ".." {
+		return "", ErrInvalidObjectPath
+	}
+	logical, _, err := cleanObjectPath(namespace + "/" + strings.Trim(objectPath, "/"))
+	if err != nil {
+		return "", err
+	}
+	return logical, nil
 }
 
-// cleanObjectPath returns the key a caller can store and the escaped path
-// used in the sign request. Segments stay separated so folders survive escaping.
 func cleanObjectPath(objectPath string) (string, string, error) {
 	objectPath = strings.Trim(objectPath, "/")
 	if objectPath == "" || strings.Contains(objectPath, "\\") || strings.ContainsRune(objectPath, 0) {
@@ -246,20 +205,17 @@ func cleanObjectPath(objectPath string) (string, string, error) {
 		if part == "" || part == "." || part == ".." {
 			return "", "", ErrInvalidObjectPath
 		}
+		for _, r := range part {
+			if r < 32 || r == 127 {
+				return "", "", ErrInvalidObjectPath
+			}
+		}
 		escaped[i] = url.PathEscape(part)
 	}
 	return objectPath, strings.Join(escaped, "/"), nil
 }
 
-func absoluteSignedURL(baseURL, signedPath string) (string, error) {
-	if signedPath == "" {
-		return "", ErrSignFailed
-	}
-	if strings.HasPrefix(signedPath, "https://") || strings.HasPrefix(signedPath, "http://") {
-		return signedPath, nil
-	}
-	if !strings.HasPrefix(signedPath, "/") {
-		return "", ErrSignFailed
-	}
-	return baseURL + "/storage/v1" + signedPath, nil
+func matchesContentType(path, contentType string) bool {
+	ext, ok := MediaExt(contentType)
+	return ok && strings.HasSuffix(path, ext)
 }

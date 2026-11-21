@@ -23,6 +23,7 @@ import (
 	groupController "Road-To-Destination-BE/module/group/controller"
 	mapsClient "Road-To-Destination-BE/module/maps/client"
 	mapsController "Road-To-Destination-BE/module/maps/controller"
+	"Road-To-Destination-BE/module/objectStorage"
 	"Road-To-Destination-BE/module/realtime"
 	realtimeController "Road-To-Destination-BE/module/realtime/controller"
 	"Road-To-Destination-BE/module/share"
@@ -140,11 +141,12 @@ func Run() error {
 			log.Printf("flush tracking checkpoints: %v", err)
 		}
 	}()
+	mediaStorage := objectStorage.NewClient()
 	routerRegistrars := []share.RouterRegistrar{
-		authenController.NewAuthenticationController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, bucketLimiter),
+		authenController.NewAuthenticationController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, bucketLimiter, mediaStorage),
 		friendController.NewFriendController(dbConfig.GetDatabase(), authMw),
 		groupController.NewGroupController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw),
-		tripController.NewTripController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw, responseCacheMw, goongClient, bucketLimiter),
+		tripController.NewTripController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw, responseCacheMw, goongClient, bucketLimiter, mediaStorage),
 		realtimeController.NewLobbyController(authMw, hub, activeTripMemberAuthorizer{db: dbConfig.GetDatabase()}),
 	}
 	for _, r := range routerRegistrars {

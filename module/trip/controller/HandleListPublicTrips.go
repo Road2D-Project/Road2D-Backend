@@ -31,6 +31,6 @@ func (ctrl *TripController) HandleListPublicTrips() gin.HandlerFunc {
 			mapTripError(c, err)
 			return
 		}
-		c.JSON(http.StatusOK, list)
+		ctrl.writeTripResponse(c, http.StatusOK, list)
 	}
 }

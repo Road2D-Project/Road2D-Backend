@@ -34,7 +34,7 @@ func TestLoginLimitsAccountAcrossIPsBeforeCredentialLookup(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	limiter := &deniedAccountLimiter{}
 	router := gin.New()
-	NewAuthenticationController(nil, nil, nil, limiter).RegisterRoutes(router.Group("/v1"))
+	NewAuthenticationController(nil, nil, nil, limiter, nil).RegisterRoutes(router.Group("/v1"))
 	for _, ip := range []string{"192.0.2.1", "192.0.2.2"} {
 		request := httptest.NewRequest(http.MethodPost, "/v1/auth/user/login", strings.NewReader(`{"username":"traveler","password":"TestPassword1!"}`))
 		request.Header.Set("Content-Type", "application/json")
@@ -54,7 +54,7 @@ func TestForgetPasswordLimitsEmailAcrossIPsBeforeLookup(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	limiter := &deniedAccountLimiter{}
 	router := gin.New()
-	NewAuthenticationController(nil, nil, nil, limiter).RegisterRoutes(router.Group("/v1"))
+	NewAuthenticationController(nil, nil, nil, limiter, nil).RegisterRoutes(router.Group("/v1"))
 	for _, test := range []struct {
 		email string
 		ip    string
@@ -96,7 +96,7 @@ func TestAuthRoutesApplyIPLimitsIncludingResetTokenPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	router := gin.New()
-	NewAuthenticationController(nil, client, nil, limiter).RegisterRoutes(router.Group("/v1"))
+	NewAuthenticationController(nil, client, nil, limiter, nil).RegisterRoutes(router.Group("/v1"))
 	for _, route := range []struct{ method, path string }{
 		{http.MethodPost, "/v1/auth/user/login"},
 		{http.MethodPost, "/v1/auth/user/register"},

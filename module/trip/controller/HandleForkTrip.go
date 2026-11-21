@@ -56,6 +56,6 @@ func (ctrl *TripController) HandleForkTrip() gin.HandlerFunc {
 			mapTripError(c, err)
 			return
 		}
-		c.JSON(http.StatusCreated, created)
+		ctrl.writeTripResponse(c, http.StatusCreated, created)
 	}
 }

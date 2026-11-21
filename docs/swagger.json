@@ -15,7 +15,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns a signed URL. PUT the image bytes to url, then call confirm with path. contentType is image/png, image/jpeg, or image/webp.",
+                "description": "Returns a private R2 upload URL and required headers. PUT the raw image bytes, then confirm with path. PNG, JPEG, and WebP only; default maximum 5 MB.",
                 "produces": [
                     "application/json"
                 ],
@@ -28,6 +28,14 @@
                         "type": "string",
                         "description": "Image content type",
                         "name": "contentType",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Exact file size in bytes",
+                        "name": "sizeBytes",
                         "in": "query",
                         "required": true
                     }
@@ -47,6 +55,12 @@
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
                         "schema": {
                             "$ref": "#/definitions/share.ErrorResponse"
                         }
@@ -84,7 +98,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Stores the public avatar URL after the file is in Storage. path is the object key returned by the sign call.",
+                "description": "Verifies the R2 object type and size, stores its key, and returns a one-hour viewing URL. path is the key returned by the sign call.",
                 "consumes": [
                     "application/json"
                 ],
@@ -127,6 +141,12 @@
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
                         "schema": {
                             "$ref": "#/definitions/share.ErrorResponse"
                         }
@@ -3859,7 +3879,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Leader or admin. PUT the image bytes to url, then call confirm with path. contentType is image/png, image/jpeg, or image/webp.",
+                "description": "Leader or admin. Returns a private R2 upload URL and required headers. PUT the raw image bytes, then confirm with path. PNG, JPEG, and WebP only; default maximum 5 MB.",
                 "produces": [
                     "application/json"
                 ],
@@ -3880,6 +3900,14 @@
                         "type": "string",
                         "description": "Image content type",
                         "name": "contentType",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Exact file size in bytes",
+                        "name": "sizeBytes",
                         "in": "query",
                         "required": true
                     }
@@ -3905,6 +3933,12 @@
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
                         "schema": {
                             "$ref": "#/definitions/share.ErrorResponse"
                         }
@@ -3964,7 +3998,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Leader or admin. Stores the public image URL after the file is in Storage. path is the object key returned by the sign call.",
+                "description": "Leader or admin. Verifies the R2 object type and size, stores its key, and returns a one-hour viewing URL. path is the key returned by the sign call.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4027,6 +4061,12 @@
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
                         "schema": {
                             "$ref": "#/definitions/share.ErrorResponse"
                         }
@@ -5871,6 +5911,18 @@
         "response.AvatarUploadResponse": {
             "type": "object",
             "properties": {
+                "expiresAt": {
+                    "type": "string"
+                },
+                "headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "method": {
+                    "type": "string"
+                },
                 "path": {
                     "type": "string"
                 },
@@ -6778,6 +6830,18 @@
         "response.TripImageUploadResponse": {
             "type": "object",
             "properties": {
+                "expiresAt": {
+                    "type": "string"
+                },
+                "headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "method": {
+                    "type": "string"
+                },
                 "path": {
                     "type": "string"
                 },

@@ -150,7 +150,7 @@ func TestPlanningPostgres(t *testing.T) {
 		cache := middleware.NewResponseCache(client)
 		validation := validator.New()
 		customValidator.ValidatorRegistrar(validation)
-		ctrl := controller.NewTripController(db, client, validation, nil, cache, nil, nil)
+		ctrl := controller.NewTripController(db, client, validation, nil, cache, nil, nil, nil)
 		router := gin.New()
 		router.Use(func(c *gin.Context) {
 			c.Set("currentUser", &authModel.User{Base: utils.Base{ID: actorID}})

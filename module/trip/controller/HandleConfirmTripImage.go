@@ -10,7 +10,7 @@ import (
 
 // HandleConfirmTripImage godoc
 // @Summary      Confirm trip image upload
-// @Description  Leader or admin. Stores the public image URL after the file is in Storage. path is the object key returned by the sign call.
+// @Description  Leader or admin. Verifies the R2 object type and size, stores its key, and returns a one-hour viewing URL. path is the key returned by the sign call.
 // @Tags         trips
 // @Accept       json
 // @Produce      json
@@ -23,6 +23,7 @@ import (
 // @Failure      403     {object}  share.ErrorResponse
 // @Failure      404     {object}  share.ErrorResponse
 // @Failure      409     {object}  share.ErrorResponse
+// @Failure      413     {object}  share.ErrorResponse
 // @Router       /trips/{tripId}/image/confirm [post]
 func (ctrl *TripController) HandleConfirmTripImage() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -38,11 +39,12 @@ func (ctrl *TripController) HandleConfirmTripImage() gin.HandlerFunc {
 			jsonBindError(c, err)
 			return
 		}
-		publicURL, err := ctrl.tripImages().Confirm(c.Request.Context(), tripID.String(), req.Path)
+		viewURL, err := ctrl.tripImages().Confirm(c.Request.Context(), tripID.String(), req.Path)
 		if err != nil {
 			mapImageError(c, err)
 			return
 		}
-		c.JSON(http.StatusOK, response.TripImageURLResponse{URL: publicURL})
+		c.Header("Cache-Control", "private, no-store")
+		c.JSON(http.StatusOK, response.TripImageURLResponse{URL: viewURL})
 	}
 }

@@ -11,7 +11,7 @@ import (
 
 // HandleConfirmAvatar godoc
 // @Summary      Confirm avatar upload
-// @Description  Stores the public avatar URL after the file is in Storage. path is the object key returned by the sign call.
+// @Description  Verifies the R2 object type and size, stores its key, and returns a one-hour viewing URL. path is the key returned by the sign call.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
@@ -21,6 +21,7 @@ import (
 // @Failure      400   {object}  share.ErrorResponse
 // @Failure      401   {object}  share.ErrorResponse
 // @Failure      409   {object}  share.ErrorResponse
+// @Failure      413   {object}  share.ErrorResponse
 // @Router       /auth/user/avatar/confirm [post]
 func (ctrl AuthenticationController) HandleConfirmAvatar() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -34,11 +35,12 @@ func (ctrl AuthenticationController) HandleConfirmAvatar() gin.HandlerFunc {
 			jsonBindError(c, err)
 			return
 		}
-		publicURL, err := ctrl.avatarImages().Confirm(c.Request.Context(), user.ID.String(), req.Path)
+		viewURL, err := ctrl.avatarImages().Confirm(c.Request.Context(), user.ID.String(), req.Path)
 		if err != nil {
 			mapImageError(c, err)
 			return
 		}
-		c.JSON(http.StatusOK, response.AvatarURLResponse{URL: publicURL})
+		c.Header("Cache-Control", "private, no-store")
+		c.JSON(http.StatusOK, response.AvatarURLResponse{URL: viewURL})
 	}
 }

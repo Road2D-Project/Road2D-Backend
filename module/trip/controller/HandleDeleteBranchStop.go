@@ -47,6 +47,6 @@ func (ctrl *TripController) HandleDeleteBranchStop() gin.HandlerFunc {
 			mapTripError(c, err)
 			return
 		}
-		c.JSON(http.StatusOK, detail)
+		ctrl.writeTripResponse(c, http.StatusOK, detail)
 	}
 }

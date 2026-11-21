@@ -693,6 +693,14 @@ definitions:
     type: object
   response.AvatarUploadResponse:
     properties:
+      expiresAt:
+        type: string
+      headers:
+        additionalProperties:
+          type: string
+        type: object
+      method:
+        type: string
       path:
         type: string
       url:
@@ -1295,6 +1303,14 @@ definitions:
     type: object
   response.TripImageUploadResponse:
     properties:
+      expiresAt:
+        type: string
+      headers:
+        additionalProperties:
+          type: string
+        type: object
+      method:
+        type: string
       path:
         type: string
       url:
@@ -1428,14 +1444,21 @@ paths:
       tags:
       - auth
     post:
-      description: Returns a signed URL. PUT the image bytes to url, then call confirm
-        with path. contentType is image/png, image/jpeg, or image/webp.
+      description: Returns a private R2 upload URL and required headers. PUT the raw
+        image bytes, then confirm with path. PNG, JPEG, and WebP only; default maximum
+        5 MB.
       parameters:
       - description: Image content type
         in: query
         name: contentType
         required: true
         type: string
+      - description: Exact file size in bytes
+        format: int64
+        in: query
+        name: sizeBytes
+        required: true
+        type: integer
       produces:
       - application/json
       responses:
@@ -1451,6 +1474,10 @@ paths:
           description: Unauthorized
           schema:
             $ref: '#/definitions/share.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Sign avatar upload
@@ -1460,8 +1487,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Stores the public avatar URL after the file is in Storage. path
-        is the object key returned by the sign call.
+      description: Verifies the R2 object type and size, stores its key, and returns
+        a one-hour viewing URL. path is the key returned by the sign call.
       parameters:
       - description: Object key
         in: body
@@ -1486,6 +1513,10 @@ paths:
             $ref: '#/definitions/share.ErrorResponse'
         "409":
           description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
           schema:
             $ref: '#/definitions/share.ErrorResponse'
       security:
@@ -3932,8 +3963,9 @@ paths:
       tags:
       - trips
     post:
-      description: Leader or admin. PUT the image bytes to url, then call confirm
-        with path. contentType is image/png, image/jpeg, or image/webp.
+      description: Leader or admin. Returns a private R2 upload URL and required headers.
+        PUT the raw image bytes, then confirm with path. PNG, JPEG, and WebP only;
+        default maximum 5 MB.
       parameters:
       - description: Trip UUID
         format: uuid
@@ -3946,6 +3978,12 @@ paths:
         name: contentType
         required: true
         type: string
+      - description: Exact file size in bytes
+        format: int64
+        in: query
+        name: sizeBytes
+        required: true
+        type: integer
       produces:
       - application/json
       responses:
@@ -3965,6 +4003,10 @@ paths:
           description: Forbidden
           schema:
             $ref: '#/definitions/share.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Sign trip image upload
@@ -3974,8 +4016,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: Leader or admin. Stores the public image URL after the file is
-        in Storage. path is the object key returned by the sign call.
+      description: Leader or admin. Verifies the R2 object type and size, stores its
+        key, and returns a one-hour viewing URL. path is the key returned by the sign
+        call.
       parameters:
       - description: Trip UUID
         format: uuid
@@ -4014,6 +4057,10 @@ paths:
             $ref: '#/definitions/share.ErrorResponse'
         "409":
           description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
           schema:
             $ref: '#/definitions/share.ErrorResponse'
       security:

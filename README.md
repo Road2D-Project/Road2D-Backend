@@ -140,6 +140,9 @@ Rules for a new step:
 
 ## Run locally
 
+Private avatar/trip media uses Cloudflare R2. Setup, browser upload examples, and
+the reusable video/audio service are documented in [R2 media](docs/r2-media.md).
+
 Go 1.26+, PostgreSQL, Redis.
 
 Full file environment variable.
