@@ -388,6 +388,20 @@ definitions:
     required:
     - name
     type: object
+  request.CreateMessageRequest:
+    properties:
+      clientMessageId:
+        format: uuid
+        type: string
+      replyToMessageId:
+        type: string
+      text:
+        maxLength: 4000
+        type: string
+    required:
+    - clientMessageId
+    - text
+    type: object
   request.CreateTripRequest:
     properties:
       endTime:
@@ -490,6 +504,14 @@ definitions:
         type: string
     required:
     - refreshToken
+    type: object
+  request.MarkReadRequest:
+    properties:
+      lastReadSeq:
+        minimum: 0
+        type: integer
+    required:
+    - lastReadSeq
     type: object
   request.PatchDestinationRequest:
     properties:
@@ -623,6 +645,27 @@ definitions:
         type: string
     required:
     - nickname
+    type: object
+  request.UpdateMessageRequest:
+    properties:
+      expectedRevision:
+        minimum: 1
+        type: integer
+      text:
+        maxLength: 4000
+        type: string
+    required:
+    - expectedRevision
+    - text
+    type: object
+  request.UpdatePreferencesRequest:
+    properties:
+      mutedUntil:
+        format: date-time
+        type: string
+        x-nullable: true
+    required:
+    - mutedUntil
     type: object
   request.UpdateTripMemberRequest:
     properties:
@@ -791,6 +834,61 @@ definitions:
           type: array
         type: array
     type: object
+  response.ConversationEventResponse:
+    properties:
+      conversationId:
+        type: string
+      createdTime:
+        type: string
+      eventId:
+        type: string
+      eventSeq:
+        type: integer
+      payload:
+        type: object
+      type:
+        type: string
+    type: object
+  response.ConversationListResponse:
+    properties:
+      conversations:
+        items:
+          $ref: '#/definitions/response.ConversationResponse'
+        type: array
+      nextCursor:
+        type: string
+    type: object
+  response.ConversationResponse:
+    properties:
+      activeMemberCount:
+        type: integer
+      id:
+        type: string
+      lastActivityAt:
+        type: string
+      lastMessageId:
+        type: string
+      lastMessagePreview:
+        $ref: '#/definitions/response.MessagePreview'
+      lastMessageRevision:
+        type: integer
+      lastMessageSeq:
+        type: integer
+      lastReadSeq:
+        type: integer
+      mutedUntil:
+        type: string
+      myRole:
+        type: string
+      name:
+        type: string
+      summaryVersion:
+        type: integer
+      tripId:
+        type: string
+      unreadCount:
+        type: integer
+    type: object
   response.CreateDestinationResponse:
     properties:
       destinationId:
@@ -827,6 +925,21 @@ definitions:
         type: string
       placeId:
         type: string
+    type: object
+  response.EventListResponse:
+    properties:
+      events:
+        items:
+          $ref: '#/definitions/response.ConversationEventResponse'
+        type: array
+      hasMore:
+        type: boolean
+      latestEventSeq:
+        type: integer
+      minAfterEventSeq:
+        type: integer
+      nextEventSeq:
+        type: integer
     type: object
   response.ForgetPasswordResponse:
     properties:
@@ -1071,6 +1184,53 @@ definitions:
       offset:
         type: integer
     type: object
+  response.MessageListResponse:
+    properties:
+      hasMore:
+        type: boolean
+      messages:
+        items:
+          $ref: '#/definitions/response.MessageResponse'
+        type: array
+      nextAfterSeq:
+        type: integer
+      nextBeforeSeq:
+        type: integer
+    type: object
+  response.MessagePreview:
+    properties:
+      deleted:
+        type: boolean
+      kind:
+        type: string
+      text:
+        type: string
+    type: object
+  response.MessageResponse:
+    properties:
+      conversationId:
+        type: string
+      createdTime:
+        type: string
+      deletedAt:
+        type: string
+      editedAt:
+        type: string
+      id:
+        type: string
+      kind:
+        type: string
+      replyToMessageId:
+        type: string
+      revision:
+        type: integer
+      senderId:
+        type: string
+      seq:
+        type: integer
+      text:
+        type: string
+    type: object
   response.PlaceDetail:
     properties:
       compound:
@@ -1182,6 +1342,25 @@ definitions:
       userId:
         format: uuid
         type: string
+    type: object
+  response.ReplayRequiredResponse:
+    properties:
+      errors:
+        additionalProperties:
+          type: string
+        type: object
+      latestEventSeq:
+        type: integer
+      message:
+        example: invalid input
+        type: string
+      minAfterEventSeq:
+        type: integer
+      status:
+        example: 400
+        type: integer
+      syncRequired:
+        type: boolean
     type: object
   response.ResetPasswordResponse:
     properties:
@@ -1739,6 +1918,433 @@ paths:
       summary: Reset password
       tags:
       - auth
+  /conversations:
+    get:
+      parameters:
+      - description: Opaque activity/ID cursor
+        in: query
+        name: cursor
+        type: string
+      - description: Page size, default 20, maximum 50
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.ConversationListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List my conversations
+      tags:
+      - chat
+  /conversations/{conversationId}:
+    get:
+      parameters:
+      - description: Conversation UUID
+        in: path
+        name: conversationId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.ConversationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get conversation summary
+      tags:
+      - chat
+  /conversations/{conversationId}/events:
+    get:
+      parameters:
+      - description: Conversation UUID
+        in: path
+        name: conversationId
+        required: true
+        type: string
+      - description: Exclusive event cursor, default zero
+        in: query
+        name: afterEventSeq
+        type: integer
+      - description: Page size, default 100, maximum 200
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.EventListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "410":
+          description: Gone
+          schema:
+            $ref: '#/definitions/response.ReplayRequiredResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Replay conversation events
+      tags:
+      - chat
+  /conversations/{conversationId}/messages:
+    get:
+      parameters:
+      - description: Conversation UUID
+        in: path
+        name: conversationId
+        required: true
+        type: string
+      - description: Older messages, exclusive; cannot combine with afterSeq
+        in: query
+        name: beforeSeq
+        type: integer
+      - description: Catch up after sequence, exclusive; zero starts at the beginning
+        in: query
+        name: afterSeq
+        type: integer
+      - description: Page size, default 30, maximum 100
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Read conversation history
+      tags:
+      - chat
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Conversation UUID
+        in: path
+        name: conversationId
+        required: true
+        type: string
+      - description: Client UUID, text and optional reply
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.CreateMessageRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Send text message
+      tags:
+      - chat
+  /conversations/{conversationId}/messages/{messageId}:
+    delete:
+      parameters:
+      - description: Conversation UUID
+        in: path
+        name: conversationId
+        required: true
+        type: string
+      - description: Message UUID
+        in: path
+        name: messageId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Message tombstoned
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete text message
+      tags:
+      - chat
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Conversation UUID
+        in: path
+        name: conversationId
+        required: true
+        type: string
+      - description: Message UUID
+        in: path
+        name: messageId
+        required: true
+        type: string
+      - description: New text and expectedRevision
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdateMessageRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Edit text message
+      tags:
+      - chat
+  /conversations/{conversationId}/preferences:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Conversation UUID
+        in: path
+        name: conversationId
+        required: true
+        type: string
+      - description: Future mutedUntil timestamp or null
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdatePreferencesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.ConversationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Set conversation mute preference
+      tags:
+      - chat
+  /conversations/{conversationId}/read:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Conversation UUID
+        in: path
+        name: conversationId
+        required: true
+        type: string
+      - description: Highest displayed sequence
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.MarkReadRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.ConversationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Mark displayed messages read
+      tags:
+      - chat
   /friends:
     get:
       description: Accepted friends of the caller, with count. Optional q keeps usernames

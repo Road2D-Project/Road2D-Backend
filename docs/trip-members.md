@@ -42,21 +42,42 @@ Accept and approve both refuse with 409 when the active roster is already at `me
 
 Any active member may fork. The caller is the leader of the new trip. Other active members are copied as members, unless their ids are in `excludeUserIds`. The caller cannot be dropped. Omitted name, note, times, type, and visibility are copied from the source. The new `memberLimit` is computed from the new trip's type, not sent by the client. If the copied roster does not fit, exclude more people. The route graph is not copied; the new trip starts with an empty draft branch.
 
-## Not built yet
+## Implementation status
 
 ### Friend system
 
 Create rejects a member who is not an accepted friend of the caller. A later invite by user id does not check that yet.
 
-### Group chat
+### Trip chat foundation
 
-Creating a trip should also create one group chat in the same step. The chat and the trip are parallel objects: they are not linked by `groupId`, and their member lists are the same people. That chat is not implemented.
+Creating or forking a trip now creates one conversation in the same database
+transaction as the trip, roster, and initial branches. Retrying trip creation
+returns the existing trip without adding another conversation. Forking creates
+an independent, empty conversation. Migration backfills existing trips.
 
-When it is, keep the two rosters aligned on:
+Chat membership will derive from active `trip_members`; there is no duplicate
+chat roster to synchronize on invitations, approvals, kick, or leave. This also
+keeps the feature independent of the legacy group module.
 
-- create (leader plus the required members)
-- approve a join request
-- accept an invitation
-- kick
-- leave
-- fork (a new chat for the new trip, not the source chat)
+Active members can now list their conversations with `GET /conversations`, read
+one summary with `GET /conversations/{conversationId}`, and page its history with
+`GET /conversations/{conversationId}/messages`. Conversation IDs are exposed only
+through these authorized chat reads; public trip discovery grants no chat access.
+History reads do not mark messages read. Active members can create text/reply
+messages, edit their own text with `expectedRevision`, and tombstone their own
+messages. Leaders/admins can also tombstone another member's text. Repeated
+`clientMessageId` requests return the existing message; a changed request body
+with the same key returns 409, and a stale edit revision also returns 409.
+
+`PUT /conversations/{conversationId}/read` monotonically advances the caller's
+`lastReadSeq`. `PATCH /conversations/{conversationId}/preferences` accepts a future
+`mutedUntil` timestamp or null to unmute; it does not mark messages read. Both
+return an authoritative summary. Writes and their outbox event commit together;
+read/preference events are addressed only to that caller.
+
+`GET /conversations/{conversationId}/events?afterEventSeq=...` replays seven days
+of public/own events. It returns 410 with `syncRequired` and sequence bounds for
+an expired cursor. Internal cleanup jobs and other users' private events are
+excluded. Apply the normal migration command before running this version: the
+outbox now includes nullable recipient metadata. Outbox dispatch, socket delivery,
+and live revocation remain subsequent implementation steps.

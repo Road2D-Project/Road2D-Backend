@@ -30,7 +30,19 @@ var Steps = []Step{
 
 // Apply runs Steps in order. AutoMigrate follows, and it will not undo these repairs.
 func Apply(db *gorm.DB) error {
-	for _, step := range Steps {
+	return applySteps(db, Steps)
+}
+
+// ApplyAfterModels repairs constraints/backfills that require newly created tables.
+// These steps are idempotent, like the legacy repairs, and run on every migrate.
+func ApplyAfterModels(db *gorm.DB) error {
+	return applySteps(db, []Step{
+		{Name: "V12_AddChatFoundation", Run: V12_AddChatFoundation},
+	})
+}
+
+func applySteps(db *gorm.DB, steps []Step) error {
+	for _, step := range steps {
 		if err := step.Run(db); err != nil {
 			return fmt.Errorf("%s: %w", step.Name, err)
 		}

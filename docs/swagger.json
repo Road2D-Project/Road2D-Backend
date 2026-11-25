@@ -516,6 +516,672 @@
                 }
             }
         },
+        "/conversations": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "List my conversations",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Opaque activity/ID cursor",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size, default 20, maximum 50",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.ConversationListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/conversations/{conversationId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Get conversation summary",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Conversation UUID",
+                        "name": "conversationId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.ConversationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/conversations/{conversationId}/events": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Replay conversation events",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Conversation UUID",
+                        "name": "conversationId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Exclusive event cursor, default zero",
+                        "name": "afterEventSeq",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size, default 100, maximum 200",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.EventListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "410": {
+                        "description": "Gone",
+                        "schema": {
+                            "$ref": "#/definitions/response.ReplayRequiredResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/conversations/{conversationId}/messages": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Read conversation history",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Conversation UUID",
+                        "name": "conversationId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Older messages, exclusive; cannot combine with afterSeq",
+                        "name": "beforeSeq",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Catch up after sequence, exclusive; zero starts at the beginning",
+                        "name": "afterSeq",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size, default 30, maximum 100",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.MessageListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Send text message",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Conversation UUID",
+                        "name": "conversationId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Client UUID, text and optional reply",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.CreateMessageRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.MessageResponse"
+                        }
+                    },
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/response.MessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/conversations/{conversationId}/messages/{messageId}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Delete text message",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Conversation UUID",
+                        "name": "conversationId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Message UUID",
+                        "name": "messageId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Message tombstoned"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Edit text message",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Conversation UUID",
+                        "name": "conversationId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Message UUID",
+                        "name": "messageId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New text and expectedRevision",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.UpdateMessageRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.MessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/conversations/{conversationId}/preferences": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Set conversation mute preference",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Conversation UUID",
+                        "name": "conversationId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Future mutedUntil timestamp or null",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.UpdatePreferencesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.ConversationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/conversations/{conversationId}/read": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Mark displayed messages read",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Conversation UUID",
+                        "name": "conversationId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Highest displayed sequence",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.MarkReadRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.ConversationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/friends": {
             "get": {
                 "security": [
@@ -5465,6 +6131,26 @@
                 }
             }
         },
+        "request.CreateMessageRequest": {
+            "type": "object",
+            "required": [
+                "clientMessageId",
+                "text"
+            ],
+            "properties": {
+                "clientMessageId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "replyToMessageId": {
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string",
+                    "maxLength": 4000
+                }
+            }
+        },
         "request.CreateTripRequest": {
             "type": "object",
             "required": [
@@ -5611,6 +6297,18 @@
             "properties": {
                 "refreshToken": {
                     "type": "string"
+                }
+            }
+        },
+        "request.MarkReadRequest": {
+            "type": "object",
+            "required": [
+                "lastReadSeq"
+            ],
+            "properties": {
+                "lastReadSeq": {
+                    "type": "integer",
+                    "minimum": 0
                 }
             }
         },
@@ -5804,6 +6502,36 @@
                     "type": "string",
                     "maxLength": 64,
                     "minLength": 1
+                }
+            }
+        },
+        "request.UpdateMessageRequest": {
+            "type": "object",
+            "required": [
+                "expectedRevision",
+                "text"
+            ],
+            "properties": {
+                "expectedRevision": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "text": {
+                    "type": "string",
+                    "maxLength": 4000
+                }
+            }
+        },
+        "request.UpdatePreferencesRequest": {
+            "type": "object",
+            "required": [
+                "mutedUntil"
+            ],
+            "properties": {
+                "mutedUntil": {
+                    "type": "string",
+                    "format": "date-time",
+                    "x-nullable": true
                 }
             }
         },
@@ -6058,6 +6786,90 @@
                 }
             }
         },
+        "response.ConversationEventResponse": {
+            "type": "object",
+            "properties": {
+                "conversationId": {
+                    "type": "string"
+                },
+                "createdTime": {
+                    "type": "string"
+                },
+                "eventId": {
+                    "type": "string"
+                },
+                "eventSeq": {
+                    "type": "integer"
+                },
+                "payload": {
+                    "type": "object"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.ConversationListResponse": {
+            "type": "object",
+            "properties": {
+                "conversations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.ConversationResponse"
+                    }
+                },
+                "nextCursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.ConversationResponse": {
+            "type": "object",
+            "properties": {
+                "activeMemberCount": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "lastActivityAt": {
+                    "type": "string"
+                },
+                "lastMessageId": {
+                    "type": "string"
+                },
+                "lastMessagePreview": {
+                    "$ref": "#/definitions/response.MessagePreview"
+                },
+                "lastMessageRevision": {
+                    "type": "integer"
+                },
+                "lastMessageSeq": {
+                    "type": "integer"
+                },
+                "lastReadSeq": {
+                    "type": "integer"
+                },
+                "mutedUntil": {
+                    "type": "string"
+                },
+                "myRole": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "summaryVersion": {
+                    "type": "integer"
+                },
+                "tripId": {
+                    "type": "string"
+                },
+                "unreadCount": {
+                    "type": "integer"
+                }
+            }
+        },
         "response.CreateDestinationResponse": {
             "type": "object",
             "properties": {
@@ -6111,6 +6923,29 @@
                 },
                 "placeId": {
                     "type": "string"
+                }
+            }
+        },
+        "response.EventListResponse": {
+            "type": "object",
+            "properties": {
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.ConversationEventResponse"
+                    }
+                },
+                "hasMore": {
+                    "type": "boolean"
+                },
+                "latestEventSeq": {
+                    "type": "integer"
+                },
+                "minAfterEventSeq": {
+                    "type": "integer"
+                },
+                "nextEventSeq": {
+                    "type": "integer"
                 }
             }
         },
@@ -6481,6 +7316,78 @@
                 }
             }
         },
+        "response.MessageListResponse": {
+            "type": "object",
+            "properties": {
+                "hasMore": {
+                    "type": "boolean"
+                },
+                "messages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.MessageResponse"
+                    }
+                },
+                "nextAfterSeq": {
+                    "type": "integer"
+                },
+                "nextBeforeSeq": {
+                    "type": "integer"
+                }
+            }
+        },
+        "response.MessagePreview": {
+            "type": "object",
+            "properties": {
+                "deleted": {
+                    "type": "boolean"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.MessageResponse": {
+            "type": "object",
+            "properties": {
+                "conversationId": {
+                    "type": "string"
+                },
+                "createdTime": {
+                    "type": "string"
+                },
+                "deletedAt": {
+                    "type": "string"
+                },
+                "editedAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "replyToMessageId": {
+                    "type": "string"
+                },
+                "revision": {
+                    "type": "integer"
+                },
+                "senderId": {
+                    "type": "string"
+                },
+                "seq": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                }
+            }
+        },
         "response.PlaceDetail": {
             "type": "object",
             "properties": {
@@ -6650,6 +7557,34 @@
                 "userId": {
                     "type": "string",
                     "format": "uuid"
+                }
+            }
+        },
+        "response.ReplayRequiredResponse": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "latestEventSeq": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "invalid input"
+                },
+                "minAfterEventSeq": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "integer",
+                    "example": 400
+                },
+                "syncRequired": {
+                    "type": "boolean"
                 }
             }
         },

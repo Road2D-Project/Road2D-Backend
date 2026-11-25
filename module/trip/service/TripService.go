@@ -96,8 +96,8 @@ func NewTripService(
 
 // CreateTrip inserts a planning trip. The caller is leader. memberUserIds are
 // seated immediately, and each of them must already be an accepted friend.
-// A matching group chat is not created yet; that roster must stay aligned
-// with these members once chat exists.
+// Its conversation is created atomically by the repository and derives its
+// membership from this trip's roster.
 // The bool is true only when this call inserted the row. The same owner and
 // idempotency key returns the stored trip when the normalized body still matches.
 func (s *TripService) CreateTrip(ctx context.Context, owner *authModel.User, req request.CreateTripRequest) (*response.TripResponse, bool, error) {
