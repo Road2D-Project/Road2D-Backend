@@ -9,9 +9,12 @@ import (
 )
 
 func (t *TrackingCoordinator) OnTick(s realtime.Session, now time.Time) {
+	t.drainRemoteRedirectResults()
 	t.applyRedirectResults(s, now)
+	t.advanceRedirectJobs(s, now)
 	t.updateMemberPosition(s, now)()
 	t.markTripComplete()
+	t.offerCheckpoint(now, false)
 }
 func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.Time) func() {
 	var (
@@ -25,6 +28,9 @@ func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.
 			return
 		}
 		for userId, progress := range t.progresses {
+			if progress.AwaitingFreshPosition {
+				continue
+			}
 			switch status {
 			case enum.TripStay:
 				if progress.DriveStatus != enum.StayPublic {
@@ -34,7 +40,9 @@ func (t *TrackingCoordinator) updateMemberPosition(s realtime.Session, now time.
 				if progress.DriveStatus == enum.STOP || progress.DriveStatus == enum.StayPrivate || progress.DriveStatus == enum.COMPLETED {
 					continue
 				}
-				progress.ApplySnap()
+				if progress.ApplySnap() {
+					t.markCheckpointDirty()
+				}
 				t.applyDeviation(s, progress, now)
 				// A stopped rider is omitted. The client keeps the last pin it saw.
 				if progress.DriveStatus != enum.COMPLETED {
@@ -74,5 +82,9 @@ func (t *TrackingCoordinator) markTripComplete() {
 			return
 		}
 	}
-	t.tripInformation.Status = enum.TripCompleted
+	if t.tripInformation.Status != enum.TripCompleted {
+		t.tripInformation.Status = enum.TripCompleted
+		t.markCheckpointDirty()
+		t.offerCheckpoint(time.Now(), true)
+	}
 }

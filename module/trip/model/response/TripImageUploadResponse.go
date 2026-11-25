@@ -1,6 +1,5 @@
 package response
 
-type TripImageUploadResponse struct {
-	URL  string `json:"url"`
-	Path string `json:"path"`
-}
+import "Road-To-Destination-BE/module/objectStorage"
+
+type TripImageUploadResponse objectStorage.SignedUpload

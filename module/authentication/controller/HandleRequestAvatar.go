@@ -7,6 +7,7 @@ import (
 	"Road-To-Destination-BE/module/objectStorage"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -14,14 +15,16 @@ import (
 
 // HandleRequestAvatar godoc
 // @Summary      Sign avatar upload
-// @Description  Returns a signed URL. PUT the image bytes to url, then call confirm with path. contentType is image/png, image/jpeg, or image/webp.
+// @Description  Returns a private R2 upload URL and required headers. PUT the raw image bytes, then confirm with path. PNG, JPEG, and WebP only; default maximum 5 MB.
 // @Tags         auth
 // @Produce      json
 // @Security     BearerAuth
 // @Param        contentType  query     string  true  "Image content type"
+// @Param        sizeBytes    query     int64   true  "Exact file size in bytes"
 // @Success      200          {object}  response.AvatarUploadResponse
 // @Failure      400          {object}  share.ErrorResponse
 // @Failure      401          {object}  share.ErrorResponse
+// @Failure      413          {object}  share.ErrorResponse
 // @Router       /auth/user/avatar [post]
 func (ctrl AuthenticationController) HandleRequestAvatar() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -30,27 +33,35 @@ func (ctrl AuthenticationController) HandleRequestAvatar() gin.HandlerFunc {
 			jsonError(c, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
-		signed, err := ctrl.avatarImages().RequestUpload(c.Request.Context(), user.ID.String(), c.Query("contentType"))
+		sizeBytes, err := strconv.ParseInt(c.Query("sizeBytes"), 10, 64)
+		if err != nil {
+			mapImageError(c, objectStorage.ErrInvalidSize)
+			return
+		}
+		signed, err := ctrl.avatarImages().RequestUpload(c.Request.Context(), user.ID.String(), c.Query("contentType"), sizeBytes)
 		if err != nil {
 			mapImageError(c, err)
 			return
 		}
-		c.JSON(http.StatusOK, response.AvatarUploadResponse{URL: signed.URL, Path: signed.Path})
+		c.Header("Cache-Control", "private, no-store")
+		c.JSON(http.StatusOK, response.AvatarUploadResponse(signed))
 	}
 }
 
 func (ctrl AuthenticationController) avatarImages() *objectStorage.ImageService {
 	return objectStorage.NewImageService(
-		repository.UserAvatarPaths{},
-		objectStorage.NewClient(),
+		objectStorage.AvatarNamespace,
+		ctrl.storage,
 		repository.NewUserAvatarRepository(ctrl.db, ctrl.redisClient),
-		objectStorage.ImageExt,
 	)
 }
 
 func mapImageError(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, objectStorage.ErrFileTooLarge):
+		jsonError(c, http.StatusRequestEntityTooLarge, err.Error())
 	case errors.Is(err, objectStorage.ErrUnsupportedType),
+		errors.Is(err, objectStorage.ErrInvalidSize),
 		errors.Is(err, objectStorage.ErrInvalidPath),
 		errors.Is(err, objectStorage.ErrInvalidObjectPath):
 		jsonError(c, http.StatusBadRequest, err.Error())

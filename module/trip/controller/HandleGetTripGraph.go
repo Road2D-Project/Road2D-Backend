@@ -44,6 +44,7 @@ func (ctrl *TripController) HandleGetTripGraph() gin.HandlerFunc {
 			mapTripError(c, err)
 			return
 		}
-		c.JSON(http.StatusOK, response.AttachTravels(*detail, stored))
+		out := response.AttachTravels(*detail, stored)
+		ctrl.writeTripResponse(c, http.StatusOK, &out)
 	}
 }

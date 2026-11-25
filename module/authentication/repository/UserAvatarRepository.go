@@ -11,29 +11,16 @@ import (
 	"gorm.io/gorm"
 )
 
-const userAvatarBucket = "avatar"
-
-// UserAvatarPaths is the object key for a user's avatar.
-// The key is <userID>/<userID><ext> inside the avatar bucket.
-type UserAvatarPaths struct{}
-
-func (UserAvatarPaths) Bucket() string { return userAvatarBucket }
-
-func (UserAvatarPaths) ObjectPath(objectID, ext string) string {
-	return objectID + "/" + objectID + ext
-}
-
-// UserAvatarRepository stores the public avatar URL and satisfies objectStorage.ImageRepo.
+// UserAvatarRepository stores the avatar key and satisfies objectStorage.ImageRepo.
 type UserAvatarRepository struct {
-	db     *gorm.DB
-	cache  *redis.Client
-	images *objectStorage.Client
+	db    *gorm.DB
+	cache *redis.Client
 }
 
 var _ objectStorage.ImageRepo = (*UserAvatarRepository)(nil)
 
 func NewUserAvatarRepository(db *gorm.DB, cache *redis.Client) *UserAvatarRepository {
-	return &UserAvatarRepository{db: db, cache: cache, images: objectStorage.NewClient()}
+	return &UserAvatarRepository{db: db, cache: cache}
 }
 
 func (r *UserAvatarRepository) SetImagePath(ctx context.Context, objectID, newPath string) (string, error) {
@@ -41,17 +28,14 @@ func (r *UserAvatarRepository) SetImagePath(ctx context.Context, objectID, newPa
 	if err != nil {
 		return "", err
 	}
-	newURL, err := r.images.PublicObjectURL(userAvatarBucket, newPath)
-	if err != nil {
+	if err := objectStorage.ValidateOwnedPath(objectID, newPath); err != nil {
 		return "", err
 	}
 	oldKey := ""
-	if user.AvatarURL != nil {
-		if key, ok := objectStorage.PublicObjectPath(*user.AvatarURL, userAvatarBucket); ok {
-			oldKey = key
-		}
+	if user.AvatarPath != nil {
+		oldKey = *user.AvatarPath
 	}
-	err = r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", user.ID).Update("avatar_url", newURL).Error
+	err = r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", user.ID).Update("avatar_url", newPath).Error
 	if err != nil {
 		return "", err
 	}
@@ -64,14 +48,13 @@ func (r *UserAvatarRepository) ImagePath(ctx context.Context, objectID string) (
 	if err != nil {
 		return "", err
 	}
-	if user.AvatarURL == nil || *user.AvatarURL == "" {
+	if user.AvatarPath == nil || *user.AvatarPath == "" {
 		return "", nil
 	}
-	key, ok := objectStorage.PublicObjectPath(*user.AvatarURL, userAvatarBucket)
-	if !ok {
-		return "", objectStorage.ErrInvalidPath
+	if err := objectStorage.ValidateOwnedPath(objectID, *user.AvatarPath); err != nil {
+		return "", err
 	}
-	return key, nil
+	return *user.AvatarPath, nil
 }
 
 func (r *UserAvatarRepository) ClearImagePath(ctx context.Context, objectID string) error {

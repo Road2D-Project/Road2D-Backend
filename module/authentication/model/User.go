@@ -14,8 +14,10 @@ type User struct {
 	Password       string `json:"-" gorm:"column:password;type:varchar(255);not null" swaggerignore:"true" validate:"strongPassword"`
 	SessionVersion int64  `json:"-" gorm:"column:session_version;not null;default:1" swaggerignore:"true"`
 	// TODO: custom validator
-	NumberPhone string  `json:"numberPhone" gorm:"column:number_phone;type:varchar(255);not null" validate:"numeric"`
-	AvatarURL   *string `json:"avatarUrl,omitempty" gorm:"column:avatar_url;type:text"`
+	NumberPhone string `json:"numberPhone" gorm:"column:number_phone;type:varchar(255);not null" validate:"numeric"`
+	// The existing nullable column now holds a permanent R2 key, never an expiring URL.
+	AvatarPath *string `json:"-" gorm:"column:avatar_url;type:text"`
+	AvatarURL  *string `json:"avatarUrl,omitempty" gorm:"-"`
 }
 
 var (

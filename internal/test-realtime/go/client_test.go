@@ -193,7 +193,7 @@ func sectionBetween(text, start, end string) string {
 }
 
 func TestHomeScenarioDryRun(t *testing.T) {
-	sc, err := Load(filepath.Join("..", "scenario.home.json"))
+	sc, err := Load(filepath.Join("..", "scenario_user_1.home.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -50,6 +50,6 @@ func (ctrl *TripController) HandleUpdateTrip() gin.HandlerFunc {
 			mapTripError(c, err)
 			return
 		}
-		c.JSON(http.StatusOK, updated)
+		ctrl.writeTripResponse(c, http.StatusOK, updated)
 	}
 }

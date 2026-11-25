@@ -1,6 +1,7 @@
 package realtime
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ type Hub struct {
 	mu        sync.Mutex
 	factories map[string]ModuleFactory
 	rooms     map[string]*Room
+	closing   bool
 }
 
 func NewHub() *Hub {
@@ -66,6 +68,10 @@ func (h *Hub) Join(roomID string, userID uuid.UUID, conn *websocket.Conn) error 
 
 func (h *Hub) getOrCreate(roomID string) (*Room, error) {
 	h.mu.Lock()
+	if h.closing {
+		h.mu.Unlock()
+		return nil, ErrRoomClosed
+	}
 	if room, ok := h.rooms[roomID]; ok {
 		h.mu.Unlock()
 		return room, nil
@@ -98,6 +104,9 @@ func (h *Hub) getOrCreate(roomID string) (*Room, error) {
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.closing {
+		return nil, ErrRoomClosed
+	}
 	if room, ok := h.rooms[roomID]; ok {
 		// Another join created the room first. Drop the unused modules.
 		return room, nil
@@ -108,6 +117,23 @@ func (h *Hub) getOrCreate(roomID string) (*Room, error) {
 	h.rooms[roomID] = room
 	go room.Run()
 	return room, nil
+}
+
+// Close finishes module callbacks before persistence workers are drained.
+func (h *Hub) Close(ctx context.Context) error {
+	h.mu.Lock()
+	h.closing = true
+	rooms := make([]*Room, 0, len(h.rooms))
+	for _, room := range h.rooms {
+		rooms = append(rooms, room)
+	}
+	h.mu.Unlock()
+	for _, room := range rooms {
+		if err := room.close(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // remove deletes the room only when it is still the same pointer.

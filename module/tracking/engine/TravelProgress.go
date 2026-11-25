@@ -23,6 +23,9 @@ type TravelProgress struct {
 	BatteryPercent   int
 	SignalBars       int
 	ObservedAt       time.Time
+	// A recovered observation is historical until the phone sends a fresh fix.
+	AwaitingFreshPosition bool
+	ResumeRedirect        bool
 
 	// Deviation counters. OffRouteSamples counts consecutive samples farther
 	// than geo.OffRouteM from the branch polyline. OnRouteSamples counts
@@ -69,6 +72,8 @@ type TravelProgress struct {
 // RedirectState is one temporary route. Generation ties worker results and
 // snap updates to this attempt; a result from an older attempt is dropped.
 type RedirectState struct {
+	JobID       uuid.UUID
+	Submitted   bool
 	Generation  uint64
 	Reason      string // why this attempt was made: confirmed or refresh
 	Retries     int    // provider retries already spent on this origin

@@ -88,9 +88,9 @@ function stringArg(value: string | boolean | undefined): string {
 function usage(): string {
   return `Giả lập một rider trên websocket tracking.
 
-  npx tsx src/main.ts --file ..\\scenario.home.json --dry-run
-  npx tsx src/main.ts --file ..\\scenario.home.json --room <trip-uuid> --token <jwt>
-  npx tsx src/main.ts --file ..\\scenario.home.json --room <trip-uuid> --username demo --password secret
+  npx tsx src/main.ts --file ..\\scenario_user_1.home.json --dry-run
+  npx tsx src/main.ts --file ..\\scenario_user_1.home.json --room <trip-uuid> --token <jwt>
+  npx tsx src/main.ts --file ..\\scenario_user_1.home.json --room <trip-uuid> --username demo --password secret
 
 Cờ ghi đè file. Biến môi trường (khi cờ bỏ trống): MOCK_SERVER, MOCK_ROOM_ID,
 MOCK_ACCESS_TOKEN, MOCK_USERNAME, MOCK_PASSWORD.

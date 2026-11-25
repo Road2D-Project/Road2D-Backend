@@ -11,28 +11,15 @@ import (
 	"gorm.io/gorm"
 )
 
-const tripImageBucket = "trip"
-
-// TripImagePaths is the object key for a trip picture.
-// The key is <tripID>/<tripID><ext> inside the trip bucket.
-type TripImagePaths struct{}
-
-func (TripImagePaths) Bucket() string { return tripImageBucket }
-
-func (TripImagePaths) ObjectPath(objectID, ext string) string {
-	return objectID + "/" + objectID + ext
-}
-
-// TripImageRepository stores the public trip image URL and satisfies objectStorage.ImageRepo.
+// TripImageRepository stores the trip image key and satisfies objectStorage.ImageRepo.
 type TripImageRepository struct {
-	db     *gorm.DB
-	images *objectStorage.Client
+	db *gorm.DB
 }
 
 var _ objectStorage.ImageRepo = (*TripImageRepository)(nil)
 
 func NewTripImageRepository(db *gorm.DB) *TripImageRepository {
-	return &TripImageRepository{db: db, images: objectStorage.NewClient()}
+	return &TripImageRepository{db: db}
 }
 
 func (r *TripImageRepository) SetImagePath(ctx context.Context, objectID, newPath string) (string, error) {
@@ -40,17 +27,14 @@ func (r *TripImageRepository) SetImagePath(ctx context.Context, objectID, newPat
 	if err != nil {
 		return "", err
 	}
-	newURL, err := r.images.PublicObjectURL(tripImageBucket, newPath)
-	if err != nil {
+	if err := objectStorage.ValidateOwnedPath(objectID, newPath); err != nil {
 		return "", err
 	}
 	oldKey := ""
-	if trip.ImageURL != nil {
-		if key, ok := objectStorage.PublicObjectPath(*trip.ImageURL, tripImageBucket); ok {
-			oldKey = key
-		}
+	if trip.ImagePath != nil {
+		oldKey = *trip.ImagePath
 	}
-	err = r.db.WithContext(ctx).Model(&model.Trip{}).Where("id = ?", trip.ID).Update("image_url", newURL).Error
+	err = r.db.WithContext(ctx).Model(&model.Trip{}).Where("id = ?", trip.ID).Update("image_url", newPath).Error
 	if err != nil {
 		return "", err
 	}
@@ -62,14 +46,13 @@ func (r *TripImageRepository) ImagePath(ctx context.Context, objectID string) (s
 	if err != nil {
 		return "", err
 	}
-	if trip.ImageURL == nil || *trip.ImageURL == "" {
+	if trip.ImagePath == nil || *trip.ImagePath == "" {
 		return "", nil
 	}
-	key, ok := objectStorage.PublicObjectPath(*trip.ImageURL, tripImageBucket)
-	if !ok {
-		return "", objectStorage.ErrInvalidPath
+	if err := objectStorage.ValidateOwnedPath(objectID, *trip.ImagePath); err != nil {
+		return "", err
 	}
-	return key, nil
+	return *trip.ImagePath, nil
 }
 
 func (r *TripImageRepository) ClearImagePath(ctx context.Context, objectID string) error {

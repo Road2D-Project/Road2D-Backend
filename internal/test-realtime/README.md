@@ -7,7 +7,7 @@ Thư mục này nằm trong repo để mở cùng backend. Server không import 
 ```
 internal/test-realtime/
   README.md
-  scenario.home.json    kịch bản cho client dòng lệnh
+  scenario_user_1.home.json    kịch bản cho client dòng lệnh
   index.html            trang bản đồ có sẵn, bấm để chạy tay
   go/                   client Go
   ts/                   client TypeScript
@@ -25,7 +25,7 @@ App thật gửi GPS của điện thoại. Ở nhà không có quãng đường
 
 Server ghi đúng `lat`, `lng`, pin và sóng client gửi. Khoảng mỗi 500ms phòng nhận `tracking.positions`. Phần snap trên server chỉ để biết rider đã tới đâu trên branch của trip. Tọa độ phát ra phòng là tọa độ client gửi.
 
-Polyline trong `scenario.home.json` là đoạn khoảng 1729 m quanh quận 1, chỉ để có đường mà chạy. Muốn pin nằm trên đường của trip thì dán polyline của branch đó vào `path.polyline`.
+Polyline trong `scenario_user_1.home.json` là đoạn khoảng 1729 m quanh quận 1, chỉ để có đường mà chạy. Muốn pin nằm trên đường của trip thì dán polyline của branch đó vào `path.polyline`.
 
 Nếu điền `path.points` từ 2 điểm trở lên, client dùng points và bỏ qua polyline. Dưới 2 điểm thì decode polyline.
 
@@ -61,6 +61,78 @@ Client gửi `Authorization: Bearer <access token>`. Token lấy từ `POST /v1/
 Một process là một user. Hai rider là hai terminal, hai tài khoản. Có thể cùng một polyline; đổi `at` nếu không muốn event của hai người rơi cùng lúc.
 
 Server mặc định `http://127.0.0.1:8080`. Dùng `127.0.0.1` để khỏi đụng IPv6 của `localhost` trên Windows.
+
+## Kiểm tra checkpoint và Redis worker
+
+Với DB và Redis trên cloud, cấu hình `DB_URL` và `REDIS_URL` trong `.env` ở gốc
+repo. Dùng `rediss://` khi Redis yêu cầu TLS. Server và worker phải dùng cùng
+DB/schema, Redis database và cấu hình quota Goong. Không cần bật container DB
+hay Redis local. Xem [hướng dẫn Redis Streams](../../docs/tracking-streams.md)
+để cấu hình kết nối, kiểm tra stream/group và dọn dữ liệu test.
+
+Chạy migration khi có thay đổi schema, rồi giữ server và worker ở hai terminal
+riêng, từ thư mục gốc repo:
+
+```powershell
+go run . migrate
+```
+
+```powershell
+go run . server
+```
+
+```powershell
+go run . worker
+```
+
+Worker phải chạy liên tục để xử lý redirect. Stream và consumer group tự tạo
+khi khởi động; không cần chạy worker một lần để chuẩn bị rồi tắt.
+`GET /health` báo kết nối DB/Redis, không xác nhận worker đang xử lý được job.
+
+Trước bài live, chọn tài khoản và trip dành cho test, kiểm tra user có assigned
+branch và trip có stored travels. Dùng polyline của đúng hop từ
+`GET /v1/trips/{tripId}/graph` cho `path.polyline`, đồng thời bỏ `path.points`
+nếu muốn dùng polyline. Đường mẫu quận 1 có thể khác tuyến của trip và gây
+off-route ngay cả khi chưa bật event `deviate`.
+
+Từ terminal thứ ba, chạy client Go; các biến `MOCK_ROOM_ID`, `MOCK_USERNAME`
+và `MOCK_PASSWORD` có thể ghi đè cấu hình JSON. Chúng phải có trong môi trường
+của terminal chạy client; client không tự nạp `.env` của backend.
+
+```powershell
+cd internal/test-realtime/go
+go run . -file ../scenario_user_1.home.json -quiet
+```
+
+Đối chiếu các bước sau trong log và dữ liệu lưu:
+
+1. Khi join, nhận `tracking.success` và `tracking.snapshot`.
+2. Khi đủ mẫu lệch tuyến, nhận `tracking.offRoute`, `tracking.life` nếu mất life,
+   rồi `tracking.redirect` từ `pending` sang `ready` hoặc `failed`.
+3. Event `disconnect` đóng socket rồi nối lại; snapshot giữ trạng thái hiện tại.
+4. Đợi checkpoint được ghi vào PostgreSQL. Dừng đột ngột riêng tiến trình server
+   test rồi chạy lại, giữ client và worker đang chạy. Ctrl+C server là shutdown
+   có drain; muốn kiểm tra crash thì cần kill đúng tiến trình server test.
+5. Client tự thử nối lại sau khi đã từng kết nối thành công. Snapshot sau recovery
+   giữ lives/progress đã lưu, có `awaitingFreshPosition: true` và `observedAt` cũ.
+   GPS mới cho phép tracking tiếp tục và checkpoint sequence tăng tiếp.
+6. Khi job xử lý xong, kiểm tra `XPENDING`, group lag và `XLEN`; pending/lag về 0,
+   còn stream có thể rỗng vì code ACK rồi XDEL entry.
+
+Live simulation ghi checkpoint và kết quả redirect thật lên cloud, có thể trừ
+lives và gọi Goong. Dùng Ctrl+C dừng client khi đủ bước; client live không tự kết
+thúc sau event cuối. Bài một rider chỉ kiểm tra luồng, chưa đo khả năng chịu tải.
+Test Go trong `module/tracking/worker` kiểm tra reclaim sau worker crash và tái
+sử dụng result đã lưu; muốn xác minh tương tự trên cloud cần một bài kill worker
+riêng khi job còn pending.
+
+Xóa stream sau test theo [hướng dẫn cleanup](../../docs/tracking-streams.md#clean-up-after-a-test).
+Việc đó giữ nguyên checkpoint và result trong PostgreSQL; user reconnect vẫn có
+thể nhận snapshot cũ.
+
+Access token hiện chỉ được kiểm tra khi mở socket. Socket đang mở không tự đóng
+khi token hết hạn; reconnect bằng token cũ sẽ nhận HTTP 401. Cả hai client chưa
+tự refresh token, nên lỗi này cần xử lý riêng khi chạy bài dài.
 
 ## Client gửi
 
@@ -98,34 +170,35 @@ Mỗi frame text là một dòng `recv`. Server ping mỗi 20 giây, client tr�
 | --- | --- | --- |
 | `system.presence` | vào phòng lần đầu, hoặc rời hẳn | `userId`, `online` |
 | `tracking.success` | vừa vào | chuỗi `Go go`. Nối lại thì `Welcome back` |
+| `tracking.snapshot` | join/reconnect hoặc gửi `tracking.resync` | `tripId`, `revision`, `status`, `riders`; gồm thời điểm quan sát, cờ chờ GPS mới và redirect nếu được phép thấy |
 | `tracking.connection` | nối lại, sau khi đã từng vào | `userId`, `connectionStatus` = `RECONNECTING`. Các `tracking.positions` sau đó mang `CONNECTING` |
 | `tracking.onLeave` | socket đóng | chuỗi |
-| `tracking.stayMode` | leader đổi chế độ nghỉ | `isChangeMode`, `message` |
+| `stayMode` | leader đổi chế độ nghỉ | `isChangeMode`, `message` |
 | `tracking.positions` | khoảng mỗi 500ms | mảng vị trí |
 | `system.error` | type không có dấu chấm, hoặc namespace lạ | `code` |
 
-`tracking.positions` đang dùng tên field viết hoa, vì struct phát ra chưa có json tag:
+`tracking.positions` dùng field camelCase theo JSON tag của struct phát ra:
 
 ```json
 {
   "type": "tracking.positions",
   "payload": [
     {
-      "UserId": "…",
-      "Lat": 10.77,
-      "Lng": 106.7,
-      "BatteryPercent": 84,
-      "SignalBars": 4,
-      "DriveStatus": "OnROUTE",
-      "ConnectionStatus": "CONNECTING"
+      "userId": "…",
+      "lat": 10.77,
+      "lng": 106.7,
+      "batteryPercent": 84,
+      "signalBars": 4,
+      "driveStatus": "OnROUTE",
+      "connectionStatus": "CONNECTING"
     }
   ]
 }
 ```
 
-`DriveStatus`: `OnROUTE`, `DEVIATED`, `STOP`, `EMERGENCY`, `StayPublic`, `StayPrivate`, `COMPLETED`.
+`driveStatus`: `OnROUTE`, `DEVIATED`, `STOP`, `EMERGENCY`, `StayPublic`, `StayPrivate`, `COMPLETED`.
 
-`ConnectionStatus`: `CONNECTING`, `UNSTABLE`, `DISCONNECTED`, `RECONNECTING`.
+`connectionStatus`: `CONNECTING`, `UNSTABLE`, `DISCONNECTED`, `RECONNECTING`.
 
 Khi trip đang stay, server chỉ đưa vào mảng những rider đã `StayPublic`. Pin biến mất cho đến khi client gửi `userStayPublic` true. File mẫu bật public 5 giây sau `stayMode`.
 
@@ -181,9 +254,9 @@ Cần Go 1.22 trở lên.
 
 ```powershell
 cd internal\test-realtime\go
-go run . -file ..\scenario.home.json -dry-run
-go run . -file ..\scenario.home.json -room <trip-uuid> -token <jwt>
-go run . -file ..\scenario.home.json -room <trip-uuid> -username demo -password secret12
+go run . -file ..\scenario_user_1.home.json -dry-run
+go run . -file ..\scenario_user_1.home.json -room <trip-uuid> -token <jwt>
+go run . -file ..\scenario_user_1.home.json -room <trip-uuid> -username demo -password secret12
 ```
 
 `go test .` trong thư mục `go` kiểm tra polyline, khoảng đứng yên, và dry-run của file mẫu.
@@ -198,8 +271,8 @@ Cần Node 18 trở lên.
 cd internal\test-realtime\ts
 npm install
 npm run check
-npx tsx src/main.ts --file ..\scenario.home.json --dry-run
-npx tsx src/main.ts --file ..\scenario.home.json --room <trip-uuid> --token <jwt>
+npx tsx src/main.ts --file ..\scenario_user_1.home.json --dry-run
+npx tsx src/main.ts --file ..\scenario_user_1.home.json --room <trip-uuid> --token <jwt>
 ```
 
 `npm run dry` là dry-run của file mẫu. `npm run check` kiểm tra polyline mẫu, không mở socket.

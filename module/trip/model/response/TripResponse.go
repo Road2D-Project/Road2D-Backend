@@ -1,8 +1,10 @@
 package response
 
 import (
+	"Road-To-Destination-BE/module/objectStorage"
 	"Road-To-Destination-BE/module/trip/model"
 	"Road-To-Destination-BE/utils/enum"
+	"context"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,6 +25,7 @@ type TripResponse struct {
 	TotalDistance float64         `json:"totalDistance"`
 	Note          string          `json:"note"`
 	ImageURL      *string         `json:"imageUrl,omitempty"`
+	ImagePath     *string         `json:"-" swaggerignore:"true"`
 	MyRole        *enum.TripRole  `json:"myRole,omitempty" swaggertype:"string" example:"leader"`
 	CreatedTime   time.Time       `json:"createdTime"`
 	UpdatedTime   time.Time       `json:"updatedTime"`
@@ -45,7 +48,7 @@ func FromTrip(trip *model.Trip, role *enum.TripRole) TripResponse {
 		EndTime:       trip.EndTime,
 		TotalDistance: trip.TotalDistance,
 		Note:          trip.Note,
-		ImageURL:      trip.ImageURL,
+		ImagePath:     trip.ImagePath,
 		MyRole:        role,
 		CreatedTime:   trip.CreatedAt,
 		UpdatedTime:   trip.UpdatedAt,
@@ -60,4 +63,33 @@ func FromTripPtr(trip *model.Trip, role *enum.TripRole) *TripResponse {
 func RolePtr(role enum.TripRole) *enum.TripRole {
 	copied := role
 	return &copied
+}
+
+type ImageURLSigner interface {
+	DownloadURL(context.Context, string, string) (string, error)
+}
+
+func (r *TripResponse) ResolveImageURLs(ctx context.Context, signer ImageURLSigner) error {
+	r.ImageURL = nil
+	if r.ImagePath == nil || *r.ImagePath == "" {
+		return nil
+	}
+	if err := objectStorage.ValidateOwnedPath(r.ID.String(), *r.ImagePath); err != nil {
+		return err
+	}
+	url, err := signer.DownloadURL(ctx, objectStorage.TripNamespace, *r.ImagePath)
+	if err != nil {
+		return err
+	}
+	r.ImageURL = &url
+	return nil
+}
+
+func (r *TripListResponse) ResolveImageURLs(ctx context.Context, signer ImageURLSigner) error {
+	for i := range r.Trips {
+		if err := r.Trips[i].ResolveImageURLs(ctx, signer); err != nil {
+			return err
+		}
+	}
+	return nil
 }

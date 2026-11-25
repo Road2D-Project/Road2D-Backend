@@ -57,6 +57,6 @@ func (ctrl *TripController) HandleCreateTrip() gin.HandlerFunc {
 		if inserted {
 			status = http.StatusCreated
 		}
-		c.JSON(status, created)
+		ctrl.writeTripResponse(c, status, created)
 	}
 }

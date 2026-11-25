@@ -6,13 +6,8 @@ import (
 	"testing"
 )
 
-type stubPaths struct{}
-
-func (stubPaths) Bucket() string { return "image" }
-
-func (stubPaths) ObjectPath(objectID, ext string) string {
-	return "avatar/" + objectID + "/" + objectID + ext
-}
+const testImagePath = "user/550e8400-e29b-41d4-a716-446655440000.png"
+const oldImagePath = "user/550e8400-e29b-41d4-a716-446655440001.jpg"
 
 type stubRecords struct {
 	path    string
@@ -28,11 +23,7 @@ func (s *stubRecords) SetImagePath(_ context.Context, _, newPath string) (string
 	s.path = newPath
 	return old, nil
 }
-
-func (s *stubRecords) ImagePath(context.Context, string) (string, error) {
-	return s.path, nil
-}
-
+func (s *stubRecords) ImagePath(context.Context, string) (string, error) { return s.path, nil }
 func (s *stubRecords) ClearImagePath(context.Context, string) error {
 	s.path = ""
 	s.cleared = true
@@ -40,105 +31,153 @@ func (s *stubRecords) ClearImagePath(context.Context, string) error {
 }
 
 type stubStorage struct {
-	bucket  string
-	path    string
-	upsert  bool
-	exists  bool
-	deleted []string
+	namespace   string
+	path        string
+	opts        SignOptions
+	info        ObjectInfo
+	headErr     error
+	headCalls   int
+	deleted     []string
+	deleteErr   error
+	downloadErr error
 }
 
-func (s *stubStorage) SignUpload(_ context.Context, bucket, objectPath string, opts SignOptions) (SignedUpload, error) {
-	s.bucket = bucket
-	s.path = objectPath
-	s.upsert = opts.Upsert
-	return SignedUpload{URL: "https://storage.example/upload", Path: objectPath}, nil
+func (s *stubStorage) SignUpload(_ context.Context, namespace, path string, opts SignOptions) (SignedUpload, error) {
+	s.namespace, s.path, s.opts = namespace, path, opts
+	return SignedUpload{URL: "https://storage.example/upload", Path: path}, nil
+}
+func (s *stubStorage) HeadObject(context.Context, string, string) (ObjectInfo, error) {
+	s.headCalls++
+	return s.info, s.headErr
+}
+func (s *stubStorage) Delete(_ context.Context, _ string, paths []string) error {
+	s.deleted = append(s.deleted, paths...)
+	return s.deleteErr
+}
+func (s *stubStorage) DownloadURL(context.Context, string, string) (string, error) {
+	return "https://storage.example/view?signature=test", s.downloadErr
 }
 
-func (s *stubStorage) Exists(context.Context, string, string) (bool, error) {
-	return s.exists, nil
-}
-
-func (s *stubStorage) Delete(_ context.Context, _ string, objectPaths []string) error {
-	s.deleted = append(s.deleted, objectPaths...)
-	return nil
-}
-
-func (s *stubStorage) PublicObjectURL(bucket, objectPath string) (string, error) {
-	return "https://storage.example/public/" + bucket + "/" + objectPath, nil
-}
-
-func TestRequestUploadSignsBucketAndStablePath(t *testing.T) {
+func TestRequestUploadUsesUniqueOwnedKeysAndPassesSizeAndType(t *testing.T) {
 	storage := &stubStorage{}
-	svc := NewImageService(stubPaths{}, storage, &stubRecords{}, ImageExt)
-
-	signed, err := svc.RequestUpload(context.Background(), "user", "image/png")
+	svc := NewImageService("avatar", storage, &stubRecords{})
+	a, err := svc.RequestUpload(context.Background(), "user", "image/png", 123)
 	if err != nil {
-		t.Fatalf("sign: %v", err)
+		t.Fatal(err)
 	}
-	if storage.bucket != "image" || storage.path != "avatar/user/user.png" || !storage.upsert {
-		t.Fatalf("sign bucket=%s path=%s upsert=%v", storage.bucket, storage.path, storage.upsert)
-	}
-	if signed.Path != "avatar/user/user.png" {
-		t.Fatalf("path = %s", signed.Path)
-	}
-}
-
-func TestRequestUploadRejectsUnknownType(t *testing.T) {
-	svc := NewImageService(stubPaths{}, &stubStorage{}, &stubRecords{}, ImageExt)
-	_, err := svc.RequestUpload(context.Background(), "user", "image/gif")
-	if !errors.Is(err, ErrUnsupportedType) {
-		t.Fatalf("got %v", err)
-	}
-}
-
-func TestConfirmRejectsForeignPath(t *testing.T) {
-	svc := NewImageService(stubPaths{}, &stubStorage{exists: true}, &stubRecords{}, ImageExt)
-	_, err := svc.Confirm(context.Background(), "user", "avatar/other/other.png")
-	if !errors.Is(err, ErrInvalidPath) {
-		t.Fatalf("got %v", err)
-	}
-}
-
-func TestConfirmStoresKeyAndDeletesPrevious(t *testing.T) {
-	storage := &stubStorage{exists: true}
-	records := &stubRecords{path: "avatar/user/user.jpg"}
-	svc := NewImageService(stubPaths{}, storage, records, ImageExt)
-
-	publicURL, err := svc.Confirm(context.Background(), "user", "/avatar/user/user.png")
+	b, err := svc.RequestUpload(context.Background(), "user", "image/png", 123)
 	if err != nil {
-		t.Fatalf("confirm: %v", err)
+		t.Fatal(err)
 	}
-	if records.path != "avatar/user/user.png" {
-		t.Fatalf("stored = %s", records.path)
+	if a.Path == b.Path {
+		t.Fatal("uploads reuse a key")
 	}
-	if len(storage.deleted) != 1 || storage.deleted[0] != "avatar/user/user.jpg" {
-		t.Fatalf("deleted = %v", storage.deleted)
+	if err := ValidateOwnedPath("user", a.Path); err != nil {
+		t.Fatal(err)
 	}
-	if publicURL != "https://storage.example/public/image/avatar/user/user.png" {
-		t.Fatalf("url = %s", publicURL)
+	if storage.namespace != "avatar" || storage.opts.ContentType != "image/png" || storage.opts.SizeBytes != 123 {
+		t.Fatalf("storage=%+v", storage)
+	}
+}
+
+func TestImageUploadRejectsVideoAndAudio(t *testing.T) {
+	svc := NewImageService("avatar", &stubStorage{}, &stubRecords{})
+	for _, mime := range []string{"video/mp4", "audio/mpeg", "image/gif"} {
+		_, err := svc.RequestUpload(context.Background(), "user", mime, 123)
+		if !errors.Is(err, ErrUnsupportedType) {
+			t.Fatalf("%s: %v", mime, err)
+		}
+	}
+}
+
+func TestConfirmRejectsForeignPathBeforeStorageAccess(t *testing.T) {
+	storage := &stubStorage{}
+	svc := NewImageService("avatar", storage, &stubRecords{})
+	_, err := svc.Confirm(context.Background(), "other", testImagePath)
+	if !errors.Is(err, ErrInvalidPath) || storage.headCalls != 0 || len(storage.deleted) != 0 {
+		t.Fatalf("err=%v storage=%+v", err, storage)
+	}
+}
+
+func TestConfirmStoresKeyThenDeletesPreviousImage(t *testing.T) {
+	storage := &stubStorage{info: ObjectInfo{ContentType: "image/png", SizeBytes: 123}}
+	records := &stubRecords{path: oldImagePath}
+	svc := NewImageService("avatar", storage, records)
+	viewURL, err := svc.Confirm(context.Background(), "user", testImagePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if records.path != testImagePath || viewURL != "https://storage.example/view?signature=test" {
+		t.Fatalf("stored=%s url=%s", records.path, viewURL)
+	}
+	if len(storage.deleted) != 1 || storage.deleted[0] != oldImagePath {
+		t.Fatalf("deleted=%v", storage.deleted)
 	}
 }
 
 func TestConfirmRequiresUploadedObject(t *testing.T) {
-	svc := NewImageService(stubPaths{}, &stubStorage{}, &stubRecords{}, ImageExt)
-	_, err := svc.Confirm(context.Background(), "user", "avatar/user/user.png")
+	svc := NewImageService("avatar", &stubStorage{headErr: ErrNotUploaded}, &stubRecords{})
+	_, err := svc.Confirm(context.Background(), "user", testImagePath)
 	if !errors.Is(err, ErrNotUploaded) {
-		t.Fatalf("got %v", err)
+		t.Fatal(err)
 	}
 }
 
-func TestDeleteRemovesStoredKeyThenClearsIt(t *testing.T) {
-	storage := &stubStorage{}
-	records := &stubRecords{path: "avatar/user/user.png"}
-	svc := NewImageService(stubPaths{}, storage, records, ImageExt)
-
-	if err := svc.Delete(context.Background(), "user"); err != nil {
-		t.Fatalf("delete: %v", err)
+func TestConfirmRejectsAndDeletesOversizedImageWithoutChangingRecord(t *testing.T) {
+	storage := &stubStorage{info: ObjectInfo{ContentType: "image/png", SizeBytes: 5_000_001}}
+	records := &stubRecords{path: oldImagePath}
+	svc := NewImageService("avatar", storage, records)
+	_, err := svc.Confirm(context.Background(), "user", testImagePath)
+	if !errors.Is(err, ErrFileTooLarge) || records.path != oldImagePath {
+		t.Fatalf("err=%v stored=%s", err, records.path)
 	}
-	if len(storage.deleted) != 1 || storage.deleted[0] != "avatar/user/user.png" {
-		t.Fatalf("deleted = %v", storage.deleted)
+	if len(storage.deleted) != 1 || storage.deleted[0] != testImagePath {
+		t.Fatalf("deleted=%v", storage.deleted)
+	}
+}
+
+func TestConfirmRejectsMismatchedMetadata(t *testing.T) {
+	for _, mime := range []string{"image/jpeg", "video/mp4", "text/html"} {
+		storage := &stubStorage{info: ObjectInfo{ContentType: mime, SizeBytes: 123}}
+		records := &stubRecords{path: oldImagePath}
+		_, err := NewImageService("avatar", storage, records).Confirm(context.Background(), "user", testImagePath)
+		if !errors.Is(err, ErrUnsupportedType) || records.path != oldImagePath || len(storage.deleted) != 1 {
+			t.Fatalf("%s: err=%v storage=%+v", mime, err, storage)
+		}
+	}
+}
+
+func TestFailedSigningOrPersistenceKeepsPreviousImage(t *testing.T) {
+	for _, failSigning := range []bool{true, false} {
+		storage := &stubStorage{info: ObjectInfo{ContentType: "image/png", SizeBytes: 123}}
+		records := &stubRecords{path: oldImagePath}
+		if failSigning {
+			storage.downloadErr = ErrSignFailed
+		} else {
+			records.setErr = errors.New("database unavailable")
+		}
+		_, err := NewImageService("avatar", storage, records).Confirm(context.Background(), "user", testImagePath)
+		if err == nil || records.path != oldImagePath || len(storage.deleted) != 0 {
+			t.Fatalf("err=%v records=%+v deleted=%v", err, records, storage.deleted)
+		}
+	}
+}
+
+func TestDeleteClearsRecordOnlyAfterStorageSucceeds(t *testing.T) {
+	storage := &stubStorage{deleteErr: ErrDeleteFailed}
+	records := &stubRecords{path: testImagePath}
+	svc := NewImageService("avatar", storage, records)
+	if err := svc.Delete(context.Background(), "user"); !errors.Is(err, ErrDeleteFailed) {
+		t.Fatal(err)
+	}
+	if records.cleared {
+		t.Fatal("record cleared after failed storage delete")
+	}
+	storage.deleteErr = nil
+	if err := svc.Delete(context.Background(), "user"); err != nil {
+		t.Fatal(err)
 	}
 	if !records.cleared || records.path != "" {
-		t.Fatalf("cleared=%v path=%s", records.cleared, records.path)
+		t.Fatal("record not cleared")
 	}
 }

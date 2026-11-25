@@ -3,6 +3,7 @@ package controller
 import (
 	"Road-To-Destination-BE/middleware"
 	mapsclient "Road-To-Destination-BE/module/maps/client"
+	"Road-To-Destination-BE/module/objectStorage"
 	"Road-To-Destination-BE/module/share"
 	"Road-To-Destination-BE/module/trip/model"
 	"Road-To-Destination-BE/module/trip/model/request"
@@ -61,6 +62,7 @@ type TripController struct {
 	goong         *mapsclient.GoongClient
 	cacheResponse *middleware.ResponseCache
 	rateLimiter   middleware.RateLimiter
+	storage       *objectStorage.Client
 }
 
 func (ctrl *TripController) CachedKeys(names ...string) gin.HandlerFunc {
@@ -79,7 +81,7 @@ func (ctrl *TripController) CachedKeys(names ...string) gin.HandlerFunc {
 	}
 }
 
-func NewTripController(db *gorm.DB, redisClient *redis.Client, validator *validator.Validate, auth *middleware.AuthenticationMiddleware, cacheResponse *middleware.ResponseCache, goong *mapsclient.GoongClient, limiter middleware.RateLimiter) *TripController {
+func NewTripController(db *gorm.DB, redisClient *redis.Client, validator *validator.Validate, auth *middleware.AuthenticationMiddleware, cacheResponse *middleware.ResponseCache, goong *mapsclient.GoongClient, limiter middleware.RateLimiter, storage *objectStorage.Client) *TripController {
 	return &TripController{
 		db:            db,
 		redisClient:   redisClient,
@@ -88,6 +90,7 @@ func NewTripController(db *gorm.DB, redisClient *redis.Client, validator *valida
 		goong:         goong,
 		cacheResponse: cacheResponse,
 		rateLimiter:   limiter,
+		storage:       storage,
 	}
 }
 
@@ -131,7 +134,8 @@ func (ctrl *TripController) registerMemberRoutes(trips *gin.RouterGroup) {
 }
 
 func (ctrl *TripController) registerGraphRoutes(trips *gin.RouterGroup) {
-	trips.GET("/:tripId/graph", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph"), ctrl.cacheResponse.CacheAround(), ctrl.HandleGetTripGraph())
+	// Graph responses contain fresh signed image URLs; never cache the serialized response.
+	trips.GET("/:tripId/graph", ctrl.handleActiveTripRole(), ctrl.HandleGetTripGraph())
 	trips.PUT("/:tripId/graph", ctrl.handleActiveTripRole(), ctrl.CachedKeys("graph", "travels"), ctrl.cacheResponse.MarkChanged(), ctrl.requireTripRole(enum.TripRoleLeader), ctrl.HandleSetTripGraph())
 	trips.GET("/:tripId/draft", ctrl.handleActiveTripRole(), ctrl.CachedKeys("draft"), ctrl.cacheResponse.CacheAround(), ctrl.HandleListDraftDestinations())
 	trips.POST("/:tripId/draft", ctrl.handleActiveTripRole(), ctrl.CachedKeys("draft"), ctrl.cacheResponse.MarkChanged(), ctrl.HandleAddDraftDestination())

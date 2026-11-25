@@ -8,6 +8,7 @@ import (
 	"Road-To-Destination-BE/module/authentication/repository"
 	"Road-To-Destination-BE/module/authentication/service"
 	"Road-To-Destination-BE/module/mail"
+	"Road-To-Destination-BE/module/objectStorage"
 	"Road-To-Destination-BE/module/share"
 	"Road-To-Destination-BE/utils/customValidator"
 	"context"
@@ -49,10 +50,11 @@ type AuthenticationController struct {
 	redisClient *redis.Client
 	validator   *validator.Validate
 	rateLimiter middleware.RateLimiter
+	storage     *objectStorage.Client
 }
 
-func NewAuthenticationController(db *gorm.DB, client *redis.Client, validator *validator.Validate, rateLimiter middleware.RateLimiter) *AuthenticationController {
-	return &AuthenticationController{db: db, redisClient: client, validator: validator, rateLimiter: rateLimiter}
+func NewAuthenticationController(db *gorm.DB, client *redis.Client, validator *validator.Validate, rateLimiter middleware.RateLimiter, storage *objectStorage.Client) *AuthenticationController {
+	return &AuthenticationController{db: db, redisClient: client, validator: validator, rateLimiter: rateLimiter, storage: storage}
 }
 
 func (ctrl AuthenticationController) RegisterRoutes(router *gin.RouterGroup) {
@@ -178,6 +180,11 @@ func (ctrl AuthenticationController) HandleGetUserProfile() gin.HandlerFunc {
 			return
 		}
 		isOwner := user.Username == middleware.GetCurrentUsername(c)
+		if err := ctrl.resolveAvatarURL(c, user); err != nil {
+			mapImageError(c, err)
+			return
+		}
+		c.Header("Cache-Control", "private, no-store")
 		c.JSON(http.StatusOK, response.UserToUserProfileResponse(user, isOwner))
 	}
 }
@@ -365,7 +372,14 @@ func (ctrl AuthenticationController) HandleMyProfile() gin.HandlerFunc {
 			jsonError(c, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
-		c.JSON(http.StatusOK, user)
+		// Keep the authenticated/cached user record free of expiring URLs.
+		view := *user
+		if err := ctrl.resolveAvatarURL(c, &view); err != nil {
+			mapImageError(c, err)
+			return
+		}
+		c.Header("Cache-Control", "private, no-store")
+		c.JSON(http.StatusOK, &view)
 	}
 }
 

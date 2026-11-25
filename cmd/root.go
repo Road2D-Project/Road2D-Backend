@@ -7,6 +7,7 @@ import (
 	"Road-To-Destination-BE/cmd/cli/seed"
 	migraterun "Road-To-Destination-BE/cmd/migrate/run"
 	serverrun "Road-To-Destination-BE/cmd/server/run"
+	workerrun "Road-To-Destination-BE/cmd/worker/run"
 	"Road-To-Destination-BE/internal/seed/location"
 	"Road-To-Destination-BE/module/share"
 
@@ -16,7 +17,7 @@ import (
 var rootCmd = &cobra.Command{
 	Use:           "r2d",
 	Short:         "Road2D backend CLI",
-	Long:          "server runs the API, cli seeds reference data, migrate applies the schema.",
+	Long:          "server runs the API, worker handles tracking jobs, cli seeds data, migrate applies the schema.",
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -38,6 +39,13 @@ func init() {
 			},
 		},
 		seed.NewSeederCommand(),
+		&cobra.Command{
+			Use:   "worker",
+			Short: "Run Redis tracking redirect jobs",
+			RunE: func(cmd *cobra.Command, args []string) error {
+				return workerrun.Run()
+			},
+		},
 		&cobra.Command{
 			Use:   "migrate",
 			Short: "Apply database schema changes",

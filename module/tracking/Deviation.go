@@ -59,6 +59,7 @@ func (t *TrackingCoordinator) applyDeviation(s realtime.Session, p *engine.Trave
 // enterDeviated flips the rider to DEVIATED, spends a life unless immune, and
 // asks for a temporary route.
 func (t *TrackingCoordinator) enterDeviated(s realtime.Session, p *engine.TravelProgress, now time.Time) {
+	t.markCheckpointDirty()
 	p.DriveStatus = enum.DEVIATED
 	p.OffRouteSamples = 0
 	p.OnRouteSamples = 0
@@ -94,6 +95,7 @@ func (t *TrackingCoordinator) enterDeviated(s realtime.Session, p *engine.Travel
 // rejoin returns a deviated rider to OnROUTE after enough samples back on the
 // branch polyline. The branch cursor was already released by the worker.
 func (t *TrackingCoordinator) rejoin(s realtime.Session, p *engine.TravelProgress) {
+	t.markCheckpointDirty()
 	p.DriveStatus = enum.OnROUTE
 	p.OffRouteSamples = 0
 	p.OnRouteSamples = 0
@@ -112,6 +114,7 @@ func (t *TrackingCoordinator) rejoin(s realtime.Session, p *engine.TravelProgres
 // the next stop without touching the branch polyline. The next hop starts
 // fresh; the last stop completes the branch.
 func (t *TrackingCoordinator) arriveByRedirect(s realtime.Session, p *engine.TravelProgress) {
+	t.markCheckpointDirty()
 	targetHop := p.Redirect.Hop + 1
 	branch := t.branch(p.BranchID)
 	p.OffRouteSamples = 0
@@ -145,6 +148,8 @@ func (t *TrackingCoordinator) arriveByRedirect(s realtime.Session, p *engine.Tra
 
 // clearRedirect forgets the temporary route and tells the room.
 func (t *TrackingCoordinator) clearRedirect(s realtime.Session, p *engine.TravelProgress, reason string) {
+	t.markCheckpointDirty()
+	p.ResumeRedirect = false
 	origin := message.RedirectPoint{Lat: p.Lat, Lng: p.Lng}
 	var target *message.RedirectTarget
 	if p.Redirect != nil {
@@ -168,6 +173,7 @@ func (t *TrackingCoordinator) startRedirect(s realtime.Session, p *engine.Travel
 	gen := p.NextRedirectGeneration()
 	origin := model.Point{Lat: p.Lat, Lng: p.Lng}
 	state := &engine.RedirectState{
+		JobID:       uuid.New(),
 		Generation:  gen,
 		Reason:      reason,
 		Hop:         p.HopIndex,
@@ -191,6 +197,7 @@ func (t *TrackingCoordinator) startRedirect(s realtime.Session, p *engine.Travel
 		p.RedirectArrived = false
 	}
 	p.Redirect = state
+	t.markCheckpointDirty()
 
 	if state.Target.DestinationID == uuid.Nil {
 		target, ok := nextStop(t.branch(p.BranchID), p.HopIndex)
@@ -200,7 +207,7 @@ func (t *TrackingCoordinator) startRedirect(s realtime.Session, p *engine.Travel
 		}
 		state.Target = target
 	}
-	if t.router == nil {
+	if t.router == nil && t.recovery.Redirects == nil {
 		t.failRedirect(s, p, state, message.RedirectReasonProviderError, now, false)
 		return
 	}
@@ -212,6 +219,10 @@ func (t *TrackingCoordinator) startRedirect(s realtime.Session, p *engine.Travel
 		Origin: message.RedirectPoint{Lat: origin.Lat, Lng: origin.Lng},
 		Target: redirectTarget(state),
 	})
+	if t.recovery.Redirects != nil {
+		state.Submitted = t.submitRedirect(p)
+		return
+	}
 	go t.callRouter(p, gen, origin, state.Target)
 }
 
@@ -236,7 +247,7 @@ func (t *TrackingCoordinator) applyRedirectResults(s realtime.Session, now time.
 	for _, p := range t.progresses {
 		for _, result := range p.DrainRedirectResults() {
 			state := p.Redirect
-			if state == nil || result.Generation != state.Generation {
+			if state == nil || result.Generation != state.Generation || !state.Pending {
 				continue
 			}
 			deviated := p.DriveStatus == enum.DEVIATED || (p.HasResume && p.ResumeDrive == enum.DEVIATED)
@@ -244,6 +255,7 @@ func (t *TrackingCoordinator) applyRedirectResults(s realtime.Session, now time.
 				continue
 			}
 			state.Pending = false
+			t.markCheckpointDirty()
 			if result.Err != nil || result.Polyline == "" {
 				t.failRedirect(s, p, state, message.RedirectReasonProviderError, now, true)
 				continue
@@ -280,6 +292,7 @@ func (t *TrackingCoordinator) applyRedirectResults(s realtime.Session, now time.
 // failRedirect marks the attempt failed. A provider error schedules one retry;
 // a missing stop does not, because nothing changes until the rider moves.
 func (t *TrackingCoordinator) failRedirect(s realtime.Session, p *engine.TravelProgress, state *engine.RedirectState, reason string, now time.Time, retry bool) {
+	t.markCheckpointDirty()
 	state.Pending = false
 	state.Failed = true
 	state.RetryAt = time.Time{}
