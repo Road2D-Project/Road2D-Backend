@@ -59,5 +59,25 @@ Chat membership will derive from active `trip_members`; there is no duplicate
 chat roster to synchronize on invitations, approvals, kick, or leave. This also
 keeps the feature independent of the legacy group module.
 
-HTTP chat endpoints, socket delivery, read synchronization, and live revocation
-are subsequent implementation steps.
+Active members can now list their conversations with `GET /conversations`, read
+one summary with `GET /conversations/{conversationId}`, and page its history with
+`GET /conversations/{conversationId}/messages`. Conversation IDs are exposed only
+through these authorized chat reads; public trip discovery grants no chat access.
+History reads do not mark messages read. Active members can create text/reply
+messages, edit their own text with `expectedRevision`, and tombstone their own
+messages. Leaders/admins can also tombstone another member's text. Repeated
+`clientMessageId` requests return the existing message; a changed request body
+with the same key returns 409, and a stale edit revision also returns 409.
+
+`PUT /conversations/{conversationId}/read` monotonically advances the caller's
+`lastReadSeq`. `PATCH /conversations/{conversationId}/preferences` accepts a future
+`mutedUntil` timestamp or null to unmute; it does not mark messages read. Both
+return an authoritative summary. Writes and their outbox event commit together;
+read/preference events are addressed only to that caller.
+
+`GET /conversations/{conversationId}/events?afterEventSeq=...` replays seven days
+of public/own events. It returns 410 with `syncRequired` and sequence bounds for
+an expired cursor. Internal cleanup jobs and other users' private events are
+excluded. Apply the normal migration command before running this version: the
+outbox now includes nullable recipient metadata. Outbox dispatch, socket delivery,
+and live revocation remain subsequent implementation steps.
