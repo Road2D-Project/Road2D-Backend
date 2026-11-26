@@ -136,8 +136,8 @@ Outbound type strings are whatever the module passes to `Send` / `Broadcast`. Pa
 
 ## Prepared events and room controls
 
-These are in-process APIs for trusted services/workers. The chat endpoints and
-their authorizers are wired; the outbox dispatcher remains pending.
+These are in-process APIs for trusted services/workers. The chat endpoints,
+authorizers and PostgreSQL outbox dispatcher are wired.
 `module/conversation` owns REST, persistence and conversation rules;
 `module/chatting` owns socket authorizers, typing/resync and live coordination.
 It uses conversation services and this generic runtime. Conversation services
@@ -195,9 +195,20 @@ remove a newer room instance with the same ID.
 
 Eviction/closure is not an admission ban. Callers still own JWT/session expiry,
 current membership checks and synchronization of joins/publications with
-revocation. Those chat-specific lifecycle integrations remain separate work.
+revocation. Chat's shared admission/delivery/access-change gate handles these
+integrations; see [chatting](chatting.md) and [outbox](outbox.md).
 Domain event IDs, durable ordering, retries and replay also belong to callers;
 the runtime keeps no durable event log or deduplication history.
+
+`HasRoom(ctx, roomID)` checks for an existing non-closing room without creating
+one. A retained empty room can still exist until its idle deadline.
+`EvictSession(ctx, userID, SessionFilter{SessionID, BeforeVersion})` visits the
+hub's existing rooms and waits for matching-user eviction. It matches the exact
+login ID or a session version older than the given threshold. Filtering occurs
+on the room goroutine, so a delayed event cannot evict a replacement login.
+If the queue/ACK fails, it requests closure of remaining snapshot rooms and waits
+with a fresh bounded context. The caller must guard concurrent joins; this
+runtime operation does not persist an admission ban.
 
 ## Current tracking module
 
@@ -256,7 +267,9 @@ Publishing or periodic ticks do not refresh an empty room's timer. This works
 without enabling module ticks. Cleanup removes the room only if it is still the
 instance stored under that ID. A join that loses that race retries once.
 
-On graceful shutdown, the HTTP listener stops accepting requests. `Hub.Close`
+On graceful shutdown, the HTTP listener stops accepting requests. Chat dispatch
+stops claiming new events and drains its accepted handoff while hubs are open.
+`Hub.Close`
 rejects new rooms/publications, signals every room before waiting, and waits for
 room cleanup. One slow close hook therefore does not leave other rooms running.
 Each room drops clients, invokes optional module `Close()` hooks on its goroutine,

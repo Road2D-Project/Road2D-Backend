@@ -1,6 +1,6 @@
 # Chatting sockets
 
-Phase 1 step 8 adds two WebSocket endpoints. `module/conversation` owns REST,
+Phase 1 steps 8–9 add two WebSocket endpoints and durable outbox delivery. `module/conversation` owns REST,
 messages, read state and authorization. `module/chatting` coordinates the live
 connections. `module/realtime` owns room queues, pumps, expiry and cleanup.
 There is no database IO in the room modules or their factories.
@@ -27,11 +27,11 @@ module/chatting/
   controller/             # HTTP upgrade handlers and origin policy
 ```
 
-Message/read/preferences mutations still use the existing conversation REST
-APIs. The outbox dispatcher and committed membership/logout revocation wiring
-belong to step 9. At this stage REST message writes do **not** automatically
-produce socket events. Prepared publishers can already deliver frames through
-the two hubs, and typing/resync work live.
+Message/read/preferences mutations use the existing conversation REST APIs.
+Their transaction also inserts an outbox event. After commit, the dispatcher
+hands authorized invalidations to the conversation room and current badge state
+to the recipient's personal room. Offline rooms are skipped, never created.
+See [outbox delivery and recovery](outbox.md) for claims, retries and retention.
 
 ## Connect and authenticate
 
@@ -59,16 +59,27 @@ disallowed browser origin returns 403, and an unavailable conversation read
 returns 503 without internal database details. After an upgrade, failures close
 the socket instead of writing HTTP JSON.
 
-`JoinWithOptions` carries the verified access token's `jti`, session version
+`JoinWithOptions` carries the verified access token's `jti`, login `sid`, session version
 and expiry into the connection. An expiry timer and read/write deadlines close
 it at token expiry, even if pongs keep arriving. Reconnect using a refreshed
 access token; there is no token-refresh command on the socket. The `jti` is an
 access-token identifier, not a shared login ID with its refresh token.
 
-Logout/session-version changes and membership removal are checked on a new
-handshake. Closing already-open sockets immediately for these changes, and the
-join-versus-revocation race guard, are still step 9 work. Token expiry alone is
-not that revocation mechanism.
+Logout closes conversation and personal sockets for that login `sid`. Password
+reset advances the account session version and closes sockets from older
+versions. Legacy credentials without `sid` use account-version revocation on
+logout. Refresh preserves the login ID and never extends an access token beyond
+its refresh token's expiry. Fresh handshakes and authenticated REST requests
+check current session version and the PostgreSQL login denylist.
+
+Kick/leave closes the removed user's conversation socket while preserving `/me`.
+Trip deletion closes that conversation. These changes persist a revocation
+event in the mutation transaction and wait for local eviction before success.
+Admission, delivery and access-changing commits share a context-aware process
+gate, acquired before authentication, so an old authorization snapshot cannot
+join or publish after local revocation. Failed queued eviction falls back to
+closing affected rooms; retained users can reconnect. The deployment remains
+single-owner; these in-process hubs do not provide multi-server fanout.
 
 ## Configuration
 
@@ -140,7 +151,41 @@ A true/false toggle cannot immediately bypass the true-update limit. Expiry is
 five seconds and uses no periodic room tick. Leaving emits a stop when needed
 and removes the user's transient state. Typing is never stored in the outbox.
 
-## Prepared durable-event delivery
+## Committed events
+
+Conversation rooms receive `chat.messageCreated`, `chat.messageUpdated`,
+`chat.messageDeleted`, `chat.readUpdated` and `chat.preferencesUpdated`.
+The payload matches REST replay: `eventId`, `type`, `conversationId`, `eventSeq`,
+`payload` and `createdTime`. Message payloads identify message IDs, sequences
+and revisions; fetch authorized REST detail for content. Read/preferences events
+are sent only to their recipient. Internal roster/session events are not exposed
+through conversation replay.
+
+`/me` receives `chat.conversationUpdated` with absolute current state:
+
+```json
+{"type":"chat.conversationUpdated","payload":{"eventId":"<uuid>","conversationId":"<uuid>","summaryVersion":7,"unreadCount":2,"lastReadSeq":3,"lastMessageSeq":5,"lastMessageId":"<uuid>","lastMessageRevision":1,"lastActivityAt":"2026-11-26T12:00:00Z","activeMemberCount":6,"reason":"chat.messageCreated"}}
+```
+
+`mutedUntil` is optional. There is no message preview, body or media URL in this
+event, including when `unreadCount` is zero. Render an `x new messages` indicator;
+fetch message content through REST when the UI needs it. Counts exclude the
+user's own messages and deleted messages, so sequence subtraction is not the
+unread-count formula. An event processed after a read returns the latest DB
+summary rather than its historical unread state.
+
+Removal sends `chat.conversationRemoved` with only `eventId` and
+`conversationId`. A delayed removal retry does not evict someone who has rejoined.
+Future notification invalidations share `/me`; there is no separate notification
+socket or persistent notification inbox in this phase.
+
+Deduplicate by source `eventId` separately for conversation and personal
+purposes. Apply only newer `summaryVersion` snapshots so an older badge cannot
+undo a read response. The worker's bounded dedup cache helps partial retries,
+but is not durable across process restart. Joining a room always triggers REST
+resynchronization; socket delivery is not a client receipt.
+
+## Prepared-event runtime
 
 Workers can publish to `ChattingHubs.Conversations` and `ChattingHubs.Personal` using
 `realtime.ServerEvent`; missing rooms are skipped. Supply `RecipientUserID` for
@@ -149,11 +194,9 @@ Do not publish message bodies, media URLs or private read/preferences as a
 room-wide event. The worker is responsible for current recipients, DTO creation,
 durable ordering/retry and authorization; the room only delivers prepared data.
 
-The intended personal types are `chat.conversationUpdated` and
-`chat.conversationRemoved`. Future notification invalidations share `/me`;
-there is no separate notification socket or persistent inbox in this step.
-Deduplicate separately for conversation and personal purposes, and apply only
-newer `summaryVersion` values so an older badge cannot undo a read response.
+Run `go run . migrate` before starting this version against an existing schema.
+Migration adds claim leases, session-denylist metadata, durable replay floors
+and pending/retention indexes. No Redis stream is required for chat dispatch.
 
 Swagger describes the HTTP upgrade/statuses. Test clients should open a real
 WebSocket; the docs UI's ordinary HTTP request does not perform an upgrade.
