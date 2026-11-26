@@ -19,12 +19,14 @@ const revokedRefreshKeyPrefix = "auth:revoked-refresh:"
 var ErrRevokeStoreUnavailable = errors.New("refresh revoke store is not configured")
 
 type RefreshRevokeStore struct {
-	redis   *redis.Client
-	persist revokedRefreshPersist
+	redis     *redis.Client
+	persist   revokedRefreshPersist
+	db        *gorm.DB
+	lifecycle UserAccessLifecycle
 }
 
 func NewRefreshRevokeStore(client *redis.Client, db *gorm.DB) *RefreshRevokeStore {
-	store := &RefreshRevokeStore{redis: client}
+	store := &RefreshRevokeStore{redis: client, db: db}
 	if db != nil {
 		store.persist = &gormRevokePersist{db: db}
 	}

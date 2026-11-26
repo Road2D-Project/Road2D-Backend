@@ -18,8 +18,8 @@ func (r *ConversationRepository) ListEvents(ctx context.Context, actor, id uuid.
 	}
 	out := &response.EventListResponse{Events: []response.ConversationEventResponse{}}
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var scope struct{ NextEventSeq int64 }
-		result := tx.Table("conversations c").Select("c.next_event_seq").Joins("JOIN trip_members tm ON tm.trip_id = c.trip_id").
+		var scope struct{ NextEventSeq, ReplayFloor int64 }
+		result := tx.Table("conversations c").Select("c.next_event_seq, c.replay_floor").Joins("JOIN trip_members tm ON tm.trip_id = c.trip_id").
 			Where("c.id = ? AND tm.user_id = ? AND tm.status = 'active'", id, actor).Scan(&scope)
 		if result.Error != nil {
 			return result.Error
@@ -45,6 +45,7 @@ func (r *ConversationRepository) ListEvents(ctx context.Context, actor, id uuid.
 			// sequence is newer than an earlier retained event.
 			out.MinAfterEventSeq = max(first.Int64-1, lastExpired)
 		}
+		out.MinAfterEventSeq = max(out.MinAfterEventSeq, scope.ReplayFloor)
 		if query.AfterEventSeq < out.MinAfterEventSeq {
 			return &ReplayExpiredError{MinAfterEventSeq: out.MinAfterEventSeq, LatestEventSeq: out.LatestEventSeq}
 		}

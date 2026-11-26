@@ -61,12 +61,31 @@ func (auth *AuthenticationMiddleware) RequireAuth() gin.HandlerFunc {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, share.NewError(http.StatusUnauthorized, "Session has expired"))
 				return
 			}
+			sid, _ := claims["sid"].(string)
+			if sid != "" {
+				checker, ok := auth.userRepo.(interface {
+					IsLoginSessionRevoked(context.Context, string) (bool, error)
+				})
+				if !ok {
+					c.AbortWithStatusJSON(http.StatusServiceUnavailable, share.NewError(http.StatusServiceUnavailable, "Session validation unavailable"))
+					return
+				}
+				revoked, err := checker.IsLoginSessionRevoked(c.Request.Context(), sid)
+				if err != nil {
+					c.AbortWithStatusJSON(http.StatusServiceUnavailable, share.NewError(http.StatusServiceUnavailable, "Authentication temporarily unavailable"))
+					return
+				}
+				if revoked {
+					c.AbortWithStatusJSON(http.StatusUnauthorized, share.NewError(http.StatusUnauthorized, "Session has expired"))
+					return
+				}
+			}
 			c.Set("currentUser", authorizedUser)
 			c.Set("username", username)
 			expiresAt, _ := service.ClaimsExpiry(claims)
 			version, _ := service.ClaimsSessionVersion(claims)
 			tokenID, _ := claims["jti"].(string)
-			c.Set(accessSessionKey, AccessSession{TokenID: tokenID, SessionVersion: version, ExpiresAt: expiresAt})
+			c.Set(accessSessionKey, AccessSession{TokenID: tokenID, SessionID: sid, SessionVersion: version, ExpiresAt: expiresAt})
 			c.Next()
 			return
 		}

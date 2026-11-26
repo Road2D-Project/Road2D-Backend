@@ -2,6 +2,7 @@ package repository
 
 import (
 	"Road-To-Destination-BE/module/authentication/model"
+	"Road-To-Destination-BE/module/share/outbox"
 	"context"
 	"errors"
 
@@ -11,7 +12,8 @@ import (
 )
 
 type UserRepository struct {
-	db *gorm.DB
+	db        *gorm.DB
+	lifecycle UserAccessLifecycle
 }
 
 var ErrSessionChanged = errors.New("user session has changed")
@@ -32,20 +34,27 @@ func (u *UserRepository) ResetPassword(ctx context.Context, userId uuid.UUID, ne
 	if err != nil {
 		return err
 	}
-	// One conditional UPDATE commits the password and session revocation together.
-	result := u.db.WithContext(ctx).Model(&model.User{}).
-		Where("id = ? AND session_version = ?", userId, expectedVersion).
-		Updates(map[string]interface{}{
-			"password":        newHashPassword,
-			"session_version": gorm.Expr("session_version + 1"),
+	change := func(ctx context.Context) error {
+		return u.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			result := tx.Model(&model.User{}).
+				Where("id = ? AND session_version = ?", userId, expectedVersion).
+				Updates(map[string]interface{}{
+					"password":        newHashPassword,
+					"session_version": gorm.Expr("session_version + 1"),
+				})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return ErrSessionChanged
+			}
+			return outbox.AppendSessionRevoked(tx, userId, "", expectedVersion+1)
 		})
-	if result.Error != nil {
-		return result.Error
 	}
-	if result.RowsAffected != 1 {
-		return ErrSessionChanged
+	if u.lifecycle != nil {
+		return u.lifecycle.UserChange(ctx, userId, "", expectedVersion+1, change)
 	}
-	return nil
+	return change(ctx)
 }
 
 func (u *UserRepository) CheckExistedEmail(ctx context.Context, mail string) (*model.User, error) {

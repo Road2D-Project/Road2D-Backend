@@ -191,6 +191,10 @@ func (r socketUserRepository) FindUserByUsername(_ context.Context, username str
 	return r.users[username], nil
 }
 
+func (socketUserRepository) IsLoginSessionRevoked(context.Context, string) (bool, error) {
+	return false, nil
+}
+
 type socketFixture struct {
 	alice, bob     authModel.User
 	conversationID uuid.UUID

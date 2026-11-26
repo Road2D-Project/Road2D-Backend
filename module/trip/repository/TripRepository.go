@@ -22,7 +22,8 @@ type ActiveTripByUser struct {
 }
 
 type TripRepository struct {
-	db *gorm.DB
+	db        *gorm.DB
+	lifecycle TripAccessLifecycle
 }
 
 func NewTripRepository(db *gorm.DB) *TripRepository {
@@ -181,14 +182,7 @@ func (r *TripRepository) UpdateInviteToken(ctx context.Context, id uuid.UUID, to
 }
 
 func (r *TripRepository) DeleteTrip(ctx context.Context, id uuid.UUID) error {
-	result := r.db.WithContext(ctx).Delete(&model.Trip{}, "id = ?", id)
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return ErrTripNotFound
-	}
-	return nil
+	return r.deleteWithAccess(ctx, id)
 }
 
 func (r *TripRepository) ListPublicTrips(ctx context.Context, limit int) ([]model.Trip, error) {

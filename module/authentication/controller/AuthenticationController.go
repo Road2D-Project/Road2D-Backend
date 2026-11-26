@@ -46,11 +46,17 @@ var (
 )
 
 type AuthenticationController struct {
-	db          *gorm.DB
-	redisClient *redis.Client
-	validator   *validator.Validate
-	rateLimiter middleware.RateLimiter
-	storage     *objectStorage.Client
+	db              *gorm.DB
+	redisClient     *redis.Client
+	validator       *validator.Validate
+	rateLimiter     middleware.RateLimiter
+	storage         *objectStorage.Client
+	accessLifecycle repository.UserAccessLifecycle
+}
+
+func (ctrl *AuthenticationController) WithAccessLifecycle(lifecycle repository.UserAccessLifecycle) *AuthenticationController {
+	ctrl.accessLifecycle = lifecycle
+	return ctrl
 }
 
 func NewAuthenticationController(db *gorm.DB, client *redis.Client, validator *validator.Validate, rateLimiter middleware.RateLimiter, storage *objectStorage.Client) *AuthenticationController {
@@ -191,7 +197,7 @@ func (ctrl AuthenticationController) HandleGetUserProfile() gin.HandlerFunc {
 
 // HandleRefreshToken godoc
 // @Summary      Refresh access token
-// @Description  Issue a new access token after checking the refresh token, logout revocation and current database session version. Password resets invalidate older sessions.
+// @Description  Issue an access token after checking refresh revocation and the current database session version. Preserve the login sid and never outlive the refresh token. Password resets invalidate older sessions.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
@@ -226,7 +232,7 @@ func (ctrl AuthenticationController) HandleRefreshToken() gin.HandlerFunc {
 		if !ctrl.allowAuthAccount(c, "refresh", user.ID.String()) {
 			return
 		}
-		accessToken, err := service.CreateToken(user)
+		accessToken, err := service.CreateAccessFromRefresh(user, request.RefreshToken)
 		if err != nil {
 			jsonError(c, http.StatusBadRequest, err.Error())
 			return
@@ -237,7 +243,7 @@ func (ctrl AuthenticationController) HandleRefreshToken() gin.HandlerFunc {
 
 // HandleLogout godoc
 // @Summary      Logout
-// @Description  Revoke the presented refresh token. The SHA-256 hash is stored in Redis with TTL until JWT exp, and persisted in Postgres so a Redis restart cannot revive the session.
+// @Description  Revoke the presented refresh token and its login sid in PostgreSQL, with a Redis hash cache until JWT expiry. Access tokens and chat sockets for that login are revoked. Legacy tokens without sid revoke the account session version. Wait for local socket eviction before success.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
@@ -267,7 +273,7 @@ func (ctrl AuthenticationController) HandleLogout() gin.HandlerFunc {
 }
 
 func (ctrl AuthenticationController) logoutService() *service.LogoutService {
-	return service.NewLogoutService(repository.NewRefreshRevokeStore(ctrl.redisClient, ctrl.db), repository.NewUserRepository(ctrl.db))
+	return service.NewLogoutService(repository.NewRefreshRevokeStore(ctrl.redisClient, ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle), repository.NewUserRepository(ctrl.db))
 }
 
 // HandleForgetPassword godoc
@@ -312,7 +318,7 @@ func (ctrl AuthenticationController) HandleResetPasswordPage() gin.HandlerFunc {
 
 // HandleResetPassword godoc
 // @Summary      Reset password
-// @Description  Set a new password and revoke older access, refresh and reset tokens by atomically advancing the user's session version.
+// @Description  Set a new password, advance the user's session version and persist a revocation event atomically. Revoke older access, refresh and reset tokens and wait for local chat socket eviction before success.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
@@ -345,7 +351,7 @@ func (ctrl AuthenticationController) HandleResetPassword() gin.HandlerFunc {
 			jsonBindError(c, err)
 			return
 		}
-		resetPasswordRepo := repository.NewCacheUserRepository(ctrl.db, ctrl.redisClient)
+		resetPasswordRepo := repository.NewCacheUserRepository(ctrl.db, ctrl.redisClient).WithAccessLifecycle(ctrl.accessLifecycle)
 		resetPasswordService := service.NewResetPasswordService(resetPasswordRepo, repository.NewPasswordResetStore(ctrl.redisClient))
 		msg, err := resetPasswordService.ResetPassword(c.Request.Context(), userId, email, resetPasswordRequest.Password, resetPasswordRequest.ConfirmPassword, version)
 		if err != nil {

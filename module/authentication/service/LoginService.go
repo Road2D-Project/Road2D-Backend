@@ -37,13 +37,5 @@ func (s *LoginService) Login(ctx context.Context, req request.LoginRequest) (str
 	if valid, err := user.CheckPassword(req.Password); err != nil || !valid {
 		return "", "", ErrInvalidCredentials
 	}
-	access, err := CreateToken(user)
-	if err != nil {
-		return "", "", err
-	}
-	refresh, err := CreateRefreshToken(user)
-	if err != nil {
-		return "", "", err
-	}
-	return access, refresh, nil
+	return CreateTokenPair(user)
 }

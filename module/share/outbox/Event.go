@@ -24,6 +24,8 @@ type Event struct {
 	Attempts        int             `json:"-" gorm:"not null;default:0;check:chk_outbox_attempts,attempts >= 0"`
 	NextAttemptAt   time.Time       `json:"-" gorm:"not null;default:CURRENT_TIMESTAMP;index:idx_outbox_pending,priority:1,where:dispatched_at IS NULL"`
 	DispatchedAt    *time.Time      `json:"-"`
+	ClaimToken      *uuid.UUID      `json:"-" gorm:"type:uuid"`
+	ClaimedUntil    *time.Time      `json:"-"`
 }
 
 func (Event) TableName() string { return "outbox_events" }

@@ -13,6 +13,7 @@ import (
 type ChattingHubs struct {
 	Conversations *realtime.Hub
 	Personal      *realtime.Hub
+	access        chan struct{}
 }
 
 func NewChattingHubs(idleTimeout time.Duration) (*ChattingHubs, error) {
@@ -32,7 +33,22 @@ func NewChattingHubs(idleTimeout time.Duration) (*ChattingHubs, error) {
 	if err := personal.Mount("chat", NewPersonalModule()); err != nil {
 		return nil, err
 	}
-	return &ChattingHubs{Conversations: conversations, Personal: personal}, nil
+	return &ChattingHubs{Conversations: conversations, Personal: personal, access: make(chan struct{}, 1)}, nil
+}
+
+// WithAccess serializes admission, prepared delivery and access-changing commits
+// in this single-owner deployment. Room callbacks never acquire this gate.
+func (h *ChattingHubs) WithAccess(ctx context.Context, run func() error) error {
+	select {
+	case h.access <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	defer func() { <-h.access }()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return run()
 }
 
 func (h *ChattingHubs) Close(ctx context.Context) error {

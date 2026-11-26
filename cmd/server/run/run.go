@@ -33,6 +33,7 @@ import (
 	realtimeController "Road-To-Destination-BE/module/realtime/controller"
 	"Road-To-Destination-BE/module/share"
 	"Road-To-Destination-BE/module/share/configuration"
+	"Road-To-Destination-BE/module/share/outbox"
 	tripController "Road-To-Destination-BE/module/trip/controller"
 	"Road-To-Destination-BE/utils/customValidator"
 
@@ -134,20 +135,34 @@ func Run() error {
 	if err != nil {
 		return err
 	}
+	conversationRecords := conversationRepository.NewConversationRepository(dbConfig.GetDatabase())
+	conversationReads := conversationService.NewConversationService(conversationRecords)
+	chatAccess := chatting.NewAccessLifecycle(chatRooms, conversationRecords)
 	chattingCtrl, err := chattingController.NewChattingController(authMw,
-		conversationService.NewConversationService(conversationRepository.NewConversationRepository(dbConfig.GetDatabase())),
+		conversationReads,
 		chatRooms, strings.Split(os.Getenv("CHAT_ALLOWED_ORIGINS"), ","))
 	if err != nil {
 		return err
 	}
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
+	outboxRecords := outbox.NewRepository(dbConfig.GetDatabase())
+	dispatcher := outbox.NewDispatcher(outboxRecords, chatting.NewDelivery(chatAccess, conversationReads))
+	dispatchCtx, stopDispatch := context.WithCancel(context.Background())
+	dispatchDone := make(chan struct{})
+	go func() { defer close(dispatchDone); dispatcher.Run(dispatchCtx) }()
 	var workers sync.WaitGroup
-	for _, run := range []func(context.Context){checkpointWriter.Run, redirectPublisher.Run, redirectResults.Run} {
+	for _, run := range []func(context.Context){checkpointWriter.Run, redirectPublisher.Run, redirectResults.Run, outboxRecords.RunRetention} {
 		workers.Go(func() { run(workerCtx) })
 	}
 	defer func() {
 		closeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+		stopDispatch()
+		select {
+		case <-dispatchDone:
+		case <-closeCtx.Done():
+			log.Printf("outbox: shutdown deadline; unfinished rows remain pending")
+		}
 		if err := chatRooms.Close(closeCtx); err != nil {
 			log.Printf("close chatting rooms: %v", err)
 		}
@@ -164,10 +179,10 @@ func Run() error {
 	routerRegistrars := []share.RouterRegistrar{
 		chattingCtrl,
 		conversationController.NewChatController(dbConfig.GetDatabase(), authMw, bucketLimiter),
-		authenController.NewAuthenticationController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, bucketLimiter, mediaStorage),
+		authenController.NewAuthenticationController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, bucketLimiter, mediaStorage).WithAccessLifecycle(chatAccess),
 		friendController.NewFriendController(dbConfig.GetDatabase(), authMw),
 		groupController.NewGroupController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw),
-		tripController.NewTripController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw, responseCacheMw, goongClient, bucketLimiter, mediaStorage),
+		tripController.NewTripController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw, responseCacheMw, goongClient, bucketLimiter, mediaStorage).WithAccessLifecycle(chatAccess),
 		realtimeController.NewLobbyController(authMw, hub, activeTripMemberAuthorizer{db: dbConfig.GetDatabase()}),
 	}
 	for _, r := range routerRegistrars {

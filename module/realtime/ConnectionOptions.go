@@ -6,6 +6,7 @@ import "time"
 // a join or establish a revocation subscription; those belong to the caller.
 type ConnectionOptions struct {
 	TokenID        string
+	SessionID      string
 	SessionVersion int64
 	ExpiresAt      time.Time
 }

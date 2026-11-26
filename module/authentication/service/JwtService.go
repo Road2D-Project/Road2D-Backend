@@ -59,6 +59,7 @@ func sessionClaims(user *model.User, tokenUse string, lifetime time.Duration) (j
 		"sessionVersion": user.SessionVersion,
 		"tokenUse":       tokenUse,
 		"jti":            uuid.NewString(),
+		"sid":            uuid.NewString(),
 		"exp":            time.Now().Add(lifetime).Unix(),
 	}, nil
 }
@@ -85,6 +86,53 @@ func CreateRefreshToken(user *model.User) (string, error) {
 		return "", err
 	}
 	return signClaims(claims, "SECRET_REFRESH_JWT")
+}
+
+// CreateTokenPair links access and refresh credentials to the same login while
+// keeping their individual token IDs distinct.
+func CreateTokenPair(user *model.User) (string, string, error) {
+	access, err := sessionClaims(user, "access", time.Hour)
+	if err != nil {
+		return "", "", err
+	}
+	refresh, err := sessionClaims(user, "refresh", 27*24*time.Hour)
+	if err != nil {
+		return "", "", err
+	}
+	refresh["sid"] = access["sid"]
+	a, err := signClaims(access, "SECRET_JWT")
+	if err != nil {
+		return "", "", err
+	}
+	r, err := signClaims(refresh, "SECRET_REFRESH_JWT")
+	return a, r, err
+}
+
+// CreateAccessFromRefresh preserves the login identity. The caller must first
+// check the refresh denylist using LogoutService.AssertRefreshUsable.
+func CreateAccessFromRefresh(user *model.User, raw string) (string, error) {
+	refresh, err := VerifyRefreshToken(raw)
+	if err != nil {
+		return "", err
+	}
+	if err := ValidateUserSession(refresh, user); err != nil {
+		return "", err
+	}
+	claims, err := sessionClaims(user, "access", time.Hour)
+	if err != nil {
+		return "", err
+	}
+	if sid, ok := refresh["sid"]; ok {
+		claims["sid"] = sid
+	} else {
+		delete(claims, "sid")
+	}
+	expiry, _ := ClaimsExpiry(refresh)
+	// Never outlive the refresh denylist record that revokes this login.
+	if expiry.Before(time.Now().Add(time.Hour)) {
+		claims["exp"] = expiry.Unix()
+	}
+	return signClaims(claims, "SECRET_JWT")
 }
 
 func CreateResetPasswordToken(form ForgetPasswordForm) (string, error) {
@@ -124,6 +172,14 @@ func verifyToken(raw, secretName, tokenUse string) (jwt.MapClaims, error) {
 	username, _ := claims["username"].(string)
 	if !hasExpiry || !expiry.After(time.Now()) || !hasVersion || idErr != nil || id == uuid.Nil || username == "" {
 		return nil, ErrTokenInvalid
+	}
+	if rawSID, exists := claims["sid"]; exists {
+		sid, ok := rawSID.(string)
+		parsed, err := uuid.Parse(sid)
+		if !ok || err != nil || parsed == uuid.Nil {
+			return nil, ErrTokenInvalid
+		}
+		claims["sid"] = parsed.String()
 	}
 	return claims, nil
 }

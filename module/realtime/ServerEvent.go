@@ -22,6 +22,7 @@ type roomCommand struct {
 	recipient uuid.UUID
 	evictUser uuid.UUID
 	ack       chan struct{}
+	filter    *SessionFilter
 }
 
 // PublishToRoom enqueues a prepared event without creating a room. False means
@@ -129,7 +130,7 @@ func (r *Room) enqueue(ctx context.Context, command roomCommand) (bool, error) {
 
 func (r *Room) handleCommand(command roomCommand) {
 	if command.ack != nil {
-		if client := r.byUser[command.evictUser]; client != nil {
+		if client := r.byUser[command.evictUser]; client != nil && (command.filter == nil || command.filter.matches(client)) {
 			r.onLeave(client)
 		}
 		close(command.ack)

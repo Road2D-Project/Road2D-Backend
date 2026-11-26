@@ -14,6 +14,7 @@ type Conversation struct {
 	Trip           *tripModel.Trip `json:"-" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 	NextMessageSeq int64           `json:"-" gorm:"not null;default:1;check:chk_conversation_message_seq,next_message_seq > 0"`
 	NextEventSeq   int64           `json:"-" gorm:"not null;default:1;check:chk_conversation_event_seq,next_event_seq > 0"`
+	ReplayFloor    int64           `json:"-" gorm:"not null;default:0;check:chk_conversation_replay_floor,replay_floor >= 0 AND replay_floor < next_event_seq"`
 }
 
 func (Conversation) TableName() string { return "conversations" }

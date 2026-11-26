@@ -8,6 +8,7 @@ import (
 	"Road-To-Destination-BE/module/trip/model"
 	"Road-To-Destination-BE/module/trip/model/request"
 	"Road-To-Destination-BE/module/trip/model/response"
+	"Road-To-Destination-BE/module/trip/repository"
 	"Road-To-Destination-BE/utils/enum"
 
 	"github.com/gin-gonic/gin"
@@ -55,14 +56,20 @@ var (
 )
 
 type TripController struct {
-	db            *gorm.DB
-	redisClient   *redis.Client
-	validator     *validator.Validate
-	auth          *middleware.AuthenticationMiddleware
-	goong         *mapsclient.GoongClient
-	cacheResponse *middleware.ResponseCache
-	rateLimiter   middleware.RateLimiter
-	storage       *objectStorage.Client
+	db              *gorm.DB
+	redisClient     *redis.Client
+	validator       *validator.Validate
+	auth            *middleware.AuthenticationMiddleware
+	goong           *mapsclient.GoongClient
+	cacheResponse   *middleware.ResponseCache
+	rateLimiter     middleware.RateLimiter
+	storage         *objectStorage.Client
+	accessLifecycle repository.TripAccessLifecycle
+}
+
+func (ctrl *TripController) WithAccessLifecycle(lifecycle repository.TripAccessLifecycle) *TripController {
+	ctrl.accessLifecycle = lifecycle
+	return ctrl
 }
 
 func (ctrl *TripController) CachedKeys(names ...string) gin.HandlerFunc {

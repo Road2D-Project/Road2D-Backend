@@ -29,8 +29,14 @@ return 0
 // CacheUserRepository retains the existing adapter API while retiring the old
 // username-keyed credential cache. Credentials always come from the database.
 type CacheUserRepository struct {
-	db     *gorm.DB
-	client *redis.Client
+	db        *gorm.DB
+	client    *redis.Client
+	lifecycle UserAccessLifecycle
+}
+
+func (cache *CacheUserRepository) WithAccessLifecycle(lifecycle UserAccessLifecycle) *CacheUserRepository {
+	cache.lifecycle = lifecycle
+	return cache
 }
 
 func NewCacheUserRepository(db *gorm.DB, client *redis.Client) *CacheUserRepository {
@@ -47,7 +53,7 @@ func (cache *CacheUserRepository) FindUserByUsername(ctx context.Context, userna
 }
 
 func (cache *CacheUserRepository) ResetPassword(ctx context.Context, userID uuid.UUID, password string, expectedVersion int64) error {
-	repo := NewUserRepository(cache.db)
+	repo := NewUserRepository(cache.db).WithAccessLifecycle(cache.lifecycle)
 	user, err := repo.FindUserByID(ctx, userID)
 	if err != nil {
 		return err

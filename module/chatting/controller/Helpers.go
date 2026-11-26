@@ -20,7 +20,7 @@ func (ctrl *ChattingController) connectionIdentity(c *gin.Context) (uuid.UUID, r
 	user := middleware.GetCurrentUser(c)
 	session, exists := middleware.GetAccessSession(c)
 	options := realtime.ConnectionOptions{
-		TokenID: session.TokenID, SessionVersion: session.SessionVersion, ExpiresAt: session.ExpiresAt,
+		TokenID: session.TokenID, SessionID: session.SessionID, SessionVersion: session.SessionVersion, ExpiresAt: session.ExpiresAt,
 	}
 	if user == nil || user.ID == uuid.Nil || !exists || options.Validate() != nil {
 		c.JSON(http.StatusUnauthorized, share.NewError(http.StatusUnauthorized, "Invalid access session"))

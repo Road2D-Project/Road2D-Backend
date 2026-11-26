@@ -23,6 +23,10 @@ func (r *authSessionRepository) FindUserByUsername(context.Context, string) (*mo
 	return r.user, r.err
 }
 
+func (*authSessionRepository) IsLoginSessionRevoked(context.Context, string) (bool, error) {
+	return false, nil
+}
+
 func TestAuthenticationRejectsAccessAfterSessionVersionChanges(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("SECRET_JWT", "access-test-secret-01234567890123456789")

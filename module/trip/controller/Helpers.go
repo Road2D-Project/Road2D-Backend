@@ -52,10 +52,10 @@ func destinationCacheKeys(c *gin.Context, tripIDs []uuid.UUID) {
 
 func (ctrl *TripController) tripService() *service.TripService {
 	return service.NewTripService(
-		repository.NewTripRepository(ctrl.db),
+		repository.NewTripRepository(ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle),
 		authRepo.NewUserRepository(ctrl.db),
-		repository.NewTripMemberRepository(ctrl.db),
-		repository.NewTripMemberRepository(ctrl.db),
+		repository.NewTripMemberRepository(ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle),
+		repository.NewTripMemberRepository(ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle),
 		repository.NewTripMemberStore(ctrl.redisClient),
 		repository.NewLocationRepository(ctrl.db),
 		friendRepo.NewFriendshipRepository(ctrl.db),
@@ -64,60 +64,60 @@ func (ctrl *TripController) tripService() *service.TripService {
 
 func (ctrl *TripController) tripMemberService() *service.TripMemberService {
 	return service.NewTripMemberService(
-		repository.NewTripRepository(ctrl.db),
-		repository.NewTripMemberRepository(ctrl.db),
+		repository.NewTripRepository(ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle),
+		repository.NewTripMemberRepository(ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle),
 		repository.NewTripMemberStore(ctrl.redisClient),
 	)
 }
 
 func (ctrl *TripController) inviteTripMemberService() *service.InviteTripMemberService {
 	return service.NewInviteTripMemberService(
-		repository.NewTripRepository(ctrl.db),
-		repository.NewTripMemberRepository(ctrl.db),
+		repository.NewTripRepository(ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle),
+		repository.NewTripMemberRepository(ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle),
 	)
 }
 
 func (ctrl *TripController) tripInvitationService() *service.TripInvitationService {
 	return service.NewTripInvitationService(
-		repository.NewTripRepository(ctrl.db),
-		repository.NewTripMemberRepository(ctrl.db),
+		repository.NewTripRepository(ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle),
+		repository.NewTripMemberRepository(ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle),
 		repository.NewTripMemberStore(ctrl.redisClient),
 	)
 }
 
 func (ctrl *TripController) tripJoinRequestService() *service.TripJoinRequestService {
 	return service.NewTripJoinRequestService(
-		repository.NewTripRepository(ctrl.db),
-		repository.NewTripMemberRepository(ctrl.db),
+		repository.NewTripRepository(ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle),
+		repository.NewTripMemberRepository(ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle),
 		repository.NewTripMemberStore(ctrl.redisClient),
 	)
 }
 
 func (ctrl *TripController) kickTripMemberService() *service.KickTripMemberService {
 	return service.NewKickTripMemberService(
-		repository.NewTripRepository(ctrl.db),
-		repository.NewTripMemberRepository(ctrl.db),
+		repository.NewTripRepository(ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle),
+		repository.NewTripMemberRepository(ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle),
 		repository.NewTripMemberStore(ctrl.redisClient),
 	)
 }
 func (ctrl *TripController) tripBranch() *service.TripBranchService {
 	return service.NewTripBranchService(
 		repository.NewTripBranchRepository(ctrl.db),
-		repository.NewTripRepository(ctrl.db),
+		repository.NewTripRepository(ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle),
 	)
 }
 func (ctrl *TripController) leaveTripService() *service.LeaveTripService {
 	return service.NewLeaveTripService(
-		repository.NewTripRepository(ctrl.db),
-		repository.NewTripMemberRepository(ctrl.db),
+		repository.NewTripRepository(ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle),
+		repository.NewTripMemberRepository(ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle),
 		repository.NewTripMemberStore(ctrl.redisClient),
 	)
 }
 
 func (ctrl *TripController) joinTripService() *service.JoinTripService {
 	return service.NewJoinTripService(
-		repository.NewTripRepository(ctrl.db),
-		repository.NewTripMemberRepository(ctrl.db),
+		repository.NewTripRepository(ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle),
+		repository.NewTripMemberRepository(ctrl.db).WithAccessLifecycle(ctrl.accessLifecycle),
 	)
 }
 

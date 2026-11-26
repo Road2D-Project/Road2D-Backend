@@ -39,7 +39,16 @@ func NewChattingController(auth *middleware.AuthenticationMiddleware, reads Conv
 }
 
 func (ctrl *ChattingController) RegisterRoutes(router *gin.RouterGroup) {
-	live := router.Group("/realtime", ctrl.auth.RequireAuth())
+	live := router.Group("/realtime", ctrl.guardAdmission(), ctrl.auth.RequireAuth())
 	live.GET("/me", ctrl.HandleJoinPersonal())
 	live.GET("/conversations/:conversationId", ctrl.HandleJoinConversation())
+}
+
+func (ctrl *ChattingController) guardAdmission() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := ctrl.rooms.WithAccess(c.Request.Context(), func() error { c.Next(); return nil }); err != nil {
+			c.Abort()
+			mapChattingError(c, err)
+		}
+	}
 }

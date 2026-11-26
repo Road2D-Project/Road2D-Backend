@@ -12,6 +12,7 @@ const accessSessionKey = "accessSession"
 // bearer token itself. TokenID identifies this access token, not a refresh login.
 type AccessSession struct {
 	TokenID        string
+	SessionID      string
 	SessionVersion int64
 	ExpiresAt      time.Time
 }
