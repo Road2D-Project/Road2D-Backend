@@ -18,12 +18,27 @@ type Hub struct {
 	factories map[string]ModuleFactory
 	rooms     map[string]*Room
 	closing   bool
+	options   RoomOptions
 }
 
 func NewHub() *Hub {
+	return newHub(DefaultRoomOptions())
+}
+
+// NewHubWithOptions creates an independent runtime, for example a chat hub with
+// a shorter idle timeout and no periodic ticks. Options are copied, not shared.
+func NewHubWithOptions(options RoomOptions) (*Hub, error) {
+	if err := options.validate(); err != nil {
+		return nil, err
+	}
+	return newHub(options), nil
+}
+
+func newHub(options RoomOptions) *Hub {
 	return &Hub{
 		factories: make(map[string]ModuleFactory),
 		rooms:     make(map[string]*Room),
+		options:   options,
 	}
 }
 
@@ -113,7 +128,7 @@ func (h *Hub) getOrCreate(roomID string) (*Room, error) {
 	}
 
 	var room *Room
-	room = NewRoom(roomID, modules, func() { h.remove(roomID, room) })
+	room = newRoom(roomID, modules, func() { h.remove(roomID, room) }, h.options)
 	h.rooms[roomID] = room
 	go room.Run()
 	return room, nil
@@ -128,8 +143,13 @@ func (h *Hub) Close(ctx context.Context) error {
 		rooms = append(rooms, room)
 	}
 	h.mu.Unlock()
+	// Signal every room before waiting: one slow close hook must not leave the
+	// other rooms accepting traffic when the shutdown deadline is exhausted.
 	for _, room := range rooms {
-		if err := room.close(ctx); err != nil {
+		room.requestClose()
+	}
+	for _, room := range rooms {
+		if err := room.waitClosed(ctx); err != nil {
 			return err
 		}
 	}

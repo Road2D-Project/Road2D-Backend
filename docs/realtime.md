@@ -11,6 +11,8 @@ The WebSocket runtime for a live trip. Tracking is mounted today; other domains 
 - read and write pumps, ping/pong, a bounded send buffer
 - namespace routing of client messages into a `Module`
 - presence, direct send, ordered broadcast, and a lossy latest-value batch
+- bounded prepared server-event delivery and acknowledged user eviction
+- per-hub idle timeouts and optional periodic ticks
 
 It does not know routes, lives, branches, or chat. Those are modules mounted onto a `Hub`.
 
@@ -36,7 +38,10 @@ User ids are `uuid.UUID`, the same id as `users.id`. The research sketch used `i
 
 ## The one rule
 
-Only `Room.Run` may touch room state (`clients`, `byUser`, `latest`). That is why `Room` has no mutex. Pumps talk to the room through `register`, `unregister`, and `inbound`.
+Only `Room.Run` may touch room state (`clients`, `byUser`, `latest`). Pumps talk
+to the room through `register`, `unregister`, and `inbound`; server publishers
+and eviction callers use the bounded `control` queue. A `sync.Once` coordinates
+the shutdown signal without letting callers change client or module state.
 
 A `Module` is called on that same goroutine. It must not:
 
@@ -47,7 +52,11 @@ A `Module` is called on that same goroutine. It must not:
 
 `Session` is the only handle a module gets. Tests fake that interface; they do not spin a room.
 
-A full send buffer means a slow client. The room drops that socket and does not run `OnLeave` inside the send. The write pump then closes the connection, the read pump unregisters, and `OnLeave` runs on a later turn. A module is never re-entered from inside its own callback.
+A full send buffer means a slow client. The room closes that socket immediately
+and does not run `OnLeave` inside the send. The read pump unregisters, and
+`OnLeave` runs on a later turn. A module is never re-entered from inside its own
+callback. Closing the transport also prevents queued frames draining after an
+explicit eviction has been acknowledged.
 
 ## Wire protocol
 
@@ -95,12 +104,15 @@ JWT validation runs at the handshake only. Expiry does not currently close an es
 
 ## How to add a module
 
-1. Put the domain in its own package (`module/tracking`, later `module/chat`). Do not add fields to `Room`.
+1. Put live domain behavior in its own package (`module/tracking`, later
+   `module/chatting`). Persistent conversation logic lives in
+   `module/conversation`. Do not add domain fields to `Room`.
 2. Implement `realtime.Module`. One factory call builds one instance for one room. Keep the room's state on that struct.
 3. `OnJoin` must be idempotent. Send the snapshot there with `Session.Send`.
 4. `OnLeave` runs only for a real disconnect.
 5. `OnMessage` receives the command with the namespace already removed.
-6. `OnTick` is every 500ms, including while the room is empty (the room stays up for 5 minutes after the last user leaves).
+6. `OnTick` uses the hub's interval: by default 500ms, including while empty
+   until the five-minute idle timeout. A hub with ticks disabled never calls it.
 7. In `cmd/server/run`, before the HTTP listener starts:
 
 ```go
@@ -112,6 +124,71 @@ if err := hub.Mount("yourNamespace", yourModuleFactory); err != nil {
 The namespace is the prefix on the wire (`tracking.position`). Do not mount `system`, an empty name, or a name that contains a dot.
 
 Outbound type strings are whatever the module passes to `Send` / `Broadcast`. Pass the full name (`tracking.offRoute`), not the short command.
+
+## Prepared events and room controls
+
+These are in-process APIs for trusted services/workers, not new HTTP or
+WebSocket routes. Chat sockets, their authorizers and the outbox dispatcher
+are not wired yet. `module/conversation` owns REST, persistence and conversation
+rules; the future `module/chatting` will own socket authorizers, typing/resync and
+live delivery coordination. It will use conversation services and this generic
+runtime. Conversation services do not import chatting. No database or HTTP reads
+run inside these operations' room handlers; the caller prepares and authorizes
+the event before publishing.
+
+`NewHub()` keeps tracking's existing configuration. To construct an independent,
+lighter runtime for chat or personal events:
+
+```go
+options := realtime.DefaultRoomOptions()
+options.IdleTimeout = time.Minute
+options.TickInterval = 0
+hub, err := realtime.NewHubWithOptions(options)
+```
+
+`IdleTimeout`, `ControlBufferSize` and `MaxEventBytes` must be positive;
+`TickInterval` must be nonnegative. Zero disables ticks. Default control capacity
+is 64 commands and the external event limit is 16 KiB per encoded JSON frame,
+including its envelope. The existing inbound socket limit remains 4,096 bytes.
+`BroadcastLatest` is ignored when ticks are disabled so undeliverable batches
+cannot accumulate; use ordered `Send`, `Broadcast` or prepared events instead.
+
+`PublishToRoom(ctx, roomID, ServerEvent{Type, Payload, RecipientUserID})` looks up
+an existing room and enqueues an immutable encoded frame. `Type` must include a
+nonempty namespace and command; `system` is reserved. `Payload` is raw JSON.
+`RecipientUserID == uuid.Nil` broadcasts; a nonzero recipient delivers only to
+that user if connected. These prepared frames go directly to socket queues,
+without invoking client-command module callbacks or requiring a mounted module
+for their namespace. Future chat modules can handle typing/resync separately.
+
+- `(false, nil)` means no room exists or it is already closing. No room is
+  created and an offline recipient does not keep durable dispatch pending.
+- `(true, nil)` means the control queue accepted the frame. A slow socket,
+  disconnect or shutdown can still lose live delivery; it is not a receipt.
+- `ErrRoomQueueFull` means no command was accepted; durable callers retry.
+  Invalid JSON/types and oversized frames return `ErrInvalidServerEvent` and
+  `ErrEventTooLarge` when publishing to an existing room.
+- A canceled context returns its context error. A shutting-down hub returns
+  `ErrRoomClosed`, distinct from an ordinary missing room.
+
+`EvictUser(ctx, roomID, userID)` uses the same FIFO queue and waits for the room
+to remove the current socket, close its transport and run `OnLeave` before
+acknowledging. Repeating it for a missing user is safe. A missing room returns
+`(false, nil)`; finding a room and completing eviction returns `(true, nil)`.
+If that room is closing, it waits for cleanup instead. A timeout after enqueue
+does not retract the command; the caller must treat it as unacknowledged and
+may retry. Queue saturation also returns an error rather than a false ACK.
+
+`CloseRoom(ctx, roomID)` bypasses that queue, signals the current instance and
+waits for cleanup. A missing room returns `(false, nil)`. A context timeout can
+leave cleanup in progress; success means its close hooks completed. It does not
+remove a newer room instance with the same ID.
+
+Eviction/closure is not an admission ban. Callers still own JWT/session expiry,
+current membership checks and synchronization of joins/publications with
+revocation. Those chat-specific lifecycle integrations remain separate work.
+Domain event IDs, durable ordering, retries and replay also belong to callers;
+the runtime keeps no durable event log or deduplication history.
 
 ## Current tracking module
 
@@ -163,11 +240,18 @@ Redis is the route-work transport; it does not own the room's authoritative stat
 
 ## Idle rooms and shutdown
 
-A room with no live user closes after 5 minutes and drops itself from the hub only if it is still the room stored under that id. A join that loses the race with that close retries once.
+A room with no live user closes after its configured idle timeout (five minutes
+for `NewHub()`). A dedicated timer starts even if nobody completes a join. A
+join cancels the timer; the last disconnect/drop/eviction starts it again.
+Publishing or periodic ticks do not refresh an empty room's timer. This works
+without enabling module ticks. Cleanup removes the room only if it is still the
+instance stored under that ID. A join that loses that race retries once.
 
 On graceful shutdown, the HTTP listener stops accepting requests. `Hub.Close`
-rejects new rooms and waits for room cleanup. Each room invokes an optional module
-`Close()` on its goroutine, drops clients, removes itself, and closes its done channel.
+rejects new rooms/publications, signals every room before waiting, and waits for
+room cleanup. One slow close hook therefore does not leave other rooms running.
+Each room drops clients, invokes optional module `Close()` hooks on its goroutine,
+clears transient maps, removes itself, and closes its done channel.
 Tracking offers a final dirty checkpoint, stops snap workers, and unsubscribes from
 redirect results. The server then stops its background workers and attempts a final
 checkpoint flush within the shutdown deadline.
