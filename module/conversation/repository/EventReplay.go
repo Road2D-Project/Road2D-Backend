@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 
-	"Road-To-Destination-BE/module/chat/model"
-	"Road-To-Destination-BE/module/chat/model/request"
-	"Road-To-Destination-BE/module/chat/model/response"
+	"Road-To-Destination-BE/module/conversation/model"
+	"Road-To-Destination-BE/module/conversation/model/request"
+	"Road-To-Destination-BE/module/conversation/model/response"
 	"Road-To-Destination-BE/module/share/outbox"
 	"github.com/google/uuid"
 	"gorm.io/gorm"

@@ -19,7 +19,7 @@ import (
 	authenController "Road-To-Destination-BE/module/authentication/controller"
 	authenRepo "Road-To-Destination-BE/module/authentication/repository"
 	authenService "Road-To-Destination-BE/module/authentication/service"
-	chatController "Road-To-Destination-BE/module/chat/controller"
+	conversationController "Road-To-Destination-BE/module/conversation/controller"
 	friendController "Road-To-Destination-BE/module/friend/controller"
 	groupController "Road-To-Destination-BE/module/group/controller"
 	mapsClient "Road-To-Destination-BE/module/maps/client"
@@ -144,7 +144,7 @@ func Run() error {
 	}()
 	mediaStorage := objectStorage.NewClient()
 	routerRegistrars := []share.RouterRegistrar{
-		chatController.NewChatController(dbConfig.GetDatabase(), authMw, bucketLimiter),
+		conversationController.NewChatController(dbConfig.GetDatabase(), authMw, bucketLimiter),
 		authenController.NewAuthenticationController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, bucketLimiter, mediaStorage),
 		friendController.NewFriendController(dbConfig.GetDatabase(), authMw),
 		groupController.NewGroupController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw),

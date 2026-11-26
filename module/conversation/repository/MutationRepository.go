@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"Road-To-Destination-BE/module/chat/model"
+	"Road-To-Destination-BE/module/conversation/model"
 	tripModel "Road-To-Destination-BE/module/trip/model"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"

@@ -14,9 +14,9 @@ import (
 	authModel "Road-To-Destination-BE/module/authentication/model"
 	authRepo "Road-To-Destination-BE/module/authentication/repository"
 	authService "Road-To-Destination-BE/module/authentication/service"
-	"Road-To-Destination-BE/module/chat/controller"
-	chatModel "Road-To-Destination-BE/module/chat/model"
-	"Road-To-Destination-BE/module/chat/model/response"
+	"Road-To-Destination-BE/module/conversation/controller"
+	conversationModel "Road-To-Destination-BE/module/conversation/model"
+	"Road-To-Destination-BE/module/conversation/model/response"
 	"Road-To-Destination-BE/module/share/configuration"
 	tripModel "Road-To-Destination-BE/module/trip/model"
 	tripRepo "Road-To-Destination-BE/module/trip/repository"
@@ -53,7 +53,7 @@ func chatDatabase(t *testing.T) *chatFixture {
 	return f
 }
 
-func (f *chatFixture) trip(t *testing.T) chatModel.Conversation {
+func (f *chatFixture) trip(t *testing.T) conversationModel.Conversation {
 	t.Helper()
 	trip := &tripModel.Trip{OwnerID: f.owner.ID, Name: "Private chat in discoverable trip", Visibility: true,
 		Status: enum.TripPlanning, MemberLimit: 15, InviteToken: uuid.NewString(), IdempotencyKey: uuid.NewString(), IdempotencyHash: "test"}
@@ -64,7 +64,7 @@ func (f *chatFixture) trip(t *testing.T) chatModel.Conversation {
 	if err := tripRepo.NewTripRepository(f.db).CreateTripWithMembers(t.Context(), trip, members, nil); err != nil {
 		t.Fatal(err)
 	}
-	var conversation chatModel.Conversation
+	var conversation conversationModel.Conversation
 	if err := f.db.First(&conversation, "trip_id = ?", trip.ID).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestChatReadsEnforceMembershipAndPreserveReadState(t *testing.T) {
 	c := f.trip(t)
 	for seq := int64(1); seq <= 6; seq++ {
 		text, attempt := "private message", uuid.New()
-		msg := chatModel.Message{Base: utils.Base{CreatedAt: f.joined.Add(time.Duration(seq) * time.Minute)},
+		msg := conversationModel.Message{Base: utils.Base{CreatedAt: f.joined.Add(time.Duration(seq) * time.Minute)},
 			ConversationID: c.ID, SenderID: &f.member.ID, Seq: seq, Kind: enum.MessageKindText,
 			Text: &text, ClientMessageID: &attempt, RequestHash: strings.Repeat("a", 64)}
 		switch seq {
@@ -155,10 +155,10 @@ func TestChatReadsEnforceMembershipAndPreserveReadState(t *testing.T) {
 		t.Fatalf("empty history: %+v", empty)
 	}
 	var states int64
-	if err := f.db.Model(&chatModel.ConversationUserState{}).Count(&states).Error; err != nil || states != 0 {
+	if err := f.db.Model(&conversationModel.ConversationUserState{}).Count(&states).Error; err != nil || states != 0 {
 		t.Fatalf("GET mutated read state: count=%d err=%v", states, err)
 	}
-	state := chatModel.ConversationUserState{ConversationID: c.ID, UserID: f.owner.ID, LastReadSeq: 6}
+	state := conversationModel.ConversationUserState{ConversationID: c.ID, UserID: f.owner.ID, LastReadSeq: 6}
 	if err := f.db.Create(&state).Error; err != nil {
 		t.Fatal(err)
 	}

@@ -12,8 +12,8 @@ import (
 
 	authModel "Road-To-Destination-BE/module/authentication/model"
 	authService "Road-To-Destination-BE/module/authentication/service"
-	chatModel "Road-To-Destination-BE/module/chat/model"
-	"Road-To-Destination-BE/module/chat/model/response"
+	conversationModel "Road-To-Destination-BE/module/conversation/model"
+	"Road-To-Destination-BE/module/conversation/model/response"
 	"Road-To-Destination-BE/module/share/outbox"
 	tripModel "Road-To-Destination-BE/module/trip/model"
 	"Road-To-Destination-BE/utils/enum"
@@ -132,7 +132,7 @@ func TestMessageMutationsAndPrivateReplay(t *testing.T) {
 	if unmuted.MutedUntil != nil || unmuted.LastReadSeq != 1 {
 		t.Fatal("unmute lost read state")
 	}
-	var persisted chatModel.Conversation
+	var persisted conversationModel.Conversation
 	if err := f.db.First(&persisted, "id = ?", c.ID).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestChatWritesRollbackWhenOutboxInsertFails(t *testing.T) {
 	} {
 		f.send(t, &f.owner, operation.method, path+operation.suffix, operation.body, 503)
 	}
-	var message chatModel.Message
+	var message conversationModel.Message
 	if err := f.db.First(&message, "id = ?", first.ID).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -185,13 +185,13 @@ func TestChatWritesRollbackWhenOutboxInsertFails(t *testing.T) {
 	for _, check := range []struct {
 		record any
 		want   int64
-	}{{&chatModel.Message{}, 1}, {&outbox.Event{}, 1}, {&chatModel.ConversationUserState{}, 0}} {
+	}{{&conversationModel.Message{}, 1}, {&outbox.Event{}, 1}, {&conversationModel.ConversationUserState{}, 0}} {
 		var count int64
 		if err := f.db.Model(check.record).Count(&count).Error; err != nil || count != check.want {
 			t.Fatalf("partial transaction %T: count=%d err=%v", check.record, count, err)
 		}
 	}
-	var conversation chatModel.Conversation
+	var conversation conversationModel.Conversation
 	if err := f.db.First(&conversation, "id = ?", c.ID).Error; err != nil {
 		t.Fatal(err)
 	}

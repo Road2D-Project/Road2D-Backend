@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	chatModel "Road-To-Destination-BE/module/chat/model"
+	conversationModel "Road-To-Destination-BE/module/conversation/model"
 	"Road-To-Destination-BE/module/trip/model"
 	"Road-To-Destination-BE/utils/enum"
 
@@ -54,7 +54,7 @@ func (r *TripRepository) CreateTripWithMembers(ctx context.Context, trip *model.
 			return err
 		}
 		// Create/fork must never commit a trip without its conversation.
-		return tx.Create(chatModel.NewConversation(trip.ID)).Error
+		return tx.Create(conversationModel.NewConversation(trip.ID)).Error
 	})
 }
 

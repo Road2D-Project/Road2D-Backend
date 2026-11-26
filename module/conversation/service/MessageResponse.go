@@ -1,8 +1,8 @@
 package service
 
 import (
-	"Road-To-Destination-BE/module/chat/model"
-	"Road-To-Destination-BE/module/chat/model/response"
+	"Road-To-Destination-BE/module/conversation/model"
+	"Road-To-Destination-BE/module/conversation/model/response"
 )
 
 func messageResponse(row model.Message) response.MessageResponse {

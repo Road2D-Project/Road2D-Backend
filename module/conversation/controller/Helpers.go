@@ -7,9 +7,9 @@ import (
 	"net/http"
 
 	"Road-To-Destination-BE/middleware"
-	"Road-To-Destination-BE/module/chat/model/response"
-	"Road-To-Destination-BE/module/chat/repository"
-	"Road-To-Destination-BE/module/chat/service"
+	"Road-To-Destination-BE/module/conversation/model/response"
+	"Road-To-Destination-BE/module/conversation/repository"
+	"Road-To-Destination-BE/module/conversation/service"
 	"Road-To-Destination-BE/module/share"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

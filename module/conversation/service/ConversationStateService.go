@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"Road-To-Destination-BE/module/chat/model"
-	"Road-To-Destination-BE/module/chat/model/request"
-	"Road-To-Destination-BE/module/chat/model/response"
+	"Road-To-Destination-BE/module/conversation/model"
+	"Road-To-Destination-BE/module/conversation/model/request"
+	"Road-To-Destination-BE/module/conversation/model/response"
 	"github.com/google/uuid"
 )
 

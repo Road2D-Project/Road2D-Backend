@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"slices"
 
-	"Road-To-Destination-BE/module/chat/model"
-	"Road-To-Destination-BE/module/chat/model/request"
-	"Road-To-Destination-BE/module/chat/model/response"
-	"Road-To-Destination-BE/module/chat/repository"
+	"Road-To-Destination-BE/module/conversation/model"
+	"Road-To-Destination-BE/module/conversation/model/request"
+	"Road-To-Destination-BE/module/conversation/model/response"
+	"Road-To-Destination-BE/module/conversation/repository"
 	"github.com/google/uuid"
 )
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"Road-To-Destination-BE/module/chat/model"
+	"Road-To-Destination-BE/module/conversation/model"
 	"gorm.io/gorm"
 )
 

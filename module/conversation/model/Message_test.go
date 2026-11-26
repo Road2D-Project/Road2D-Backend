@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	"Road-To-Destination-BE/module/chat/model"
+	"Road-To-Destination-BE/module/conversation/model"
 	"Road-To-Destination-BE/module/share/outbox"
 
 	"gorm.io/gorm/schema"

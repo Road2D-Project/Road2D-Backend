@@ -12,9 +12,9 @@ import (
 	"Road-To-Destination-BE/middleware"
 	authRepo "Road-To-Destination-BE/module/authentication/repository"
 	authService "Road-To-Destination-BE/module/authentication/service"
-	"Road-To-Destination-BE/module/chat/controller"
-	chatModel "Road-To-Destination-BE/module/chat/model"
-	"Road-To-Destination-BE/module/chat/model/response"
+	"Road-To-Destination-BE/module/conversation/controller"
+	conversationModel "Road-To-Destination-BE/module/conversation/model"
+	"Road-To-Destination-BE/module/conversation/model/response"
 	"Road-To-Destination-BE/module/share/outbox"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
@@ -136,7 +136,7 @@ func TestMessageSendLimiterIsPerUserAcrossConversations(t *testing.T) {
 	f.send(t, &f.owner, "POST", "/limited/conversations/"+second.ID.String()+"/messages", messageBody("limited"), 429)
 	f.send(t, &f.member, "POST", "/limited/conversations/"+second.ID.String()+"/messages", messageBody("different user"), 201)
 	var messages int64
-	if err := f.db.Model(&chatModel.Message{}).Count(&messages).Error; err != nil || messages != 2 {
+	if err := f.db.Model(&conversationModel.Message{}).Count(&messages).Error; err != nil || messages != 2 {
 		t.Fatalf("limiter side effects: count=%d err=%v", messages, err)
 	}
 }

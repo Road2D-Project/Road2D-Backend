@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"Road-To-Destination-BE/module/chat/model/request"
+	"Road-To-Destination-BE/module/conversation/model/request"
 	"github.com/gin-gonic/gin"
 	"net/http"
 )

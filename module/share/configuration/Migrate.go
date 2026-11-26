@@ -2,7 +2,7 @@ package configuration
 
 import (
 	authModel "Road-To-Destination-BE/module/authentication/model"
-	chatModel "Road-To-Destination-BE/module/chat/model"
+	conversationModel "Road-To-Destination-BE/module/conversation/model"
 	friendModel "Road-To-Destination-BE/module/friend/model"
 	groupModel "Road-To-Destination-BE/module/group/model"
 	"Road-To-Destination-BE/module/share/configuration/version"
@@ -36,9 +36,9 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.Travel{},
 		&trackingModel.CheckpointRecord{},
 		&trackingModel.RedirectResultRecord{},
-		&chatModel.Conversation{},
-		&chatModel.ConversationUserState{},
-		&chatModel.Message{},
+		&conversationModel.Conversation{},
+		&conversationModel.ConversationUserState{},
+		&conversationModel.Message{},
 		&outbox.Event{},
 	); err != nil {
 		return err

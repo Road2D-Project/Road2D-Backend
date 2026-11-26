@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"Road-To-Destination-BE/module/chat/model"
-	"Road-To-Destination-BE/module/chat/repository"
+	"Road-To-Destination-BE/module/conversation/model"
+	"Road-To-Destination-BE/module/conversation/repository"
 	tripModel "Road-To-Destination-BE/module/trip/model"
 	"github.com/google/uuid"
 )

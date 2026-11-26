@@ -1,8 +1,8 @@
 package service
 
 import (
-	"Road-To-Destination-BE/module/chat/model/request"
-	"Road-To-Destination-BE/module/chat/model/response"
+	"Road-To-Destination-BE/module/conversation/model/request"
+	"Road-To-Destination-BE/module/conversation/model/response"
 	"context"
 	"github.com/google/uuid"
 )
