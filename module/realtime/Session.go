@@ -16,6 +16,7 @@ type Session interface {
 	// BroadcastLatest keeps only the newest value for (msgType, key) and
 	// flushes it once per tick as "<msgType>.batch". Use it for lossy streams
 	// such as positions. key is an opaque id, usually the user id string.
+	// Ignored on a hub with ticks disabled; use Send/Broadcast there instead.
 	BroadcastLatest(key string, msgType string, payload any)
 
 	IsOnline(userID uuid.UUID) bool

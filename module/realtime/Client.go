@@ -18,10 +18,11 @@ const (
 // Client is one user's WebSocket connection inside one room.
 // userID comes from auth. The room never trusts an id inside a client message.
 type Client struct {
-	room   *Room
-	conn   *websocket.Conn
-	send   chan []byte
-	userID uuid.UUID
+	room    *Room
+	conn    *websocket.Conn
+	send    chan []byte
+	userID  uuid.UUID
+	options ConnectionOptions
 }
 
 func newClient(room *Room, conn *websocket.Conn, userID uuid.UUID) *Client {
@@ -45,14 +46,17 @@ func (c *Client) readPump() {
 	}()
 
 	c.conn.SetReadLimit(maxMessageBytes)
-	_ = c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	_ = c.conn.SetReadDeadline(c.deadline(pongWait))
 	c.conn.SetPongHandler(func(string) error {
-		return c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		return c.conn.SetReadDeadline(c.deadline(pongWait))
 	})
 
 	for {
 		var env Envelope
 		if err := c.conn.ReadJSON(&env); err != nil {
+			return
+		}
+		if c.expired(time.Now()) {
 			return
 		}
 		if !c.room.submit(inbound{client: c, env: env}) {
@@ -67,23 +71,49 @@ func (c *Client) writePump() {
 		ticker.Stop()
 		c.conn.Close()
 	}()
+	var expiry <-chan time.Time
+	if !c.options.ExpiresAt.IsZero() {
+		timer := time.NewTimer(time.Until(c.options.ExpiresAt))
+		defer timer.Stop()
+		expiry = timer.C
+	}
 
 	for {
+		if c.expired(time.Now()) {
+			return
+		}
 		select {
+		case <-expiry:
+			return
 		case msg, ok := <-c.send:
 			if !ok {
 				// The room dropped this client and closed send.
 				return
 			}
-			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if c.expired(time.Now()) {
+				return
+			}
+			_ = c.conn.SetWriteDeadline(c.deadline(writeWait))
 			if err := c.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
 				return
 			}
 		case <-ticker.C:
-			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			_ = c.conn.SetWriteDeadline(c.deadline(writeWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
 		}
 	}
+}
+
+func (c *Client) expired(now time.Time) bool {
+	return !c.options.ExpiresAt.IsZero() && !c.options.ExpiresAt.After(now)
+}
+
+func (c *Client) deadline(wait time.Duration) time.Time {
+	deadline := time.Now().Add(wait)
+	if !c.options.ExpiresAt.IsZero() && c.options.ExpiresAt.Before(deadline) {
+		return c.options.ExpiresAt
+	}
+	return deadline
 }

@@ -38,6 +38,7 @@ func Apply(db *gorm.DB) error {
 func ApplyAfterModels(db *gorm.DB) error {
 	return applySteps(db, []Step{
 		{Name: "V12_AddChatFoundation", Run: V12_AddChatFoundation},
+		{Name: "V13_AddOutboxLifecycle", Run: V13_AddOutboxLifecycle},
 	})
 }
 

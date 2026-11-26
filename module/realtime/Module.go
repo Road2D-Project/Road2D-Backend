@@ -26,8 +26,8 @@ type Module interface {
 	// namespace prefix removed ("tracking.location" arrives as "location").
 	OnMessage(s Session, userID uuid.UUID, msgType string, payload json.RawMessage)
 
-	// OnTick runs every tickInterval so the module can advance time-based work.
-	// The room may already be empty; it stays alive until roomIdleTTL.
+	// OnTick runs at the hub's configured interval, including while empty until
+	// idle cleanup. It is not called when RoomOptions.TickInterval is zero.
 	OnTick(s Session, now time.Time)
 }
 

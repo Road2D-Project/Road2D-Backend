@@ -254,7 +254,7 @@
         },
         "/auth/user/logout": {
             "post": {
-                "description": "Revoke the presented refresh token. The SHA-256 hash is stored in Redis with TTL until JWT exp, and persisted in Postgres so a Redis restart cannot revive the session.",
+                "description": "Revoke the presented refresh token and its login sid in PostgreSQL, with a Redis hash cache until JWT expiry. Access tokens and chat sockets for that login are revoked. Legacy tokens without sid revoke the account session version. Wait for local socket eviction before success.",
                 "consumes": [
                     "application/json"
                 ],
@@ -331,7 +331,7 @@
         },
         "/auth/user/refresh": {
             "post": {
-                "description": "Issue a new access token after checking the refresh token, logout revocation and current database session version. Password resets invalidate older sessions.",
+                "description": "Issue an access token after checking refresh revocation and the current database session version. Preserve the login sid and never outlive the refresh token. Password resets invalidate older sessions.",
                 "consumes": [
                     "application/json"
                 ],
@@ -429,7 +429,7 @@
         },
         "/auth/user/reset-password/{resetToken}": {
             "post": {
-                "description": "Set a new password and revoke older access, refresh and reset tokens by atomically advancing the user's session version.",
+                "description": "Set a new password, advance the user's session version and persist a revocation event atomically. Revoke older access, refresh and reset tokens and wait for local chat socket eviction before success.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3353,6 +3353,101 @@
                     },
                     "502": {
                         "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/realtime/conversations/{conversationId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Pushes sync hints and transient typing. Durable writes use REST. Browser clients may authenticate with access_token as described in docs/chatting.md.",
+                "tags": [
+                    "Chatting"
+                ],
+                "summary": "Open the active conversation WebSocket",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Conversation UUID",
+                        "name": "conversationId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "101": {
+                        "description": "WebSocket upgraded"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/realtime/me": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Shared channel for conversation badges and future notifications. The server derives its room from the authenticated user.",
+                "tags": [
+                    "Chatting"
+                ],
+                "summary": "Open the personal events WebSocket",
+                "responses": {
+                    "101": {
+                        "description": "WebSocket upgraded"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/share.ErrorResponse"
                         }

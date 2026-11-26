@@ -8,7 +8,7 @@ import (
 	"Road-To-Destination-BE/internal/testutil"
 	authModel "Road-To-Destination-BE/module/authentication/model"
 	authRepo "Road-To-Destination-BE/module/authentication/repository"
-	chatModel "Road-To-Destination-BE/module/chat/model"
+	conversationModel "Road-To-Destination-BE/module/conversation/model"
 	friendModel "Road-To-Destination-BE/module/friend/model"
 	friendRepo "Road-To-Destination-BE/module/friend/repository"
 	"Road-To-Destination-BE/module/share/configuration"
@@ -62,12 +62,12 @@ func TestTripCreateReplayAndForkHaveIndependentConversations(t *testing.T) {
 	if err != nil || inserted || replayed.ID != created.ID {
 		t.Fatalf("replay trip: inserted=%v err=%v", inserted, err)
 	}
-	var source chatModel.Conversation
+	var source conversationModel.Conversation
 	if err := db.First(&source, "trip_id = ?", created.ID).Error; err != nil {
 		t.Fatal(err)
 	}
 	text, clientID := "Source history", uuid.New()
-	message := chatModel.Message{ConversationID: source.ID, SenderID: &owner.ID, Seq: 1,
+	message := conversationModel.Message{ConversationID: source.ID, SenderID: &owner.ID, Seq: 1,
 		Kind: enum.MessageKindText, Text: &text, ClientMessageID: &clientID, RequestHash: strings.Repeat("a", 64)}
 	if err := db.Create(&message).Error; err != nil {
 		t.Fatal(err)
@@ -76,7 +76,7 @@ func TestTripCreateReplayAndForkHaveIndependentConversations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var target chatModel.Conversation
+	var target conversationModel.Conversation
 	if err := db.First(&target, "trip_id = ?", forked.ID).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -84,10 +84,10 @@ func TestTripCreateReplayAndForkHaveIndependentConversations(t *testing.T) {
 		t.Fatal("fork reused the source conversation")
 	}
 	var count int64
-	if err := db.Model(&chatModel.Conversation{}).Count(&count).Error; err != nil || count != 2 {
+	if err := db.Model(&conversationModel.Conversation{}).Count(&count).Error; err != nil || count != 2 {
 		t.Fatalf("create/replay/fork conversations: count=%d err=%v", count, err)
 	}
-	if err := db.Model(&chatModel.Message{}).Where("conversation_id = ?", target.ID).Count(&count).Error; err != nil || count != 0 {
+	if err := db.Model(&conversationModel.Message{}).Where("conversation_id = ?", target.ID).Count(&count).Error; err != nil || count != 0 {
 		t.Fatalf("fork must not copy messages: count=%d err=%v", count, err)
 	}
 }
@@ -115,7 +115,7 @@ func TestTripChatFailureRollsBackTripRosterAndInitialGraph(t *testing.T) {
 	if !errors.Is(err, injected) {
 		t.Fatalf("got %v, want injected conversation failure", err)
 	}
-	for _, record := range []any{&model.Trip{}, &model.TripMember{}, &model.TripBranch{}, &model.BranchDestination{}, &model.Destination{}, &chatModel.Conversation{}} {
+	for _, record := range []any{&model.Trip{}, &model.TripMember{}, &model.TripBranch{}, &model.BranchDestination{}, &model.Destination{}, &conversationModel.Conversation{}} {
 		var count int64
 		if err := db.Model(record).Count(&count).Error; err != nil || count != 0 {
 			t.Fatalf("partial commit for %T: count=%d err=%v", record, count, err)

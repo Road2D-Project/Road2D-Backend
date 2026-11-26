@@ -18,12 +18,27 @@ type Hub struct {
 	factories map[string]ModuleFactory
 	rooms     map[string]*Room
 	closing   bool
+	options   RoomOptions
 }
 
 func NewHub() *Hub {
+	return newHub(DefaultRoomOptions())
+}
+
+// NewHubWithOptions creates an independent runtime, for example a chat hub with
+// a shorter idle timeout and no periodic ticks. Options are copied, not shared.
+func NewHubWithOptions(options RoomOptions) (*Hub, error) {
+	if err := options.validate(); err != nil {
+		return nil, err
+	}
+	return newHub(options), nil
+}
+
+func newHub(options RoomOptions) *Hub {
 	return &Hub{
 		factories: make(map[string]ModuleFactory),
 		rooms:     make(map[string]*Room),
+		options:   options,
 	}
 }
 
@@ -47,6 +62,19 @@ func (h *Hub) Mount(namespace string, factory ModuleFactory) error {
 // and starts the two pumps. The room id is an opaque string (a trip UUID text
 // for the lobby). The user id is the authenticated user, never a value from the socket.
 func (h *Hub) Join(roomID string, userID uuid.UUID, conn *websocket.Conn) error {
+	return h.join(roomID, userID, conn, ConnectionOptions{})
+}
+
+// JoinWithOptions attaches an authenticated expiring connection. Tracking's
+// existing Join remains unchanged; new chat connections must use this method.
+func (h *Hub) JoinWithOptions(roomID string, userID uuid.UUID, conn *websocket.Conn, options ConnectionOptions) error {
+	if err := options.Validate(); err != nil {
+		return err
+	}
+	return h.join(roomID, userID, conn, options)
+}
+
+func (h *Hub) join(roomID string, userID uuid.UUID, conn *websocket.Conn, options ConnectionOptions) error {
 	if roomID == "" || len(roomID) > maxRoomIDLen || userID == uuid.Nil || conn == nil {
 		return ErrInvalidRoom
 	}
@@ -57,6 +85,7 @@ func (h *Hub) Join(roomID string, userID uuid.UUID, conn *websocket.Conn) error 
 			return err
 		}
 		client := newClient(room, conn, userID)
+		client.options = options
 		if room.join(client) {
 			go client.writePump()
 			go client.readPump()
@@ -113,7 +142,7 @@ func (h *Hub) getOrCreate(roomID string) (*Room, error) {
 	}
 
 	var room *Room
-	room = NewRoom(roomID, modules, func() { h.remove(roomID, room) })
+	room = newRoom(roomID, modules, func() { h.remove(roomID, room) }, h.options)
 	h.rooms[roomID] = room
 	go room.Run()
 	return room, nil
@@ -128,8 +157,13 @@ func (h *Hub) Close(ctx context.Context) error {
 		rooms = append(rooms, room)
 	}
 	h.mu.Unlock()
+	// Signal every room before waiting: one slow close hook must not leave the
+	// other rooms accepting traffic when the shutdown deadline is exhausted.
 	for _, room := range rooms {
-		if err := room.close(ctx); err != nil {
+		room.requestClose()
+	}
+	for _, room := range rooms {
+		if err := room.waitClosed(ctx); err != nil {
 			return err
 		}
 	}

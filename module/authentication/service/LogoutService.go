@@ -9,6 +9,7 @@ import (
 	"Road-To-Destination-BE/module/authentication/model"
 	"Road-To-Destination-BE/module/authentication/repository"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -46,6 +47,14 @@ func (s *LogoutService) Logout(ctx context.Context, refreshToken string) error {
 		return ErrTokenInvalid
 	}
 	username, _ := claims["username"].(string)
+	if sessions, ok := s.store.(interface {
+		RevokeSession(context.Context, string, string, uuid.UUID, string, int64, time.Time) error
+	}); ok {
+		id, _ := uuid.Parse(claims["sub"].(string))
+		sid, _ := claims["sid"].(string)
+		version, _ := ClaimsSessionVersion(claims)
+		return sessions.RevokeSession(ctx, refreshToken, username, id, sid, version, exp)
+	}
 	return s.store.Revoke(ctx, refreshToken, username, exp)
 }
 

@@ -19,7 +19,11 @@ import (
 	authenController "Road-To-Destination-BE/module/authentication/controller"
 	authenRepo "Road-To-Destination-BE/module/authentication/repository"
 	authenService "Road-To-Destination-BE/module/authentication/service"
-	chatController "Road-To-Destination-BE/module/chat/controller"
+	"Road-To-Destination-BE/module/chatting"
+	chattingController "Road-To-Destination-BE/module/chatting/controller"
+	conversationController "Road-To-Destination-BE/module/conversation/controller"
+	conversationRepository "Road-To-Destination-BE/module/conversation/repository"
+	conversationService "Road-To-Destination-BE/module/conversation/service"
 	friendController "Road-To-Destination-BE/module/friend/controller"
 	groupController "Road-To-Destination-BE/module/group/controller"
 	mapsClient "Road-To-Destination-BE/module/maps/client"
@@ -29,6 +33,7 @@ import (
 	realtimeController "Road-To-Destination-BE/module/realtime/controller"
 	"Road-To-Destination-BE/module/share"
 	"Road-To-Destination-BE/module/share/configuration"
+	"Road-To-Destination-BE/module/share/outbox"
 	tripController "Road-To-Destination-BE/module/trip/controller"
 	"Road-To-Destination-BE/utils/customValidator"
 
@@ -125,14 +130,42 @@ func Run() error {
 	if err != nil {
 		return err
 	}
+	chatIdleSeconds := share.GetEnvIntDefault("CHAT_ROOM_IDLE_TIMEOUT_SECONDS", 60)
+	chatRooms, err := chatting.NewChattingHubs(time.Duration(chatIdleSeconds) * time.Second)
+	if err != nil {
+		return err
+	}
+	conversationRecords := conversationRepository.NewConversationRepository(dbConfig.GetDatabase())
+	conversationReads := conversationService.NewConversationService(conversationRecords)
+	chatAccess := chatting.NewAccessLifecycle(chatRooms, conversationRecords)
+	chattingCtrl, err := chattingController.NewChattingController(authMw,
+		conversationReads,
+		chatRooms, strings.Split(os.Getenv("CHAT_ALLOWED_ORIGINS"), ","))
+	if err != nil {
+		return err
+	}
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
+	outboxRecords := outbox.NewRepository(dbConfig.GetDatabase())
+	dispatcher := outbox.NewDispatcher(outboxRecords, chatting.NewDelivery(chatAccess, conversationReads))
+	dispatchCtx, stopDispatch := context.WithCancel(context.Background())
+	dispatchDone := make(chan struct{})
+	go func() { defer close(dispatchDone); dispatcher.Run(dispatchCtx) }()
 	var workers sync.WaitGroup
-	for _, run := range []func(context.Context){checkpointWriter.Run, redirectPublisher.Run, redirectResults.Run} {
+	for _, run := range []func(context.Context){checkpointWriter.Run, redirectPublisher.Run, redirectResults.Run, outboxRecords.RunRetention} {
 		workers.Go(func() { run(workerCtx) })
 	}
 	defer func() {
 		closeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+		stopDispatch()
+		select {
+		case <-dispatchDone:
+		case <-closeCtx.Done():
+			log.Printf("outbox: shutdown deadline; unfinished rows remain pending")
+		}
+		if err := chatRooms.Close(closeCtx); err != nil {
+			log.Printf("close chatting rooms: %v", err)
+		}
 		if err := hub.Close(closeCtx); err != nil {
 			log.Printf("close tracking rooms: %v", err)
 		}
@@ -144,11 +177,12 @@ func Run() error {
 	}()
 	mediaStorage := objectStorage.NewClient()
 	routerRegistrars := []share.RouterRegistrar{
-		chatController.NewChatController(dbConfig.GetDatabase(), authMw, bucketLimiter),
-		authenController.NewAuthenticationController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, bucketLimiter, mediaStorage),
+		chattingCtrl,
+		conversationController.NewChatController(dbConfig.GetDatabase(), authMw, bucketLimiter),
+		authenController.NewAuthenticationController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, bucketLimiter, mediaStorage).WithAccessLifecycle(chatAccess),
 		friendController.NewFriendController(dbConfig.GetDatabase(), authMw),
 		groupController.NewGroupController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw),
-		tripController.NewTripController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw, responseCacheMw, goongClient, bucketLimiter, mediaStorage),
+		tripController.NewTripController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, authMw, responseCacheMw, goongClient, bucketLimiter, mediaStorage).WithAccessLifecycle(chatAccess),
 		realtimeController.NewLobbyController(authMw, hub, activeTripMemberAuthorizer{db: dbConfig.GetDatabase()}),
 	}
 	for _, r := range routerRegistrars {

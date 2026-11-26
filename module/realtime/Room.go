@@ -3,14 +3,10 @@ package realtime
 import (
 	"context"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
-)
-
-const (
-	tickInterval = 500 * time.Millisecond // OnTick and BroadcastLatest flush
-	roomIdleTTL  = 5 * time.Minute
 )
 
 type inbound struct {
@@ -21,12 +17,14 @@ type inbound struct {
 // Room is one realtime channel (a trip, later a chat). It owns connections,
 // presence, fanout, and backpressure. Domain rules live in Module.
 //
-// Only the Run goroutine may touch the fields below, so Room has no mutex.
+// Only Run touches clients, modules and domain state. Other goroutines submit
+// work through channels; stopOnce only coordinates the shutdown signal.
 type Room struct {
 	id      string
 	modules map[string]Module
 	onClose func()
 	session *roomSession
+	options RoomOptions
 
 	clients map[*Client]bool
 	byUser  map[uuid.UUID]*Client // one live connection per user; the newest wins
@@ -35,23 +33,31 @@ type Room struct {
 	inbound    chan inbound
 	register   chan *Client
 	unregister chan *Client
+	control    chan roomCommand
 	done       chan struct{} // closed when the room dies, so pumps do not block
-	shutdown   chan struct{}
+	stopping   chan struct{} // closes before cleanup; no new work should be admitted
+	stopOnce   sync.Once
 }
 
 func NewRoom(id string, modules map[string]Module, onClose func()) *Room {
+	return newRoom(id, modules, onClose, DefaultRoomOptions())
+}
+
+func newRoom(id string, modules map[string]Module, onClose func(), options RoomOptions) *Room {
 	r := &Room{
 		id:         id,
 		modules:    modules,
 		onClose:    onClose,
+		options:    options,
 		clients:    make(map[*Client]bool),
 		byUser:     make(map[uuid.UUID]*Client),
 		latest:     make(map[string]map[string]any),
 		inbound:    make(chan inbound, 256),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
+		control:    make(chan roomCommand, options.ControlBufferSize),
 		done:       make(chan struct{}),
-		shutdown:   make(chan struct{}, 1),
+		stopping:   make(chan struct{}),
 	}
 	r.session = &roomSession{room: r}
 	return r
@@ -59,46 +65,71 @@ func NewRoom(id string, modules map[string]Module, onClose func()) *Room {
 
 func (r *Room) Run() {
 	defer r.finish()
-	ticker := time.NewTicker(tickInterval)
-	defer ticker.Stop()
+	var tick <-chan time.Time
+	if r.options.TickInterval > 0 {
+		ticker := time.NewTicker(r.options.TickInterval)
+		defer ticker.Stop()
+		tick = ticker.C
+	}
 	// A room nobody joins still has to close itself.
-	idleSince := time.Now()
+	idle := time.NewTimer(r.options.IdleTimeout)
+	defer idle.Stop()
+	idleTick := idle.C
 
 	for {
+		// Give shutdown priority over a continuously busy queue.
 		select {
-		case <-r.shutdown:
+		case <-r.stopping:
+			return
+		default:
+		}
+		select {
+		case <-r.stopping:
 			return
 		case c := <-r.register:
 			r.onJoin(c)
-			idleSince = time.Time{}
 
 		case c := <-r.unregister:
 			r.onLeave(c)
-			if len(r.byUser) == 0 && idleSince.IsZero() {
-				idleSince = time.Now()
-			}
 
 		case in := <-r.inbound:
 			r.handle(in)
 
-		case now := <-ticker.C:
+		case command := <-r.control:
+			r.handleCommand(command)
+
+		case now := <-tick:
 			r.tick(now)
-			if len(r.byUser) == 0 && !idleSince.IsZero() && now.Sub(idleSince) > roomIdleTTL {
+
+		case <-idleTick:
+			if len(r.clients) == 0 {
 				return
 			}
+		}
+		// Publication never refreshes an armed idle timer. Starting/stopping the
+		// timer depends only on connection transitions, including eviction/drop.
+		if len(r.clients) > 0 && idleTick != nil {
+			idle.Stop()
+			idleTick = nil
+		} else if len(r.clients) == 0 && idleTick == nil {
+			idle.Reset(r.options.IdleTimeout)
+			idleTick = idle.C
 		}
 	}
 }
 
 func (r *Room) finish() {
+	r.requestClose()
+	for client := range r.clients {
+		r.drop(client)
+	}
 	for _, module := range r.modules {
 		if closer, ok := module.(interface{ Close() }); ok {
 			closer.Close()
 		}
 	}
-	for client := range r.clients {
-		r.drop(client)
-	}
+	clear(r.byUser)
+	clear(r.latest)
 	if r.onClose != nil {
 		r.onClose()
 	}
@@ -106,13 +137,18 @@ func (r *Room) finish() {
 }
 
 func (r *Room) close(ctx context.Context) error {
-	select {
-	case r.shutdown <- struct{}{}:
-	case <-r.done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
+	r.requestClose()
+	return r.waitClosed(ctx)
+}
+
+func (r *Room) requestClose() {
+	r.stopOnce.Do(func() { close(r.stopping) })
+}
+
+func (r *Room) waitClosed(ctx context.Context) error {
 	select {
 	case <-r.done:
 		return nil
@@ -124,23 +160,45 @@ func (r *Room) close(ctx context.Context) error {
 // join and submit select on done so the caller is not stuck after the room dies.
 func (r *Room) join(c *Client) bool {
 	select {
+	case <-r.stopping:
+		<-r.done
+		return false
+	default:
+	}
+	select {
 	case r.register <- c:
 		return true
 	case <-r.done:
+		return false
+	case <-r.stopping:
+		<-r.done
 		return false
 	}
 }
 
 func (r *Room) submit(in inbound) bool {
 	select {
+	case <-r.stopping:
+		return false
+	default:
+	}
+	select {
 	case r.inbound <- in:
 		return true
 	case <-r.done:
+		return false
+	case <-r.stopping:
 		return false
 	}
 }
 
 func (r *Room) onJoin(c *Client) {
+	if c.expired(time.Now()) {
+		if c.conn != nil {
+			_ = c.conn.Close()
+		}
+		return
+	}
 	old, reconnected := r.byUser[c.userID]
 	if reconnected {
 		// The new connection wins. The previous one is treated as already dead
@@ -172,13 +230,16 @@ func (r *Room) onLeave(c *Client) {
 	r.broadcast(encode(MsgTypePresence, presencePayload{UserID: c.userID, Online: false}))
 }
 
-// drop is idempotent: close(send) runs once. writePump sees the closed channel,
-// closes the socket, and readPump then posts unregister. onLeave therefore
-// always runs later, outside the module callback that caused the drop.
+// drop is idempotent. Close the transport immediately so buffered frames cannot
+// drain after an eviction ACK. The read pump posts unregister; normal slow-client
+// OnLeave runs later, outside the module callback that caused the drop.
 func (r *Room) drop(c *Client) {
 	if r.clients[c] {
 		delete(r.clients, c)
 		close(c.send)
+		if c.conn != nil {
+			_ = c.conn.Close()
+		}
 	}
 }
 
@@ -204,7 +265,7 @@ func (r *Room) broadcast(b []byte) {
 }
 
 func (r *Room) handle(in inbound) {
-	if r.byUser[in.client.userID] != in.client {
+	if r.byUser[in.client.userID] != in.client || in.client.expired(time.Now()) {
 		// Frame from a socket that has already been replaced.
 		return
 	}
@@ -233,6 +294,11 @@ func (r *Room) tick(now time.Time) {
 }
 
 func (r *Room) setLatest(key string, msgType string, payload any) {
+	if r.options.TickInterval == 0 {
+		// A tickless room has no batch consumer; retaining entries would grow
+		// state that can never be delivered. Ordered server events still work.
+		return
+	}
 	entries, ok := r.latest[msgType]
 	if !ok {
 		entries = make(map[string]any)

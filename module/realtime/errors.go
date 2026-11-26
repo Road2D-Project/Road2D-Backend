@@ -19,4 +19,12 @@ var (
 	// ErrModuleUnavailable means a mounted module failed to build, so the room
 	// was not created. The socket is already upgraded; the lobby closes it.
 	ErrModuleUnavailable = errors.New("realtime module unavailable")
+
+	ErrInvalidRoomOptions       = errors.New("invalid realtime room options")
+	ErrInvalidUser              = errors.New("invalid realtime user id")
+	ErrInvalidServerEvent       = errors.New("invalid realtime server event")
+	ErrEventTooLarge            = errors.New("realtime server event too large")
+	ErrRoomQueueFull            = errors.New("realtime room control queue full")
+	ErrInvalidConnectionOptions = errors.New("invalid realtime connection options")
+	ErrConnectionExpired        = errors.New("realtime connection expired")
 )

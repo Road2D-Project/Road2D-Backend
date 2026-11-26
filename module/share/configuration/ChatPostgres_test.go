@@ -8,7 +8,7 @@ import (
 
 	"Road-To-Destination-BE/internal/testutil"
 	authModel "Road-To-Destination-BE/module/authentication/model"
-	chatModel "Road-To-Destination-BE/module/chat/model"
+	conversationModel "Road-To-Destination-BE/module/conversation/model"
 	"Road-To-Destination-BE/module/share/configuration"
 	"Road-To-Destination-BE/module/share/outbox"
 	tripModel "Road-To-Destination-BE/module/trip/model"
@@ -47,13 +47,13 @@ func TestChatMigrationBackfillsExistingTripsWithoutResettingCounters(t *testing.
 		t.Fatal(err)
 	}
 	tripID, _ := legacyChatTrip(t, db)
-	if err := db.Migrator().DropTable(&outbox.Event{}, &chatModel.Message{}, &chatModel.ConversationUserState{}, &chatModel.Conversation{}); err != nil {
+	if err := db.Migrator().DropTable(&outbox.Event{}, &conversationModel.Message{}, &conversationModel.ConversationUserState{}, &conversationModel.Conversation{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := configuration.AutoMigrate(db); err != nil {
 		t.Fatal(err)
 	}
-	var conversation chatModel.Conversation
+	var conversation conversationModel.Conversation
 	if err := db.First(&conversation, "trip_id = ?", tripID).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestChatMigrationBackfillsExistingTripsWithoutResettingCounters(t *testing.
 	if err := configuration.AutoMigrate(db); err != nil {
 		t.Fatalf("repeat migration: %v", err)
 	}
-	var persisted chatModel.Conversation
+	var persisted conversationModel.Conversation
 	if err := db.First(&persisted, "trip_id = ?", tripID).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -82,18 +82,18 @@ func TestChatSchemaScopesRepliesAttemptsAndDeletion(t *testing.T) {
 	if err := configuration.AutoMigrate(db); err != nil {
 		t.Fatal(err)
 	}
-	var first, other chatModel.Conversation
+	var first, other conversationModel.Conversation
 	if err := db.First(&first, "trip_id = ?", tripID).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.First(&other, "trip_id = ?", otherTripID).Error; err != nil {
 		t.Fatal(err)
 	}
-	requireSQLState(t, db.Create(chatModel.NewConversation(tripID)).Error, "23505")
-	requireSQLState(t, db.Create(chatModel.NewConversation(uuid.New())).Error, "23503")
-	newMessage := func(conversationID uuid.UUID, seq int64) chatModel.Message {
+	requireSQLState(t, db.Create(conversationModel.NewConversation(tripID)).Error, "23505")
+	requireSQLState(t, db.Create(conversationModel.NewConversation(uuid.New())).Error, "23503")
+	newMessage := func(conversationID uuid.UUID, seq int64) conversationModel.Message {
 		clientID, text := uuid.New(), "Hello"
-		return chatModel.Message{ConversationID: conversationID, SenderID: &ownerID, Seq: seq,
+		return conversationModel.Message{ConversationID: conversationID, SenderID: &ownerID, Seq: seq,
 			Kind: enum.MessageKindText, Text: &text, ClientMessageID: &clientID, RequestHash: strings.Repeat("a", 64)}
 	}
 	message := newMessage(first.ID, 1)
@@ -114,11 +114,11 @@ func TestChatSchemaScopesRepliesAttemptsAndDeletion(t *testing.T) {
 	blank, whitespace := newMessage(first.ID, 3), " \n\t"
 	blank.Text = &whitespace
 	requireSQLState(t, db.Create(&blank).Error, "23514")
-	state := chatModel.ConversationUserState{ConversationID: first.ID, UserID: ownerID}
+	state := conversationModel.ConversationUserState{ConversationID: first.ID, UserID: ownerID}
 	if err := db.Create(&state).Error; err != nil {
 		t.Fatal(err)
 	}
-	duplicateState := chatModel.ConversationUserState{ConversationID: first.ID, UserID: ownerID}
+	duplicateState := conversationModel.ConversationUserState{ConversationID: first.ID, UserID: ownerID}
 	requireSQLState(t, db.Create(&duplicateState).Error, "23505")
 	requireSQLState(t, db.Model(&state).Update("last_read_seq", -1).Error, "23514")
 	seq := int64(1)

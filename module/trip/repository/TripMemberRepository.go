@@ -14,7 +14,8 @@ import (
 )
 
 type TripMemberRepository struct {
-	db *gorm.DB
+	db        *gorm.DB
+	lifecycle TripAccessLifecycle
 }
 
 func (r *TripMemberRepository) AssignBranch(ctx context.Context, member *model.TripMember, branchID uuid.UUID) error {
@@ -107,7 +108,7 @@ func (r *TripMemberRepository) ListActiveMembers(ctx context.Context, tripId uui
 	return members, nil
 }
 
-func (r *TripMemberRepository) UpdateMember(ctx context.Context, member *model.TripMember) error {
+func (r *TripMemberRepository) updateMember(ctx context.Context, member *model.TripMember) error {
 	if r == nil || r.db == nil {
 		return ErrInternalServerError
 	}
@@ -127,7 +128,7 @@ func (r *TripMemberRepository) AddActiveMember(ctx context.Context, userId uuid.
 	return r.AddMember(ctx, userId, tripId, role, enum.MembershipActive, nickname, nil)
 }
 
-func (r *TripMemberRepository) AddMember(ctx context.Context, userId uuid.UUID, tripId uuid.UUID, role enum.TripRole, status enum.MembershipStatus, nickname string, invitorName *string) (*model.TripMember, error) {
+func (r *TripMemberRepository) addMember(ctx context.Context, userId uuid.UUID, tripId uuid.UUID, role enum.TripRole, status enum.MembershipStatus, nickname string, invitorName *string) (*model.TripMember, error) {
 	if r == nil || r.db == nil {
 		return nil, ErrInternalServerError
 	}
@@ -221,7 +222,7 @@ func (r *TripMemberRepository) ListInvitedMembers(ctx context.Context, userId uu
 	return members, nil
 }
 
-func (r *TripMemberRepository) ApplyKick(ctx context.Context, member *model.TripMember) error {
+func (r *TripMemberRepository) applyKick(ctx context.Context, member *model.TripMember) error {
 	if r == nil || r.db == nil {
 		return ErrInternalServerError
 	}
@@ -242,7 +243,7 @@ func (r *TripMemberRepository) ApplyKick(ctx context.Context, member *model.Trip
 	return nil
 }
 
-func (r *TripMemberRepository) ApplyLeave(ctx context.Context, leaver *model.TripMember, successor *model.TripMember) error {
+func (r *TripMemberRepository) applyLeave(ctx context.Context, leaver *model.TripMember, successor *model.TripMember) error {
 	if r == nil || r.db == nil {
 		return ErrInternalServerError
 	}

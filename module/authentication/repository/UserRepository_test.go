@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 
@@ -48,6 +49,11 @@ func TestResetPasswordRejectsReuseAndPropagatesWriteErrors(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { _ = sqlDB.Close() })
+			db.ConnPool = callbackTransactionPool{ConnPool: db.ConnPool}
+			db.Statement.ConnPool = db.ConnPool
+			if err := db.Callback().Create().Replace("gorm:create", func(tx *gorm.DB) { tx.RowsAffected = 1 }); err != nil {
+				t.Fatal(err)
+			}
 			userID := uuid.New()
 			// Replace database operations so this regression test needs no server.
 			if err := db.Callback().Query().Replace("gorm:query", func(tx *gorm.DB) {
@@ -90,3 +96,13 @@ func TestResetPasswordRejectsReuseAndPropagatesWriteErrors(t *testing.T) {
 		})
 	}
 }
+
+// Callback-backed tests must not open a real transaction on the placeholder DSN.
+// Database rollback and atomic outbox behavior are covered by PostgreSQL tests.
+type callbackTransactionPool struct{ gorm.ConnPool }
+
+func (p callbackTransactionPool) BeginTx(context.Context, *sql.TxOptions) (gorm.ConnPool, error) {
+	return p, nil
+}
+func (callbackTransactionPool) Commit() error   { return nil }
+func (callbackTransactionPool) Rollback() error { return nil }
