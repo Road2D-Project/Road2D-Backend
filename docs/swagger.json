@@ -3360,6 +3360,101 @@
                 }
             }
         },
+        "/realtime/conversations/{conversationId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Pushes sync hints and transient typing. Durable writes use REST. Browser clients may authenticate with access_token as described in docs/chatting.md.",
+                "tags": [
+                    "Chatting"
+                ],
+                "summary": "Open the active conversation WebSocket",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Conversation UUID",
+                        "name": "conversationId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "101": {
+                        "description": "WebSocket upgraded"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/realtime/me": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Shared channel for conversation badges and future notifications. The server derives its room from the authenticated user.",
+                "tags": [
+                    "Chatting"
+                ],
+                "summary": "Open the personal events WebSocket",
+                "responses": {
+                    "101": {
+                        "description": "WebSocket upgraded"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/share.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/trips": {
             "get": {
                 "security": [

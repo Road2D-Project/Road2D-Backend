@@ -1,6 +1,11 @@
 # Realtime rooms
 
-The WebSocket runtime for a live trip. Tracking is mounted today; other domains can be added as modules. Off-route detection, lives, and redirect rules are in [tracking deviation](tracking-deviation.md). Checkpoint recovery and worker operations are in [tracking streams](tracking-streams.md). The original sketch walkthrough is [research material](research/road2d_websocket_main_explanation.md), not the current protocol specification.
+The shared WebSocket runtime serves tracking plus separate conversation and
+personal hubs. The chat endpoints and wire commands are in [chatting](chatting.md).
+Off-route detection, lives, and redirect rules are in [tracking deviation](tracking-deviation.md).
+Checkpoint recovery and worker operations are in [tracking streams](tracking-streams.md).
+The original sketch walkthrough is [research material](research/road2d_websocket_main_explanation.md),
+not the current protocol specification.
 
 ## What this package owns
 
@@ -100,7 +105,11 @@ JSON fields on this socket are camelCase (`userId`), matching the rest of the AP
 
 Mount every module before the process accepts connections. A room created earlier does not see a factory registered later.
 
-JWT validation runs at the handshake only. Expiry does not currently close an established socket. Reconnecting with an expired access token returns HTTP 401 before upgrade. Automatic expiry close and token refresh are not implemented in the socket runtime or simulation clients.
+Tracking's existing `Join` path validates JWT only at the handshake and does not
+close an established socket at JWT expiry. Chat uses `JoinWithOptions`, which
+stores verified token metadata and closes at expiry using a timer and bounded
+read/write deadlines. Reconnecting with an expired token returns HTTP 401.
+Neither path accepts in-socket token refresh.
 
 ## How to add a module
 
@@ -127,12 +136,12 @@ Outbound type strings are whatever the module passes to `Send` / `Broadcast`. Pa
 
 ## Prepared events and room controls
 
-These are in-process APIs for trusted services/workers, not new HTTP or
-WebSocket routes. Chat sockets, their authorizers and the outbox dispatcher
-are not wired yet. `module/conversation` owns REST, persistence and conversation
-rules; the future `module/chatting` will own socket authorizers, typing/resync and
-live delivery coordination. It will use conversation services and this generic
-runtime. Conversation services do not import chatting. No database or HTTP reads
+These are in-process APIs for trusted services/workers. The chat endpoints and
+their authorizers are wired; the outbox dispatcher remains pending.
+`module/conversation` owns REST, persistence and conversation rules;
+`module/chatting` owns socket authorizers, typing/resync and live coordination.
+It uses conversation services and this generic runtime. Conversation services
+do not import chatting. No database or HTTP reads
 run inside these operations' room handlers; the caller prepares and authorizes
 the event before publishing.
 

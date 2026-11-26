@@ -19,7 +19,11 @@ import (
 	authenController "Road-To-Destination-BE/module/authentication/controller"
 	authenRepo "Road-To-Destination-BE/module/authentication/repository"
 	authenService "Road-To-Destination-BE/module/authentication/service"
+	"Road-To-Destination-BE/module/chatting"
+	chattingController "Road-To-Destination-BE/module/chatting/controller"
 	conversationController "Road-To-Destination-BE/module/conversation/controller"
+	conversationRepository "Road-To-Destination-BE/module/conversation/repository"
+	conversationService "Road-To-Destination-BE/module/conversation/service"
 	friendController "Road-To-Destination-BE/module/friend/controller"
 	groupController "Road-To-Destination-BE/module/group/controller"
 	mapsClient "Road-To-Destination-BE/module/maps/client"
@@ -125,6 +129,17 @@ func Run() error {
 	if err != nil {
 		return err
 	}
+	chatIdleSeconds := share.GetEnvIntDefault("CHAT_ROOM_IDLE_TIMEOUT_SECONDS", 60)
+	chatRooms, err := chatting.NewChattingHubs(time.Duration(chatIdleSeconds) * time.Second)
+	if err != nil {
+		return err
+	}
+	chattingCtrl, err := chattingController.NewChattingController(authMw,
+		conversationService.NewConversationService(conversationRepository.NewConversationRepository(dbConfig.GetDatabase())),
+		chatRooms, strings.Split(os.Getenv("CHAT_ALLOWED_ORIGINS"), ","))
+	if err != nil {
+		return err
+	}
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
 	var workers sync.WaitGroup
 	for _, run := range []func(context.Context){checkpointWriter.Run, redirectPublisher.Run, redirectResults.Run} {
@@ -133,6 +148,9 @@ func Run() error {
 	defer func() {
 		closeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+		if err := chatRooms.Close(closeCtx); err != nil {
+			log.Printf("close chatting rooms: %v", err)
+		}
 		if err := hub.Close(closeCtx); err != nil {
 			log.Printf("close tracking rooms: %v", err)
 		}
@@ -144,6 +162,7 @@ func Run() error {
 	}()
 	mediaStorage := objectStorage.NewClient()
 	routerRegistrars := []share.RouterRegistrar{
+		chattingCtrl,
 		conversationController.NewChatController(dbConfig.GetDatabase(), authMw, bucketLimiter),
 		authenController.NewAuthenticationController(dbConfig.GetDatabase(), redisConfig.Client(), mainValidator, bucketLimiter, mediaStorage),
 		friendController.NewFriendController(dbConfig.GetDatabase(), authMw),

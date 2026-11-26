@@ -62,6 +62,19 @@ func (h *Hub) Mount(namespace string, factory ModuleFactory) error {
 // and starts the two pumps. The room id is an opaque string (a trip UUID text
 // for the lobby). The user id is the authenticated user, never a value from the socket.
 func (h *Hub) Join(roomID string, userID uuid.UUID, conn *websocket.Conn) error {
+	return h.join(roomID, userID, conn, ConnectionOptions{})
+}
+
+// JoinWithOptions attaches an authenticated expiring connection. Tracking's
+// existing Join remains unchanged; new chat connections must use this method.
+func (h *Hub) JoinWithOptions(roomID string, userID uuid.UUID, conn *websocket.Conn, options ConnectionOptions) error {
+	if err := options.Validate(); err != nil {
+		return err
+	}
+	return h.join(roomID, userID, conn, options)
+}
+
+func (h *Hub) join(roomID string, userID uuid.UUID, conn *websocket.Conn, options ConnectionOptions) error {
 	if roomID == "" || len(roomID) > maxRoomIDLen || userID == uuid.Nil || conn == nil {
 		return ErrInvalidRoom
 	}
@@ -72,6 +85,7 @@ func (h *Hub) Join(roomID string, userID uuid.UUID, conn *websocket.Conn) error 
 			return err
 		}
 		client := newClient(room, conn, userID)
+		client.options = options
 		if room.join(client) {
 			go client.writePump()
 			go client.readPump()

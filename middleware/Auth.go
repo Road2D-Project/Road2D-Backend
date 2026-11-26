@@ -63,6 +63,10 @@ func (auth *AuthenticationMiddleware) RequireAuth() gin.HandlerFunc {
 			}
 			c.Set("currentUser", authorizedUser)
 			c.Set("username", username)
+			expiresAt, _ := service.ClaimsExpiry(claims)
+			version, _ := service.ClaimsSessionVersion(claims)
+			tokenID, _ := claims["jti"].(string)
+			c.Set(accessSessionKey, AccessSession{TokenID: tokenID, SessionVersion: version, ExpiresAt: expiresAt})
 			c.Next()
 			return
 		}

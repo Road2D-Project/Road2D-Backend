@@ -3808,6 +3808,68 @@ paths:
       summary: Preview locations
       tags:
       - planning
+  /realtime/conversations/{conversationId}:
+    get:
+      description: Pushes sync hints and transient typing. Durable writes use REST.
+        Browser clients may authenticate with access_token as described in docs/chatting.md.
+      parameters:
+      - description: Conversation UUID
+        in: path
+        name: conversationId
+        required: true
+        type: string
+      responses:
+        "101":
+          description: WebSocket upgraded
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Open the active conversation WebSocket
+      tags:
+      - Chatting
+  /realtime/me:
+    get:
+      description: Shared channel for conversation badges and future notifications.
+        The server derives its room from the authenticated user.
+      responses:
+        "101":
+          description: WebSocket upgraded
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/share.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Open the personal events WebSocket
+      tags:
+      - Chatting
   /trips:
     get:
       description: Returns trips where the caller is an active member (leader, admin,

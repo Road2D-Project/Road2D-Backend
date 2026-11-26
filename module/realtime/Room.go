@@ -193,6 +193,12 @@ func (r *Room) submit(in inbound) bool {
 }
 
 func (r *Room) onJoin(c *Client) {
+	if c.expired(time.Now()) {
+		if c.conn != nil {
+			_ = c.conn.Close()
+		}
+		return
+	}
 	old, reconnected := r.byUser[c.userID]
 	if reconnected {
 		// The new connection wins. The previous one is treated as already dead
@@ -259,7 +265,7 @@ func (r *Room) broadcast(b []byte) {
 }
 
 func (r *Room) handle(in inbound) {
-	if r.byUser[in.client.userID] != in.client {
+	if r.byUser[in.client.userID] != in.client || in.client.expired(time.Now()) {
 		// Frame from a socket that has already been replaced.
 		return
 	}
